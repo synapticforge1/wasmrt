@@ -33,7 +33,8 @@ by the `wasi-gate` conformance test (see `../tests/`).
 
 ## FFI demo (re-pointed at wasmrt)
 
-- `deno_ffi.mjs` (port of wazmrt's) — `Deno.dlopen` the wasmrt **cdylib** and
+- `bun_ffi.mjs` (port of wazmrt's FFI demo, re-targeted at Bun) — `dlopen` from
+  `bun:ffi` the wasmrt **cdylib** and
   drive **`wasmrt.h`** (engine → module → linker/instantiate → call → read
   result) on `(func (export "answer") (result i32) (i32.const 42))` → `42`. This
   is the concrete "drop-in engine for the loaders" acceptance demo.

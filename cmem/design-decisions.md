@@ -47,7 +47,7 @@ For editing source, prefer the `Edit` tool; for anything scripted, write a `.ts`
 text verbatim, so no shell quoting touches it — which is what made the Python one-liners dangerous. Both runtimes are Rust-built (Bun since its
 [Zig→Rust rewrite](https://bun.com/blog/bun-in-rust), merged 2026-05-14, shipped in 1.4), and both
 are installed here. The scripts import from `node:` builtins only (`node:fs`, `node:child_process`,
-`node:path`, `node:process`), so **one file runs under Deno, Bun or node** — no runtime is pinned.
+`node:path`, `node:process`), so **one file runs under Bun or node**; **Bun is the runtime** (owner, 2026-10-21).
 
     bun scripts/c-gate.ts                  (was: deno run -A scripts/c-gate.ts — retired 2026-10-21)
 
@@ -142,7 +142,7 @@ from `\r` in Rust source or from bytes, and does **not** embed a raw CR in a che
 that is content cannot be told from a CR that is an accident, and that ambiguity is what would force
 the gate to become advisory.
 
-⚠️ **Nothing here needs CRLF**: no `.bat`/`.cmd`/`.ps1`/`.sln`, a Rust + Deno/Bun toolchain, all
+⚠️ **Nothing here needs CRLF**: no `.bat`/`.cmd`/`.ps1`/`.sln`, a Rust + Bun toolchain, all
 gates in TypeScript. A Windows-only script added later gets an explicit `*.bat text eol=crlf` line
 rather than a relaxation of the rule.
 

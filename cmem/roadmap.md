@@ -376,7 +376,7 @@ alone, and the real number (0.111s) had to be measured directly.
 
 ⚠️ **Two owner rules landed during this pass**, both after I broke them: **PROVE, DO NOT ASSUME**
 (three misses in a day — a stale training fact, a guessed errno inside a test, a timing proxy), and
-**no Python either — only Deno or Bun**, which I had been violating in every ad-hoc edit script while
+**no Python either — TypeScript only** (Bun only since 2026-10-21), which I had been violating in every ad-hoc edit script while
 honouring it in `scripts/`. The session's helper is now `edit.ts`: anchored replacements that must
 match exactly once, with the text carried in JSON so no shell quoting touches it.
 
@@ -402,11 +402,11 @@ its feature was built with, and every defect lived in a different spelling of th
 
 ##### 🔧 DAY 4, part 11 — the TOOLING RULES, and the four gates ported. `[x]`
 
-Two owner rules (`design-decisions.md`, "TOOLING RULES"): **every script is TypeScript run by Deno or
-Bun**, and **no heredocs**. Both gates-of-the-project and ad-hoc session scripting are covered.
+Two owner rules (`design-decisions.md`, "TOOLING RULES"): **every script is TypeScript run by Bun**
+(Bun only since 2026-10-21), and **no heredocs**. Both gates-of-the-project and ad-hoc session scripting are covered.
 
 **All four gates ported, originals removed:** `c-gate.sh`/`miri-gate.sh`/`conformance-diff.sh`/
-`custom-sections-diff.py` → `.ts`, importing `node:` builtins only so one file runs under Deno, Bun or
+`custom-sections-diff.py` → `.ts`, importing `node:` builtins only so one file runs under Bun or
 node. 🔒 **Each port was verified to STILL FAIL when it should** — the only property worth checking
 here, because `conformance-diff`'s own header records two holes that got in from ad-hoc
 re-implementation. conformance-diff: byte-identical output AND exit status against the shell version on

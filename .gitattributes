@@ -13,7 +13,7 @@
 #
 # `eol=lf` overrides `core.autocrlf`, so no per-developer git config is needed and none is assumed.
 # Nothing here requires CRLF: there are no `.bat`/`.cmd`/`.ps1`/`.sln` files, the toolchain is Rust +
-# Deno/Bun, and every gate script is TypeScript. If a Windows-only script is ever added, pin it here
+# Bun, and every gate script is TypeScript. If a Windows-only script is ever added, pin it here
 # explicitly rather than relaxing the rule.
 #
 # The gate is `scripts/eol-gate.ts` — it fails if any tracked text file holds a CR.
