@@ -118,7 +118,7 @@ adjudicated 64,142 → 64,134, passes unchanged because the removed assertions w
 sweep, and **Track W complete** (`wide-arithmetic.wast` **0/1/108 → 107/0/0**). No file lost a pass at
 any step. 503 workspace tests, C-ABI gate PASSED (74 symbols), `.wat` corpus **528/532** ⚠️ *(not 530 — the corpus loop keyed on the CLI's exit status, which is 0 even when validation fails; reading the verdict instead exposed two pre-existing failures. All four are corpus defects wasmtime also refuses.)*.
 ✅ **Miri 31/31 PASSED (2026-09-17)** — the `wasmrt-capi` surface, including `lifecycle_fuzz` and `every_entry_point_survives_a_null_pointer`, run under interpretation on the post-`u16` code. ⚠️ **31, not the 28 on record** — the crate gained tests and nobody re-counted.
-Run with `deno run -A scripts/miri-gate.ts` (needs `rustup component add miri`; ~28s).
+Run with `bun scripts/miri-gate.ts` (needs `rustup component add miri`; ~28s).
 
 ### ✅ 2026-09-19 — SETTLED at **64,603 / 0 / 0**, and the threads contradiction is closed
 
@@ -194,13 +194,14 @@ one spelling its feature was built with. **Test the spellings, not the flag** (`
 
 ### 🔧 2026-09-19 — day 4, part 11: the gates are TypeScript now (**567 tests**)
 
-`scripts/` is five `.ts` files run by **Deno or Bun** (`node:` builtins only, so either works, and so
-does node). The commands:
+`scripts/` is **nine** `.ts` files (counted 2026-10-21), run by **Bun** — 🆕 Bun only since
+2026-10-21 (owner: Deno is going away; `design-decisions.md` TOOLING RULES §1). They use `node:`
+builtins only, and all nine build under Bun 1.4.3. The commands:
 
-    CC=gcc deno run -A scripts/c-gate.ts            deno run -A scripts/miri-gate.ts
-    deno run --allow-read scripts/conformance-diff.ts <baseline.txt> <current.txt>
-    deno run -A scripts/custom-sections-diff.ts target/release/wasmrt.exe @watlist.txt
-    deno run -A scripts/wat-corpus.ts [corpus-root]         # added 2026-09-19, see below
+    CC=gcc bun scripts/c-gate.ts                    bun scripts/miri-gate.ts
+    bun scripts/conformance-diff.ts <baseline.txt> <current.txt>
+    bun scripts/custom-sections-diff.ts target/release/wasmrt.exe @watlist.txt
+    bun scripts/wat-corpus.ts [corpus-root]         # added 2026-09-19, see below
 
 🔒 **Each port was checked to still FAIL when it should**, not merely to agree today:
 conformance-diff reproduces the shell version's output and exit status on lost passes, more failures,
@@ -211,7 +212,7 @@ records two such holes.
 
 ### 🆕 2026-09-19 — `scripts/wat-corpus.ts`: the `.wat` gate now ends at an OUTSIDE READER (**580 tests**)
 
-    deno run -A scripts/wat-corpus.ts            # default root: ../wasmtk/tests
+    bun scripts/wat-corpus.ts                    # default root: ../wasmtk/tests
 
 **assemble → decode+validate (wasmrt) → `wasm-tools validate` (not us).** Current reading:
 **532 files, 4 known corpus defects, 528 assembled AND accepted by wasm-tools.** The four are not
@@ -339,7 +340,7 @@ whenever memory code changes. The runner now VALIDATES `(module definition …)`
 
 `custom/` **0/1/20 → 20/0/0** (the custom-annotations feature); earlier the same day the whole-module
 quote fix moved 64,068/66/549 → 64,067/65/550 by removing six FALSE passes. 514 workspace tests.
-⚠️ **C-ABI gate needs `CC=gcc` on this host** (no `cc` on PATH): `CC=gcc deno run -A scripts/c-gate.ts`.
+⚠️ **C-ABI gate needs `CC=gcc` on this host** (no `cc` on PATH): `CC=gcc bun scripts/c-gate.ts`.
 
 **`scripts/custom-sections-diff.ts <wasmrt.exe> <file.wat | @list.txt>…`** — assembles each file with
 `wasmrt wat` AND `wasm-tools parse` and compares section order plus every custom section's bytes

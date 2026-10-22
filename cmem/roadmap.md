@@ -304,7 +304,7 @@ clean and the wasmtk patch is the only thing left uncommitted, deliberately (bel
 ✅ **Every gate is green and re-verified on this host**: 503 workspace tests, C-ABI gate (74 symbols),
 Miri **31/31**, `conformance-diff.ts` per file, `.wat` corpus 528/532. ⚠️ **Miri needs
 `rustup component add miri` on a fresh machine** — it is a rustup component, not a separate install,
-and `rust-toolchain.toml` already pins the nightly it requires. `deno run -A scripts/miri-gate.ts`, ~28s.
+and `rust-toolchain.toml` already pins the nightly it requires. `bun scripts/miri-gate.ts`, ~28s.
 
 🎓 **Three things to carry into tomorrow, all paid for today:**
 1. **Re-measure the corpus before trusting a delta.** wasmtk syncs it; the file count is part of the

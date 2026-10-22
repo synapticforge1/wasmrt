@@ -16,7 +16,7 @@
 //! no trigger is a preference, so this one runs with every `cargo test`, exactly like
 //! `regression_wast.rs`.
 //!
-//! `deno run -A scripts/eol-gate.ts --fix` rewrites offenders; this test only reports them.
+//! `bun scripts/eol-gate.ts --fix` rewrites offenders; this test only reports them.
 //!
 //! ⚠️ **If a fixture ever needs a real CR** — a lexer test for the §6.2 source character set, say —
 //! build it in Rust with `\r` or from bytes, rather than embedding a raw CR in a checked-in file.
@@ -90,7 +90,7 @@ fn every_text_file_in_the_repository_uses_lf() {
     assert!(
         offenders.is_empty(),
         "{} of {checked} text files contain a CR; line endings are LF in this repository \
-         (`.gitattributes`: `* text=auto eol=lf`). Run `deno run -A scripts/eol-gate.ts --fix`:\n  {}",
+         (`.gitattributes`: `* text=auto eol=lf`). Run `bun scripts/eol-gate.ts --fix`:\n  {}",
         offenders.len(),
         offenders.join("\n  ")
     );

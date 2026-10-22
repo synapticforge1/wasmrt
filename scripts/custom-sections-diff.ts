@@ -1,11 +1,11 @@
-#!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
+#!/usr/bin/env bun
 // custom-sections-diff.ts — the EXTERNAL gate for what wasmrt's assembler writes OUTSIDE the
 // code: custom sections from `@custom`, the `name` section, and branch hints.
 //
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Jon Marcum
 //
-//   deno run -A scripts/custom-sections-diff.ts <wasmrt.exe> <file.wat | @list.txt>...
+//   bun scripts/custom-sections-diff.ts <wasmrt.exe> <file.wat | @list.txt>...
 //   bun scripts/custom-sections-diff.ts <wasmrt.exe> <file.wat | @list.txt>...
 //
 // Each file is assembled twice — by `wasmrt wat` and by `wasm-tools parse` (the `wat` crate that

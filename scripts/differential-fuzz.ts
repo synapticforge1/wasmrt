@@ -11,7 +11,7 @@
 // is one, and it decoded, validated and RAN here until this fuzz found it in a 300-module run.
 // The suite was at 64,603 / 0 / 0 throughout.
 //
-//   deno run -A scripts/differential-fuzz.ts [iterations] [path/to/wasmrt]
+//   bun scripts/differential-fuzz.ts [iterations] [path/to/wasmrt]
 //
 // Needs `wasm-tools` on PATH. Exits non-zero if either direction finds anything, and keeps the
 // offending module in the scratch directory it names.

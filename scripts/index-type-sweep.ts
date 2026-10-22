@@ -12,7 +12,7 @@
 // 2^32 called the function in slot 0 and returned its answer. The spec suite was at 64,603 / 0 / 0
 // throughout, because no suite file tail-calls or indexes past 2^32 through a 64-bit table.
 //
-//   deno run -A scripts/index-type-sweep.ts [path/to/wasmrt]
+//   bun scripts/index-type-sweep.ts [path/to/wasmrt]
 //
 // Needs `wasm-tools` and `wasmtime` on PATH. Exits non-zero on any disagreement.
 import { spawnSync } from "node:child_process";

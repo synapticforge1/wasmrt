@@ -1,10 +1,10 @@
-#!/usr/bin/env -S deno run --allow-read
+#!/usr/bin/env bun
 // conformance-diff.ts — the per-file conformance gate, with ONE definition.
 //
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Jon Marcum
 //
-//   deno run --allow-read scripts/conformance-diff.ts <baseline.txt> <current.txt>
+//   bun scripts/conformance-diff.ts <baseline.txt> <current.txt>
 //   bun scripts/conformance-diff.ts <baseline.txt> <current.txt>
 //
 // Both arguments are saved `wasmrt wast <dir>` output. Exits non-zero if any file

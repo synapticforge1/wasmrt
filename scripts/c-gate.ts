@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-run --allow-env --allow-read --allow-write
+#!/usr/bin/env bun
 // c-gate.ts — build the wasmrt static library and run the two C-ABI gates.
 //
 // SPDX-License-Identifier: MIT OR Apache-2.0
@@ -13,7 +13,7 @@
 // Both compile against the SHIPPED header, so they also prove `wasmrt.h` is valid C — which
 // no Rust test can.
 //
-//   deno run -A scripts/c-gate.ts [--release]   ·   bun scripts/c-gate.ts [--release]
+//   bun scripts/c-gate.ts [--release]
 //
 // ⚠️ This host has no `cc` on PATH: set CC=gcc.
 //

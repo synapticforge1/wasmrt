@@ -11,7 +11,7 @@
 // hypothetical: a `(table 1 funcref (ref.func $f))` fixture was refused for its declare segment's
 // element type and certified a gate it never exercised.
 //
-//   deno run -A scripts/feature-gate-sweep.ts [path/to/wasmrt]
+//   bun scripts/feature-gate-sweep.ts [path/to/wasmrt]
 //
 // Needs `wasm-tools` on PATH. Exits non-zero if any row disagrees or any control fails.
 import { spawnSync } from "node:child_process";

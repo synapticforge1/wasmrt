@@ -1,10 +1,10 @@
-#!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
+#!/usr/bin/env bun
 // wat-corpus.ts — the `.wat` corpus gate: assemble → decode+validate → HAND THE BYTES TO SOMEONE ELSE.
 //
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Jon Marcum
 //
-//   deno run -A scripts/wat-corpus.ts [corpus-root]   ·   bun scripts/wat-corpus.ts [corpus-root]
+//   bun scripts/wat-corpus.ts [corpus-root]
 //
 // Default root: ../wasmtk/tests. Exits non-zero unless every file either round-trips completely or
 // is one of the known corpus defects (see below).

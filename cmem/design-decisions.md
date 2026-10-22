@@ -26,7 +26,14 @@ code and read the answer before asserting it), and **a proxy for the property yo
 
 ## 🔒 TOOLING RULES (owner, 2026-09-19) — scripts are TypeScript, and no heredocs
 
-### 1. Every script is TypeScript, run by Deno or Bun — **no bash, and NO PYTHON**
+### 1. Every script is TypeScript, run by **Bun** — **no bash, NO PYTHON, and no longer Deno**
+
+🆕 **BUN ONLY from 2026-10-21 (owner): *"from this point further utilize bun scripts, since deno is
+going away."*** Run every script, gate and throwaway helper as `bun <file>.ts`. Nothing in `scripts/`
+had to change: all nine files use `node:` builtins only, and each one builds under Bun 1.4.3 (`bun
+build --target=bun`, measured 2026-10-21). **Keep it that way — no `Deno.*` API, no `jsr:` or
+`https://deno.land` import**, so nothing comes back that needs the runtime that is going away. Where
+the text below says "Deno or Bun", read **Bun**; it is kept as the record of the 2026-09-19 rule.
 
 **Owner's rule, restated 2026-09-19 because it was being honoured in `scripts/` and ignored
 everywhere else:** *"python scripts not allowed either, only deno or bun"*. `scripts/` holds `.ts`
@@ -42,7 +49,7 @@ text verbatim, so no shell quoting touches it — which is what made the Python 
 are installed here. The scripts import from `node:` builtins only (`node:fs`, `node:child_process`,
 `node:path`, `node:process`), so **one file runs under Deno, Bun or node** — no runtime is pinned.
 
-    deno run -A scripts/c-gate.ts          bun scripts/c-gate.ts
+    bun scripts/c-gate.ts                  (was: deno run -A scripts/c-gate.ts — retired 2026-10-21)
 
 🔻 **The four gates were ported on the day the rule landed** — `c-gate.sh`, `miri-gate.sh`,
 `conformance-diff.sh` and `custom-sections-diff.py` — and each port was verified against the script

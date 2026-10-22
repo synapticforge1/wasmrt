@@ -1,10 +1,10 @@
-#!/usr/bin/env -S deno run --allow-run --allow-env --allow-read
+#!/usr/bin/env bun
 // miri-gate.ts — run the C-ABI surface under Miri.
 //
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Jon Marcum
 //
-//   deno run -A scripts/miri-gate.ts     ·     bun scripts/miri-gate.ts
+//   bun scripts/miri-gate.ts
 //
 // WHY. `wasmrt-capi` is the one crate that cannot be `#![forbid(unsafe_code)]`, because a C
 // ABI is an unsafe boundary. A normal allocator will happily hand back freed memory that

@@ -7,7 +7,7 @@
 // passes, and a mutation test that never applied is indistinguishable from a gate that caught
 // nothing (`cmem/best-practices.md` §8.1b).
 //
-//   deno run -A scripts/eol-gate.ts [--fix]
+//   bun scripts/eol-gate.ts [--fix]
 //
 // `--fix` rewrites the offenders in place (CRLF → LF); without it the script only reports.
 // Exits non-zero if anything is wrong.
