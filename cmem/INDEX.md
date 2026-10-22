@@ -824,8 +824,11 @@ When the owner says **"update the project memory"** (or a synonym — "update me
    first run of it on 2026-08-19 found the roadmap's own status block five days stale and every recorded
    `.wat`-corpus figure quoting a denominator that no longer exists.)*
 3. **Sync `README.md` only where the change is user-relevant** (status, eventual install/usage/API).
-4. **Commit and push** — the repo is synced to `origin` (github.com/jrmarcum/wasmrt); keep the portable
-   memory current on GitHub.
+4. **Commit and push** — the repo is synced to `origin` (github.com/synapticforge1/wasmrt); keep the
+   portable memory current on GitHub. 🏢 **The repo moved from `jrmarcum/wasmrt` to the owner's
+   `synapticforge1` organization** (owner, recorded 2026-10-21); GitHub 301-redirects the old URL
+   (measured), as it does for `wazmrt` and `rsxtk`, which moved too. `wasmtk` did NOT move (still
+   `jrmarcum/wasmtk`, HTTP 200 on 2026-10-21) — re-check a sibling's URL before writing it, never infer it.
 
 ### 🤝 The "**coordinate**" trigger (binding on every agent) — *added by the owner 2026-08-19*
 
