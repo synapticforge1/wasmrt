@@ -2,7 +2,7 @@
 
 A fast, small, idiomatic-**Rust** WebAssembly runtime.
 
-wasmrt is a from-scratch Rust port of the Zig runtime [`wazmrt`](https://github.com/jrmarcum/wazmrt) —
+wasmrt is a from-scratch Rust port of the Zig runtime [`wazmrt`](https://github.com/synapticforge1/wazmrt) —
 which already runs the full WebAssembly spec testsuite and a large WASI corpus. wazmrt is the
 **reference oracle**; wasmrt is finished when it reproduces the oracle feature-for-feature, verified by
 parity testing at every step.

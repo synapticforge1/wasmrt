@@ -1,6 +1,6 @@
 # wasmrt (CLI)
 
-The command-line tool of [wasmrt](https://github.com/jrmarcum/wasmrt), a fast, small,
+The command-line tool of [wasmrt](https://github.com/synapticforge1/wasmrt), a fast, small,
 idiomatic-Rust WebAssembly runtime.
 
 ```sh

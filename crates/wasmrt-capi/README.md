@@ -1,6 +1,6 @@
 # wasmrt-capi
 
-The C ABI of [wasmrt](https://github.com/jrmarcum/wasmrt) — the `wasmrt.h` surface, built as a
+The C ABI of [wasmrt](https://github.com/synapticforge1/wasmrt) — the `wasmrt.h` surface, built as a
 `staticlib` and a `cdylib` over [`wasmrt-core`](https://crates.io/crates/wasmrt-core).
 
 Compile a module, link host functions, instantiate, call exports, and read or write guest memory

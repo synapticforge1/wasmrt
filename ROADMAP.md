@@ -1,7 +1,7 @@
 # wasmrt roadmap
 
 **wasmrt** is a fast, small, idiomatic-**Rust** WebAssembly runtime — a from-scratch port of the
-battle-tested Zig runtime [`wazmrt`](https://github.com/jrmarcum/wazmrt). **That oracle relationship is
+battle-tested Zig runtime [`wazmrt`](https://github.com/synapticforge1/wazmrt). **That oracle relationship is
 retired** (see the anchor change below) — wasmrt is finished on its own terms, measured against the
 official spec testsuite, wasmtime's observable behaviour, and the wasmtk WASI corpus.
 

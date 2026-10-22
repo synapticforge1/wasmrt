@@ -1,6 +1,6 @@
 # wasmrt-core
 
-The runtime core of [wasmrt](https://github.com/jrmarcum/wasmrt): decode, validate and interpret
+The runtime core of [wasmrt](https://github.com/synapticforge1/wasmrt): decode, validate and interpret
 WebAssembly, plus the text toolchain (`.wat` assembler, `.wast` script runner) and WASI preview 1.
 
 - **`#![forbid(unsafe_code)]`** and **zero third-party dependencies**.

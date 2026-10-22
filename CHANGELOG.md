@@ -6,7 +6,7 @@ scheme: `0.x` releases climb toward **1.0.0 = complete on wasmrt's own terms** â
 implemented, conformance at its achievable ceiling, the C ABI stable, and the size and speed numbers
 measured and defended. See [ROADMAP.md](ROADMAP.md) for the stage ladder and the live use-case matrix.
 
-*Through 0.9.0 the target was phrased as full parity with the [`wazmrt`](https://github.com/jrmarcum/wazmrt)
+*Through 0.9.0 the target was phrased as full parity with the [`wazmrt`](https://github.com/synapticforge1/wazmrt)
 reference oracle; that anchor was retired 2026-08-11 when the two runtimes became independent entrants
 for the same inclusion slots.*
 
@@ -608,21 +608,21 @@ First release: the crate exists and the build is real on every target surface. N
 - Size-first release profile; builds verified on native (CLI + static lib + cdylib) and freestanding
   `wasm32-unknown-unknown` (no_std, libc-free).
 
-[Unreleased]: https://github.com/jrmarcum/wasmrt/compare/v0.8.0...HEAD
-[0.8.0]: https://github.com/jrmarcum/wasmrt/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/jrmarcum/wasmrt/compare/v0.6.9...v0.7.0
-[0.6.9]: https://github.com/jrmarcum/wasmrt/compare/v0.6.8...v0.6.9
-[0.6.8]: https://github.com/jrmarcum/wasmrt/compare/v0.6.7...v0.6.8
-[0.6.7]: https://github.com/jrmarcum/wasmrt/compare/v0.6.6...v0.6.7
-[0.6.6]: https://github.com/jrmarcum/wasmrt/compare/v0.6.5...v0.6.6
-[0.6.5]: https://github.com/jrmarcum/wasmrt/compare/v0.6.4...v0.6.5
-[0.6.4]: https://github.com/jrmarcum/wasmrt/compare/v0.6.3...v0.6.4
-[0.6.3]: https://github.com/jrmarcum/wasmrt/compare/v0.6.2...v0.6.3
-[0.6.2]: https://github.com/jrmarcum/wasmrt/compare/v0.6.1...v0.6.2
-[0.6.1]: https://github.com/jrmarcum/wasmrt/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/jrmarcum/wasmrt/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/jrmarcum/wasmrt/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/jrmarcum/wasmrt/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/jrmarcum/wasmrt/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/jrmarcum/wasmrt/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/jrmarcum/wasmrt/releases/tag/v0.1.0
+[Unreleased]: https://github.com/synapticforge1/wasmrt/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/synapticforge1/wasmrt/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/synapticforge1/wasmrt/compare/v0.6.9...v0.7.0
+[0.6.9]: https://github.com/synapticforge1/wasmrt/compare/v0.6.8...v0.6.9
+[0.6.8]: https://github.com/synapticforge1/wasmrt/compare/v0.6.7...v0.6.8
+[0.6.7]: https://github.com/synapticforge1/wasmrt/compare/v0.6.6...v0.6.7
+[0.6.6]: https://github.com/synapticforge1/wasmrt/compare/v0.6.5...v0.6.6
+[0.6.5]: https://github.com/synapticforge1/wasmrt/compare/v0.6.4...v0.6.5
+[0.6.4]: https://github.com/synapticforge1/wasmrt/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/synapticforge1/wasmrt/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/synapticforge1/wasmrt/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/synapticforge1/wasmrt/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/synapticforge1/wasmrt/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/synapticforge1/wasmrt/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/synapticforge1/wasmrt/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/synapticforge1/wasmrt/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/synapticforge1/wasmrt/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/synapticforge1/wasmrt/releases/tag/v0.1.0
