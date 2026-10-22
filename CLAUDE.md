@@ -1,5 +1,10 @@
 # wasmrt
 
+> **At session start, read `../cmem/handoffs.md` for letters addressed to this repo.** The workspace
+> session (`../cmem/INDEX.md`) reviews across the sibling repos and reports there; nothing is ever
+> written into this repo from outside. (owner directive, 2026-09-20)
+
+
 An idiomatic-**Rust** WebAssembly runtime — a port of the Zig runtime **`wazmrt`** (`../wazmrt`),
 built to **replace wasmtime** as the engine beneath the owner's `universalWasmLoader-*` projects.
 
@@ -400,9 +405,11 @@ and the three shapes to watch: `cmem/design-decisions.md`, "PROVE, DO NOT ASSUME
 
 ## 🔒 Tooling rules (owner, 2026-09-19)
 
-**Scripts are TypeScript, run by Deno or Bun — NO bash, NO PYTHON** (owner, restated 2026-09-19:
-*"python scripts not allowed either, only deno or bun"*). `deno run -A scripts/x.ts` / `bun
-scripts/x.ts`, importing `node:` builtins only so one file runs under either. ⚠️ **This covers the
+**Scripts are TypeScript, run by BUN — NO bash, NO PYTHON, and 🆕 NO LONGER DENO** (owner,
+2026-10-21: *"from this point further utilize bun scripts, since deno is going away"*; restated
+2026-09-19: *"python scripts not allowed either, only deno or bun"*). `bun scripts/x.ts`. Keep
+importing `node:` builtins only — that is why the switch cost no code (all nine `scripts/*.ts` build
+under Bun 1.4.3, measured 2026-10-21) — and never add a `Deno.*` API or a `jsr:` import. ⚠️ **This covers the
 throwaway edit scripts a session writes, which is the half that gets skipped** — and the half where
 a `python -c` string executed backticks and silently applied nothing. Prefer the `Edit` tool for
 source; otherwise write a `.ts` and run it. The four gates were ported the same day and each was verified to still FAIL
@@ -433,7 +440,8 @@ diff --numstat` was empty for all twelve).
 
 When asked to record/remember anything for the project, fold it into the matching `cmem/` file(s) and
 refresh the `cmem/INDEX.md` Files table (see the binding triggers in `cmem/INDEX.md`), then commit +
-push (`origin` = github.com/jrmarcum/wasmrt). `README.md` is public-facing docs, NOT project memory.
+push (`origin` = github.com/synapticforge1/wasmrt — moved from `jrmarcum/wasmrt` to the owner's
+organization; GitHub 301-redirects the old URL, verified 2026-10-21). `README.md` is public-facing docs, NOT project memory.
 
 ## 🔒 Release-prep directive — docs BEFORE the publish handoff (owner, 2026-07-31)
 
