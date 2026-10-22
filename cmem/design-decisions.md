@@ -34,6 +34,11 @@ had to change: all nine files use `node:` builtins only, and each one builds und
 build --target=bun`, measured 2026-10-21). **Keep it that way — no `Deno.*` API, no `jsr:` or
 `https://deno.land` import**, so nothing comes back that needs the runtime that is going away. Where
 the text below says "Deno or Bun", read **Bun**; it is kept as the record of the 2026-09-19 rule.
+**Why Deno is going away** (taken from binaryang's record, not re-measured here:
+`../binaryang/cmem/jsr-deno-exit-guide.md` §1): on 2026-10-09 the Deno team announced it is
+joining Cloudflare. The runtime gets about a year of maintenance releases, so development ends
+around 2027-10 (an inferred date). binaryang started moving to Bun on 2026-10-12. wasmrt's own
+exposure was small: only the gate scripts ran on Deno, and they already used `node:` builtins.
 
 **Owner's rule, restated 2026-09-19 because it was being honoured in `scripts/` and ignored
 everywhere else:** *"python scripts not allowed either, only deno or bun"*. `scripts/` holds `.ts`

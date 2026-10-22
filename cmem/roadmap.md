@@ -186,6 +186,31 @@ Produced after the **skip census** (`testing.md`) made the skip column attributa
 ⚠️ **The track table was ranked on numbers that could not distinguish a root from its shadow;** these
 are ranked on *assertions unblocked*, which is what the ranking rule above actually asks for.
 
+##### 🗂️ 2026-10-21 — housekeeping, no engine change
+
+**The engine was not touched, and none of the numbers in the day-6 handoff below was re-measured.**
+Treat them as dated 2026-09-20, and re-run them before quoting (the corpus can move).
+
+Done:
+* 🏢 **The repo moved to the owner's `synapticforge1` organization.** `origin` is
+  `github.com/synapticforge1/wasmrt`, and every `.md` link now points there; `wazmrt` and `rsxtk`
+  moved too, but `wasmtk` did not (`INDEX.md`, "update the project memory" step 4). Pushed through
+  `78d31a50d`.
+* 🟢 **Scripts run on Bun only.** Owner: *"deno is going away"*. All nine `scripts/*.ts` build under
+  Bun 1.4.3; their shebangs, the gate commands and `line_endings.rs`'s fix message now say `bun`
+  (`design-decisions.md` TOOLING RULES §1).
+
+Open, each the owner's call:
+1. **`Cargo.toml`'s `repository` field still names `jrmarcum/wasmrt`.** It works through the
+   redirect, but crates.io shows it from the next publish, so fix it before `1.0.0`. It is not a
+   `.md` file, so the link sweep left it.
+2. **The JavaScript-runtime comparison in T11.** The cold-start wins on record are against Deno/V8.
+   Whether to switch the comparison to Bun is undecided (`vision.md`, "Fast").
+3. **The local `origin` URL** still uses the old address. It works through the redirect.
+
+A fresh clone **on this host** needs a local git setting to stop `.git` growing. That is a fact about
+this machine, so it lives in machine-local notes, not here (workspace rule).
+
 ##### 🚦 HANDOFF — where to pick up (updated 2026-09-20, day 6)
 
 **State: 🎯 64,603 / 0 / 0 over 288 files, unchanged by the day's eight fixes.** **588 workspace tests**,

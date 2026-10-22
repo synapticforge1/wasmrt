@@ -63,6 +63,10 @@ and the wasmtk WASI corpus. Those were always the harder test; the oracle was sc
 2. **Fast** — beat wasmtk/Deno/V8. Preserve wazmrt's confirmed **cold-start win** (2.4× on a trivial
    call, 1.5× on `sum(1e6)` vs Deno/V8, which pays ~110 ms of V8 init + JIT + JS marshalling per run).
    wasmrt cedes sustained hot loops to a JIT — **accepted**; win short-lived / native-FFI, not hot loops.
+   ⚠️ **OPEN, 2026-10-21: Deno is going away** (owner; `design-decisions.md` TOOLING RULES §1). The
+   figures above were measured against Deno/V8 and stay as measured. Whether T11's JavaScript-runtime
+   comparison moves to **Bun** (JavaScriptCore, not V8) is the **owner's decision, not yet made**. A
+   Bun figure would need a new measurement; the Deno numbers must not be relabelled.
 3. **Small** — minimize **every** artifact (freestanding wasm, cdylib, static lib, CLI); aim smaller
    than the next-smallest runtime (wasm3 / WAMR), benchmarked later. See [design-decisions.md](design-decisions.md)
    for the size levers.
