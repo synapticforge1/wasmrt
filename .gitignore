@@ -3,3 +3,6 @@
 **/*.rs.bk
 
 # Keep Cargo.lock tracked (this workspace ships binaries).
+
+# Machine-local memory: absolute paths and other private facts (workspace rule, Records).
+/cmem/local/

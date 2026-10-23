@@ -194,19 +194,89 @@ Treat them as dated 2026-09-20, and re-run them before quoting (the corpus can m
 Done:
 * 🏢 **The repo moved to the owner's `synapticforge1` organization.** `origin` is
   `github.com/synapticforge1/wasmrt`, and every `.md` link now points there; `wazmrt` and `rsxtk`
-  moved too, but `wasmtk` did not (`INDEX.md`, "update the project memory" step 4). Pushed through
+  moved too; `wasmtk` followed by 2026-10-23 (below; `INDEX.md`, "update the project memory" step 4). Pushed through
   `78d31a50d`.
 * 🟢 **Scripts run on Bun only.** Owner: *"deno is going away"*. All nine `scripts/*.ts` build under
   Bun 1.4.3; their shebangs, the gate commands and `line_endings.rs`'s fix message now say `bun`
   (`design-decisions.md` TOOLING RULES §1).
 
 Open, each the owner's call:
-1. **`Cargo.toml`'s `repository` field still names `jrmarcum/wasmrt`.** It works through the
-   redirect, but crates.io shows it from the next publish, so fix it before `1.0.0`. It is not a
-   `.md` file, so the link sweep left it.
+1. ✅ **CLOSED 2026-10-23 (owner: "update those references").** `Cargo.toml`'s `repository` field
+   now names `synapticforge1/wasmrt`, which answers HTTP 200 with no redirect. crates.io shows the
+   new value from the next publish.
 2. **The JavaScript-runtime comparison in T11.** The cold-start wins on record are against Deno/V8.
    Whether to switch the comparison to Bun is undecided (`vision.md`, "Fast").
-3. **The local `origin` URL** still uses the old address. It works through the redirect.
+3. ✅ **Already done; this entry was stale.** On 2026-10-23, `git remote -v` showed
+   `origin = https://github.com/synapticforge1/wasmrt.git`.
+
+🏢 **2026-10-23: wasmtk has moved too.** `jrmarcum/wasmtk` now 301-redirects to
+`synapticforge1/wasmtk` (HTTP 200, `main` listed by `git ls-remote`). The one wasmtk URL in this repo
+(`testing.md`, "spec testsuite") now points there. ⚠️ The workspace's `../cmem/projects.md` table
+(measured 2026-10-22) and letter H17 still say "NOT MOVED". Report that to the workspace session;
+do not edit it from here.
+
+##### 📋 2026-10-23 — SCOPE: the workspace rules and letters, as they apply here (track A DONE the same day)
+
+The source is `../cmem/working-rules.md` (Tooling rule 1 amended 2026-10-22; Records rule amended
+2026-10-22 and 2026-10-23) and the letters `../cmem/handoffs.md` addresses to wasmrt. **On
+2026-10-23, none of H1, H2, H6, H8, H10, H13, H15, H18, H19 or H20 was recorded anywhere in this
+repo's `cmem/`.** Ordered by size and by who has to act:
+
+**A. Small; can be done in a session without new owner input — ✅ DONE 2026-10-23 (owner: "I agree")**
+* ✅ **Records rule.** `/cmem/local/` is in `.gitignore`. `git check-ignore -v` confirmed it
+  (`.gitignore:8`) before the first write.
+* ✅ **H18.** The four personal drive paths are now sibling-relative. ⚠️ **The relative forms first
+  planned here were WRONG**: `../../Rust/rsxtk` and `../../GithubProjects/universalWasmLoader` no
+  longer exist. Both projects now live beside this repo, at **`../rsxtk`** (origin
+  `synapticforge1/rsxtk`) and **`../universalWasmLoader`** (all ten loaders). Checking each path
+  before writing it caught that. The absolute paths are in the gitignored
+  `cmem/local/environment.md`. After the change, the working-rules scan returns nothing.
+* ✅ **H15.** Recorded in `design-decisions.md` TOOLING RULES §1. Conforms: no committed shell
+  scripts. ⚠️ The workspace's new allowance for **one-time** shell scripts is NOT adopted here.
+  This repo's rule is stricter, and the repo rule governs. **That one is the owner's call.**
+* ✅ **H16.** Already done (2026-10-21); now noted in `cmem/local/environment.md`, since it is a
+  per-clone, per-machine fact.
+* ✅ **H20.** Recorded in `releasing.md` § Tooling: token publishing, no OIDC policy, so the move
+  does not affect publishing.
+* **Maintainer-email exception (2026-10-23).** `Cargo.toml` `authors = ["Jon Marcum"]` carries no
+  email. One is now allowed there, and only there. Whether to add it is the owner's choice; nothing
+  requires it.
+
+**B. Needs one fact from the owner**
+* **Commit metadata: the local `user.email` is the owner's personal address**, and so is every
+  commit's author and committer. The rule wants the GitHub **noreply** address as the local
+  `user.email`. Wait for the owner to supply it; never guess it.
+
+**C. Memory conformance (medium; repo-internal)**
+* **H2**: `CLAUDE.md` is **49,055 bytes** (2026-10-23); the letter asks for a pointer file. Move
+  the INDEX narrative to `open-work.md`. Renumber the duplicated `§3.11 §3.12 §1.7 §4.4 §4.5`.
+  README, CHANGELOG and roadmap must "reflect a shipped stage" before `1.0.0` (drift-register
+  R1–R9). Policy: `../cmem/memory-conventions.md`.
+* **H6**: SemVer 2.0.0, plus a **gated bump**. wasmrt has **no bump script and no committed surface
+  snapshot**. A gate needs three: the public Rust API of the three crates, `wasmrt.h`, and the CLI
+  flag set (the CLI is a contract surface, `interop.md`). Also copy the ★ rules block into
+  `best-practices.md` under a dated stamp. This is the largest item in C and blocks the `1.0.0`
+  release checklist.
+
+**D. Engine and contract work (technical; some cross the `interop.md` contract)**
+* **H1**: record the owner decisions in `interop.md` (any CLI syntax error throws; lockstep at
+  1.0.0+). Close §5 rows 10 and 12. Mirror wazmrt's v22 Z4 close and its v28 contract.
+  ⚠️ wazmrt moved the lockstep point to wasmrt `1.0.1`. Coordinate before release.
+* **H13**: the assembler differs from wasm-tools on **539 of 603** files (workspace measurement).
+  Three causes: locals written one entry per local instead of runs, exports grouped by kind instead
+  of source order, and type interning order. wazmrt closed its copy. ⚠️ This changes emitted bytes,
+  so `.wat` pin digests move. Treat it as a format-level change and run the outside-reader gate.
+* **H8**: the measurements requested (I5–I8, plus the three sweeps against wazmrt and binaryang).
+* **H10**: the opcode table and feature list become generated copies of binaryang `./definitions`
+  (live since 1.9.0). The gate regenerates them and diffs. Large.
+
+**E. Owner-gated and destructive**
+* **H19: purge personal information from history** (214 commits, 17 tags, measured 2026-10-23).
+  Rewrite the author/committer email to the noreply address, and remove the H18 paths from every
+  tree. Keep every tagged tree byte-identical. crates.io 0.x `.cargo_vcs_info.json` keeps the OLD
+  hashes forever, so record the old→new map tag by tag. Force-push with lease, then
+  `gc --prune=now`. Template: loader-dotnet `cmem/overview.md`. **Do A's H18 fix first, so the
+  purge removes what is already gone from the tip.**
 
 A fresh clone **on this host** needs a local git setting to stop `.git` growing. That is a fact about
 this machine, so it lives in machine-local notes, not here (workspace rule).

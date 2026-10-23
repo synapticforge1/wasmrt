@@ -165,6 +165,13 @@ whether you meant to or not.
   the **only** CI automation so far — deliberately scoped to the GitHub-release step; **`cargo publish`
   remains manual** (needs the owner's crates.io token, and the owner chose not to build CI publishing up
   front). To add crate publishing later, extend this workflow with a `CRATES_IO_TOKEN` repo secret.
+- 🏢 **The org move does not touch publishing (workspace letter H20, recorded 2026-10-23).** H20 exists
+  because a registry's trusted-publishing (OIDC) policy is locked to the GitHub owner and repository
+  **IDs**, and the move to `synapticforge1` changed the owner ID (nuget.org refused loader-dotnet's
+  next publish). wasmrt publishes with the owner's **API token**, with no OIDC policy, so nothing is
+  pinned to the old ID. **If CI publishing is ever adopted through crates.io trusted publishing,
+  create the policy under `synapticforge1/wasmrt`, never the old owner.** crates.io shows the
+  corrected `repository` field (`synapticforge1/wasmrt`, fixed 2026-10-23) from the next publish.
 - **`cargo-release`** (recommended): workspace-aware — bumps the shared version, syncs the internal dep
   pin, publishes in order, tags. `cargo install cargo-release`; then `cargo release minor` (or `patch`
   for an interp slice). Not yet installed as of 2026-07-27.

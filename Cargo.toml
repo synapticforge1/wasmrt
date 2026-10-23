@@ -13,7 +13,7 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 authors = ["Jon Marcum"]
-repository = "https://github.com/jrmarcum/wasmrt"
+repository = "https://github.com/synapticforge1/wasmrt"
 description = "An idiomatic-Rust WebAssembly runtime — a port of the Zig runtime wazmrt."
 
 [workspace.dependencies]

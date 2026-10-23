@@ -1,6 +1,6 @@
 # universalWasmLoader — API surface driving wasmrt.h
 
-Loaders dir: `../universalWasmLoader`
+Loaders dir: `../universalWasmLoader` (a sibling of this repo; one subdirectory per loader)
 Ten language loaders: c, dart, dotnet, go, js, jvm, py, rs, v, zig. Currently built on **wasmtime v45 C API** (vendored).
 
 ## Architecture (KEY reconciliation)

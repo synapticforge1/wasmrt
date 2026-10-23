@@ -1238,7 +1238,7 @@ The official WebAssembly spec testsuite is **already vendored locally** — no c
 
 **257 core `.wast` files** plus `proposals/` (custom-descriptors 14, threads 4, custom-page-sizes 4,
 wide-arithmetic 1) and `legacy/` (4 — the legacy EH encoding: `throw`, `rethrow`, `try_catch`,
-`try_delegate`). Mirrored on GitHub at <https://github.com/jrmarcum/wasmtk/tree/main/tests>. The wider
+`try_delegate`). Mirrored on GitHub at <https://github.com/synapticforge1/wasmtk/tree/main/tests>. The wider
 `wasmtk/tests` tree also holds the **WASI corpus** used at T7 and 534 `.wat` files.
 
 This is the **T6 conformance gate**: the `.wast` runner walks these and must reach wazmrt's ~60k-assertion

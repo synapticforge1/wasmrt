@@ -827,8 +827,10 @@ When the owner says **"update the project memory"** (or a synonym — "update me
 4. **Commit and push** — the repo is synced to `origin` (github.com/synapticforge1/wasmrt); keep the
    portable memory current on GitHub. 🏢 **The repo moved from `jrmarcum/wasmrt` to the owner's
    `synapticforge1` organization** (owner, recorded 2026-10-21); GitHub 301-redirects the old URL
-   (measured), as it does for `wazmrt` and `rsxtk`, which moved too. `wasmtk` did NOT move (still
-   `jrmarcum/wasmtk`, HTTP 200 on 2026-10-21) — re-check a sibling's URL before writing it, never infer it.
+   (measured), as it does for `wazmrt` and `rsxtk`, which moved too. `wasmtk` has now moved as well:
+   on 2026-10-21 `jrmarcum/wasmtk` answered HTTP 200, and on **2026-10-23 it 301-redirects to
+   `synapticforge1/wasmtk`** (HTTP 200, `main` listed). Re-check a sibling's URL before writing it,
+   never infer it. The workspace's canonical table is `../cmem/projects.md`, "Where each project lives".
 
 ### 🤝 The "**coordinate**" trigger (binding on every agent) — *added by the owner 2026-08-19*
 

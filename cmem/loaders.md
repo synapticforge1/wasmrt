@@ -24,7 +24,7 @@ which means the *default* consumer's artifact is the one with no number on it �
 
 ## `rsxtk` — READ, not assumed (2026-08-11)
 
-**`../rsxtk`** — v0.4.4, MIT/Apache, edition 2024,
+**`../rsxtk`** (a sibling of this repo) — v0.4.4, MIT/Apache, edition 2024,
 `github.com/synapticforge1/rsxtk` (moved from `jrmarcum/rsxtk`; redirect verified 2026-10-21). *"A high-performance Rust WASM Toolkit for managing and running WASI
 scripts, WAT, and WASM modules."* **One source file, `src/main.rs`, 463 lines.** Release profile:
 `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`.

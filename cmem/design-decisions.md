@@ -40,6 +40,22 @@ joining Cloudflare. The runtime gets about a year of maintenance releases, so de
 around 2027-10 (an inferred date). binaryang started moving to Bun on 2026-10-12. wasmrt's own
 exposure was small: only the gate scripts ran on Deno, and they already used `node:` builtins.
 
+🆕 **WORKSPACE AMENDMENTS, 2026-10-22 (letter H15, `../cmem/working-rules.md` § Tooling rule 1),
+recorded here 2026-10-23.**
+* **A committed script uses the repo language's own scripting mechanism, else TypeScript on Bun.**
+  A mechanism that has to **build an executable** to run the script does not count. So **Rust →
+  Bun**; the owner also calls `cargo -Zscript` "a moving target". Nothing changes here.
+* **A port replaces its TypeScript original only after an output diff proves them equivalent**:
+  same inputs, compare the files written, stdout and exit code, include one input that must fail,
+  and record the comparison in the commit. The 2026-09-19 gate ports below already met this bar.
+* **Conformance, measured 2026-10-23:** `git ls-files` shows no `.sh`, `.ps1`, `.bat`, `.nu`,
+  `.mjs` or `.py`. The only shell is the `run:` blocks in `.github/workflows/release.yml`, which the
+  workspace rule accepts (a `run:` block only launches commands).
+* ⚠️ **One difference, kept on purpose.** The workspace now allows a **one-time** script, deleted
+  after use, to be a shell script. **This repo's rule is stricter** (a throwaway edit script is a
+  `.ts` too, see below, because that is where the silent no-op edits happened). A repo's own rule
+  governs inside the repo, so **the stricter rule stands here until the owner says otherwise.**
+
 **Owner's rule, restated 2026-09-19 because it was being honoured in `scripts/` and ignored
 everywhere else:** *"python scripts not allowed either, only deno or bun"*. `scripts/` holds `.ts`
 files, **and so does every throwaway edit script a session writes** — the ad-hoc half is the half
