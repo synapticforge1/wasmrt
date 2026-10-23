@@ -353,6 +353,9 @@ per domain — same convention as wazmrt. **Start with [`cmem/INDEX.md`](cmem/IN
   from the iteration it guards is **no check**; which direction to err in is a property of the *consequence*.
 - [`cmem/roadmap.md`](cmem/roadmap.md) · [`cmem/known-issues.md`](cmem/known-issues.md) · [`cmem/reference-projects.md`](cmem/reference-projects.md)
 - [`cmem/releasing.md`](cmem/releasing.md) — versioning ladder + the binding per-release checklist
+- 🔗 [`cmem/shared-definitions.md`](cmem/shared-definitions.md) — binaryang's D1/D2/D3, vendored and
+  GENERATED into `definitions.rs` (`bun scripts/definitions.ts --check`); wasmrt's tables are held to
+  it in `cargo test`. **Editing the generated file by hand is a DEFECT** (letter H10)
 - 🔑 [`cmem/history-map-2026-10-23.md`](cmem/history-map-2026-10-23.md) — **history was rewritten on
   2026-10-23** (drive-path purge), so every commit id quoted from before then is OLD: look it up here
 

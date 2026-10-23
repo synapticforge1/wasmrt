@@ -4538,7 +4538,7 @@ fn emit_op_with_immediates(
 
 /// The immediate shape of a `0xFD` op.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SimdImm {
+pub(crate) enum SimdImm {
     /// No immediate.
     None,
     /// A single lane index byte.
@@ -4557,7 +4557,7 @@ enum SimdImm {
 ///
 /// Kept as one table so a name and its sub-opcode cannot drift apart; the sub-opcodes are
 /// the same ones `decode_simd` reads and `simd_natural_align_log2` sizes.
-fn lookup_simd(name: &str) -> Option<(u32, SimdImm)> {
+pub(crate) fn lookup_simd(name: &str) -> Option<(u32, SimdImm)> {
     use SimdImm::{Const, Lane, Mem, MemLane, None as N, Shuffle};
     const TBL: &[(&str, u32, SimdImm)] = &[
         // loads / stores
@@ -4844,7 +4844,7 @@ fn lookup_simd(name: &str) -> Option<(u32, SimdImm)> {
 /// `[i32.full, i64.full, i32.8, i32.16, i64.8, i64.16, i64.32]`. That is the same layout
 /// `atomic_natural_align_log2` and `atomic_val_type` encode, so describing it once keeps
 /// the three in step.
-fn lookup_atomic(name: &str) -> Option<u32> {
+pub(crate) fn lookup_atomic(name: &str) -> Option<u32> {
     const FIXED: &[(&str, u32)] = &[
         ("memory.atomic.notify", 0x00),
         ("memory.atomic.wait32", 0x01),

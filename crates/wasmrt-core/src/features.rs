@@ -395,9 +395,12 @@ impl Features {
 /// The proposal an opcode belongs to, or `None` for WebAssembly 1.0 core instructions.
 ///
 /// **One authority.** Every gate in the validator reads this table, so an instruction
-/// cannot be gated in one place and forgotten in another — and a new opcode added to
-/// [`crate::opcode`] shows up here as an explicit decision rather than silently defaulting
-/// to "always allowed", because the match below is exhaustive over `Op`.
+/// cannot be gated in one place and forgotten in another.
+///
+/// ⚠️ **The match is NOT exhaustive** (it ends in `_ => return None`), so a new opcode defaults to
+/// ungated. Two checks catch that instead: [`UNGATED_CORE_OPS`] pins the count, and
+/// `definitions_check` holds every op to binaryang's D1 `feature` column. *(This comment claimed
+/// exhaustiveness until 2026-10-23, after the defect it hid had already been found once.)*
 #[must_use]
 pub const fn op_feature(op: Op) -> Option<Feature> {
     use Op::*;
@@ -430,8 +433,16 @@ pub const fn op_feature(op: Op) -> Option<Feature> {
         Atomic => Feature::Threads,
 
         // --- WasmGC (the whole 0xFB family, plus `ref.eq`) ---
+        //
+        // 🔴 The six bulk array ops (`array.new_data` … `array.init_elem`, `0xFB 0x09/0x0a/0x10..0x13`)
+        // were MISSING from this arm from the day they landed (2026-08-19) until 2026-10-23, so no
+        // flag gated them. Latent, not live: each needs an array type index, and an array TYPE is
+        // refused with GC off first (measured: wasmrt "uses the disabled proposal `gc`", wasm-tools
+        // "array indexed types not supported without the gc feature"). Found by `definitions_check`
+        // against binaryang's D1, not by reading this arm — the X3 shape, a fifth time.
         RefEq | ArrayNew | ArrayNewDefault | ArrayNewFixed | ArrayGet | ArrayGetS
-        | ArrayGetU | ArraySet | ArrayLen | RefTest | RefCastOp | RefI31 | I31GetS
+        | ArrayGetU | ArraySet | ArrayLen | ArrayNewData | ArrayNewElem | ArrayFill
+        | ArrayCopy | ArrayInitData | ArrayInitElem | RefTest | RefCastOp | RefI31 | I31GetS
         | I31GetU | StructNew | StructNewDefault | StructGet | StructGetS | StructGetU
         | StructSet | BrOnCast | BrOnCastFail | AnyConvertExtern | ExternConvertAny => {
             Feature::Gc
@@ -475,8 +486,12 @@ pub const fn op_feature(op: Op) -> Option<Feature> {
 /// a feature (this list does not move) or shows up here as a visible, deliberate diff.
 /// `best-practices.md`: a gate that cannot fail is decoration — and a gate that exists only in
 /// a doc comment is not even that.
+///
+/// **172 since 2026-10-23** (was 178): six GC bulk array ops had been counted here as "core". 172 is
+/// also binaryang D1's count of instructions with no gating feature, which `definitions_check` holds
+/// this table to op by op — the count and the cross-check now fail independently.
 #[cfg(test)]
-const UNGATED_CORE_OPS: usize = 178;
+const UNGATED_CORE_OPS: usize = 172;
 
 /// Lowest relaxed-SIMD sub-opcode in the `0xFD` space (`i8x16.relaxed_swizzle`).
 pub const RELAXED_SIMD_FIRST: u32 = 0x100;
@@ -804,6 +819,17 @@ mod tests {
                 "{} must be gated by wide-arithmetic",
                 op.text_name()
             );
+        }
+        // The six GC bulk array ops that sat ungated from 2026-08-19 to 2026-10-23.
+        for op in [
+            Op::ArrayNewData,
+            Op::ArrayNewElem,
+            Op::ArrayFill,
+            Op::ArrayCopy,
+            Op::ArrayInitData,
+            Op::ArrayInitElem,
+        ] {
+            assert_eq!(op_feature(op), Some(Feature::Gc), "{} must be gated by gc", op.text_name());
         }
     }
 

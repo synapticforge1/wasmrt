@@ -43,6 +43,15 @@ pub mod wat;
 pub mod wast;
 pub mod pin;
 
+// The workspace's shared definitions (D1 instructions, D2 features, D3 verdicts), GENERATED from
+// binaryang by `scripts/definitions.ts` — and the check that holds wasmrt's own tables to them.
+// Test-only, so neither reaches a shipped artifact (letter H10; `cmem/testing.md`).
+#[cfg(test)]
+#[rustfmt::skip]
+mod definitions;
+#[cfg(test)]
+mod definitions_check;
+
 // WASI + the secure sandbox resolve real OS paths → they require `std`.
 pub mod rng;
 #[cfg(feature = "std")]

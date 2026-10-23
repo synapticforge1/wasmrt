@@ -1120,6 +1120,23 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 Shared definitions gate (2026-10-23, letters H8 / H10) — **590 workspace tests**
+
+    bun scripts/definitions.ts --check              # the copy equals what the pinned source generates
+    cargo test -p wasmrt-core --lib definitions_check   # wasmrt's own tables equal the copy
+
+The first verifies the vendored binaryang source (content hash and git blob id) and regenerates
+`crates/wasmrt-core/src/definitions.rs`; any difference fails. The second runs inside `cargo test`.
+Every D1 instruction must decode as one instruction of exactly D1's width, with D1's name and gating
+feature, and a reverse sweep refuses anything wasmrt decodes that D1 lacks. Both were inverted
+2026-10-23. Detail, the classified `KNOWN` list and the cross-repo results:
+[shared-definitions.md](shared-definitions.md).
+
+**590 workspace tests, 0 failed** (2026-10-23, from Git Bash; was 589, plus the cross-check). ⚠️ From
+PowerShell one test fails for an environment reason (`known-issues.md`, top). Spec suite
+**64,603 / 0 / 0** over 288 files, unchanged by the day's gating fix (`conformance-diff`: no file lost
+a pass). The three sweeps pass; clippy is clean.
+
 ### Benchmark (T9c, added 2026-08-07)
 
 `cargo run --release -p wasmrt-core --example bench` — cold (decode+validate+instantiate+call) and

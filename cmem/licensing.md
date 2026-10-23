@@ -19,6 +19,14 @@ derived from wazmrt in design, and that history is real whatever the two project
 - ⚠️ The **Component Ledger stays EMPTY** — wasmrt is 100% original Rust. That was true when wazmrt was
   the oracle and is unaffected by the split. Adopting *anyone's* code, wazmrt's included, still triggers
   the Adoption Checklist and a ledger entry.
+- 🆕 **2026-10-23: binaryang's shared-definitions DATA is vendored** (`definitions/binaryang/*.json`,
+  pinned at `v1.14.0`), and `crates/wasmrt-core/src/definitions.rs` is generated from it (letter H10;
+  [shared-definitions.md](shared-definitions.md)). binaryang is the same owner's MIT project, and the
+  generated module is test-only (`#[cfg(test)]`), so it reaches no shipped binary, though it is in
+  the published crate's source. 🗓️ **OWNER question, not decided here:** binaryang populated D1 from
+  its wabt-ts table, a port of wabt (Apache-2.0). An opcode table is largely the spec's facts, which
+  may make the question moot. Whether the vendored data needs a ledger entry or a NOTICE line is the
+  owner's call. Until then the Component Ledger stays empty.
 
 ## Files (mimic wazmrt) — **all four exist since the T0 scaffold**, verified 2026-08-06
 
