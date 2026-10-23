@@ -409,10 +409,12 @@ and the three shapes to watch: `cmem/design-decisions.md`, "PROVE, DO NOT ASSUME
 2026-10-21: *"from this point further utilize bun scripts, since deno is going away"*; restated
 2026-09-19: *"python scripts not allowed either, only deno or bun"*). `bun scripts/x.ts`. Keep
 importing `node:` builtins only — that is why the switch cost no code (all nine `scripts/*.ts` build
-under Bun 1.4.3, measured 2026-10-21) — and never add a `Deno.*` API or a `jsr:` import. ⚠️ **This covers the
-throwaway edit scripts a session writes, which is the half that gets skipped** — and the half where
-a `python -c` string executed backticks and silently applied nothing. Prefer the `Edit` tool for
-source; otherwise write a `.ts` and run it. The four gates were ported the same day and each was verified to still FAIL
+under Bun 1.4.3, measured 2026-10-21) — and never add a `Deno.*` API or a `jsr:` import. 🆕 **A ONE-TIME
+script deleted after use may be a shell script** (PowerShell, bash, Bun or Rust; owner, 2026-10-23,
+adopting the workspace rule). It is still written with `Write` into the scratchpad, is ported to
+`.ts` before it is ever committed, and is **never host Python**. A one-time *edit* script must
+assert that each match applied once and read back the result: a `python -c` string once executed
+backticks and silently applied nothing. Prefer the `Edit` tool for source. The four gates were ported the same day and each was verified to still FAIL
 when it should. **⛔ And no heredocs**: write the script to a file and run the file. A heredoc's
 quoting has silently mangled non-ASCII, executed backticks it should have quoted, and made an edit
 apply nothing while reporting success — the silent-wrong class. Detail and the evidence:

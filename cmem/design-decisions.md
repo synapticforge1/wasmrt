@@ -51,17 +51,27 @@ recorded here 2026-10-23.**
 * **Conformance, measured 2026-10-23:** `git ls-files` shows no `.sh`, `.ps1`, `.bat`, `.nu`,
   `.mjs` or `.py`. The only shell is the `run:` blocks in `.github/workflows/release.yml`, which the
   workspace rule accepts (a `run:` block only launches commands).
-* ⚠️ **One difference, kept on purpose.** The workspace now allows a **one-time** script, deleted
-  after use, to be a shell script. **This repo's rule is stricter** (a throwaway edit script is a
-  `.ts` too, see below, because that is where the silent no-op edits happened). A repo's own rule
-  governs inside the repo, so **the stricter rule stands here until the owner says otherwise.**
+* 🔒 **A ONE-TIME script may be a shell script — ADOPTED here (owner, 2026-10-23: "adopt the
+  looser one").** A script that is used once and then deleted may be PowerShell, bash, Bun or Rust,
+  whichever fits. Three things still hold:
+  1. It is **written to a file with `Write`**, never a heredoc, `-c` / `-e` string or `-F -` (§2).
+  2. It lives in the scratchpad, not the repo. **If it is needed again, it is ported to a `.ts`
+     before it is committed.**
+  3. **No host Python, ever.** The workspace rule keeps that ban (a Store stub that hangs, and
+     cp1252 stdout).
+
+  This replaces the 2026-09-19 rule below that "every throwaway edit script" is a `.ts`. Because the
+  damage below came from scripted edits that silently applied nothing, a one-time **edit** script
+  must still assert that each match applied exactly once and read back what it changed (workspace
+  Tooling rule 4). Language is not the safeguard; the assertion is.
 
 **Owner's rule, restated 2026-09-19 because it was being honoured in `scripts/` and ignored
 everywhere else:** *"python scripts not allowed either, only deno or bun"*. `scripts/` holds `.ts`
-files, **and so does every throwaway edit script a session writes** — the ad-hoc half is the half
-that gets skipped, and it is where the damage happened (a `python -c` string executed backticks it
-should have quoted, and mangled non-ASCII into a silent no-op). Not bash, not Python, not `perl -pi`.
-For editing source, prefer the `Edit` tool; for anything scripted, write a `.ts` and run it.
+files. ~~**and so does every throwaway edit script a session writes**~~ *(superseded 2026-10-23,
+above: a one-time script may be a shell script)*. The ad-hoc half is the half that gets skipped, and
+it is where the damage happened (a `python -c` string executed backticks it should have quoted, and
+mangled non-ASCII into a silent no-op). Not Python, and not a script passed as a string. For editing
+source, prefer the `Edit` tool.
 
 **The session's own helper is `edit.ts`**: a spec of `[file, [[find, replace], …]]` where every
 `find` must match EXACTLY once or nothing is written and the run exits non-zero. JSON carries the

@@ -232,8 +232,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   before writing it caught that. The absolute paths are in the gitignored
   `cmem/local/environment.md`. After the change, the working-rules scan returns nothing.
 * ✅ **H15.** Recorded in `design-decisions.md` TOOLING RULES §1. Conforms: no committed shell
-  scripts. ⚠️ The workspace's new allowance for **one-time** shell scripts is NOT adopted here.
-  This repo's rule is stricter, and the repo rule governs. **That one is the owner's call.**
+  scripts. The workspace's allowance for **one-time** shell scripts was held back at first (this
+  repo's rule was stricter). 🔒 **The owner then adopted it, 2026-10-23: "adopt the looser one".**
+  Recorded in `design-decisions.md` TOOLING RULES §1 and in `CLAUDE.md`.
 * ✅ **H16.** Already done (2026-10-21); now noted in `cmem/local/environment.md`, since it is a
   per-clone, per-machine fact.
 * ✅ **H20.** Recorded in `releasing.md` § Tooling: token publishing, no OIDC policy, so the move
@@ -242,10 +243,14 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   email. One is now allowed there, and only there. Whether to add it is the owner's choice; nothing
   requires it.
 
-**B. Needs one fact from the owner**
-* **Commit metadata: the local `user.email` is the owner's personal address**, and so is every
-  commit's author and committer. The rule wants the GitHub **noreply** address as the local
-  `user.email`. Wait for the owner to supply it; never guess it.
+**B. Commit metadata — ✅ CLOSED BY OWNER DECISION 2026-10-23**
+* 🔒 **The owner's personal address stays as this repo's commit author/committer email** (owner,
+  2026-10-23: *"I am okay with my private email address for the repo"*). The local `user.email` is
+  not changed, and **H19's email rewrite does not apply to wasmrt**. ⚠️ This departs from the
+  workspace Records rule ("author and committer email is the owner's GitHub noreply address"). The
+  workspace session should record it as an owner exception for wasmrt, or it will keep filing the
+  item as open. Reported to the owner the same day; not written into the workspace from here. The
+  address itself is not repeated in memory (workspace rule).
 
 **C. Memory conformance (medium; repo-internal)**
 * **H2**: `CLAUDE.md` is **49,055 bytes** (2026-10-23); the letter asks for a pointer file. Move
@@ -272,8 +277,10 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 
 **E. Owner-gated and destructive**
 * **H19: purge personal information from history** (214 commits, 17 tags, measured 2026-10-23).
-  Rewrite the author/committer email to the noreply address, and remove the H18 paths from every
-  tree. Keep every tagged tree byte-identical. crates.io 0.x `.cargo_vcs_info.json` keeps the OLD
+  ~~Rewrite the author/committer email to the noreply address~~ (**not for wasmrt**: owner,
+  2026-10-23, track B). **What is left is the H18 paths**: they are gone from the tip but still sit
+  in older trees. Whether to rewrite history for the paths alone is an open owner call. Keep every
+  tagged tree byte-identical. crates.io 0.x `.cargo_vcs_info.json` keeps the OLD
   hashes forever, so record the old→new map tag by tag. Force-push with lease, then
   `gc --prune=now`. Template: loader-dotnet `cmem/overview.md`. **Do A's H18 fix first, so the
   purge removes what is already gone from the tip.**
