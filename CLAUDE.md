@@ -353,6 +353,8 @@ per domain — same convention as wazmrt. **Start with [`cmem/INDEX.md`](cmem/IN
   from the iteration it guards is **no check**; which direction to err in is a property of the *consequence*.
 - [`cmem/roadmap.md`](cmem/roadmap.md) · [`cmem/known-issues.md`](cmem/known-issues.md) · [`cmem/reference-projects.md`](cmem/reference-projects.md)
 - [`cmem/releasing.md`](cmem/releasing.md) — versioning ladder + the binding per-release checklist
+- 🔑 [`cmem/history-map-2026-10-23.md`](cmem/history-map-2026-10-23.md) — **history was rewritten on
+  2026-10-23** (drive-path purge), so every commit id quoted from before then is OLD: look it up here
 
 Detailed engineering reference (the wazmrt deep-read maps) is in [`docs/port/`](docs/port/).
 ⚠️ **`docs/port/wasmrt.h.draft` is HISTORICAL** — four of its shapes never matched the code. The

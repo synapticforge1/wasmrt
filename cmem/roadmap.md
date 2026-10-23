@@ -275,7 +275,14 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 * **H10**: the opcode table and feature list become generated copies of binaryang `./definitions`
   (live since 1.9.0). The gate regenerates them and diffs. Large.
 
-**E. Owner-gated and destructive**
+**E. Owner-gated and destructive — ✅ DONE 2026-10-23 (owner: "fix the old drive paths in the git history")**
+* ✅ **History rewritten and force-pushed with a lease on all 18 refs.** 217 commits, tip tree
+  byte-identical, 0 trees and 0 messages with a path (213 and 1 before), authors, emails and dates
+  unchanged. ⚠️ **Every commit id changed**, so an id quoted anywhere from before 2026-10-23 is
+  resolved through **`history-map-2026-10-23.md`**. ⚠️ The tagged trees could NOT stay
+  byte-identical, as H19 asks, because all 17 tagged trees held a path. That guidance protects Go's
+  content-hashing checksum DB. For wasmrt it costs nothing: the published crates contain no
+  `cmem/`/`docs/` file. Only their `.cargo_vcs_info.json` keeps the old ids. *(Planning record follows.)*
 * **H19: purge personal information from history** (214 commits, 17 tags, measured 2026-10-23).
   ~~Rewrite the author/committer email to the noreply address~~ (**not for wasmrt**: owner,
   2026-10-23, track B). **What is left is the H18 paths**: they are gone from the tip but still sit
