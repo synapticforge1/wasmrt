@@ -23,10 +23,15 @@ derived from wazmrt in design, and that history is real whatever the two project
   pinned at `v1.14.0`), and `crates/wasmrt-core/src/definitions.rs` is generated from it (letter H10;
   [shared-definitions.md](shared-definitions.md)). binaryang is the same owner's MIT project, and the
   generated module is test-only (`#[cfg(test)]`), so it reaches no shipped binary, though it is in
-  the published crate's source. 🗓️ **OWNER question, not decided here:** binaryang populated D1 from
-  its wabt-ts table, a port of wabt (Apache-2.0). An opcode table is largely the spec's facts, which
-  may make the question moot. Whether the vendored data needs a ledger entry or a NOTICE line is the
-  owner's call. Until then the Component Ledger stays empty.
+  the published crate's source. binaryang populated D1 from its wabt-ts table, a port of wabt
+  (Apache-2.0). 🔒 **Owner, 2026-10-23: "attribution: yes."** So the Component Ledger has its FIRST
+  entry (wabt, by way of binaryang), and the rest follows the Adoption Checklist:
+  * `third_party/wabt/LICENSE` is wabt's own text, taken at tag `1.0.41`.
+  * The top-level `NOTICE` carries wabt's copyright line. wabt ships no NOTICE of its own (checked),
+    so there is nothing to propagate.
+  * The generated `definitions.rs` opens with an SPDX tag and a change-note (written by the
+    generator, so regeneration keeps them).
+  * `README.md` says the engine is still 100% original and names the one test-only component.
 
 ## Files (mimic wazmrt) — **all four exist since the T0 scaffold**, verified 2026-08-06
 

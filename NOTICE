@@ -28,9 +28,17 @@ source file, as required by Section 4(b).
 
 Incorporated components (see third_party/LICENSES.md for the full ledger):
 
-  * None at this time.
+  * WebAssembly/wabt — instruction-table data (test-only)
 
-    wasmrt is 100% original Rust and ships its OWN C ABI header ("wasmrt.h") —
-    it does NOT vendor the standard wasm-c-api "wasm.h" that the source project
-    wazmrt vendored. Should any third-party code ever be adopted, it will be
-    listed here and in third_party/LICENSES.md per the Adoption Checklist.
+    Copyright 2016 WebAssembly Community Group participants
+    Licensed under the Apache License, Version 2.0 (third_party/wabt/LICENSE).
+
+    The WebAssembly instruction table used by wasmrt's shared-definitions
+    test is derived from wabt, by way of binaryang's shared definitions
+    (definitions/binaryang/, generated into
+    crates/wasmrt-core/src/definitions.rs). It is compiled only for tests and
+    is not part of any wasmrt binary. wabt ships no NOTICE file of its own.
+
+    The wasmrt engine itself is 100% original Rust and ships its OWN C ABI
+    header ("wasmrt.h"); it does NOT vendor the standard wasm-c-api "wasm.h"
+    that the source project wazmrt vendored.

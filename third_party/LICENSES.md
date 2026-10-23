@@ -12,10 +12,13 @@ license compliance. (Mirrors the source project `wazmrt`'s compliance scaffold.)
 > at their code" is fine and needs no entry; "I ported their function" always
 > needs one.
 >
-> **wasmrt status:** 100% original Rust. The port of `wazmrt` is the owner's own
-> code (not a third-party adoption). **Nothing is currently adopted** — the
-> Component Ledger is empty. In particular, wasmrt ships its **own** `wasmrt.h`
-> and does **not** vendor the standard wasm-c-api `wasm.h` (unlike wazmrt).
+> **wasmrt status:** the engine is 100% original Rust. The port of `wazmrt` is
+> the owner's own code (not a third-party adoption). **One component is
+> recorded** (2026-10-23): the instruction-table DATA vendored for the
+> shared-definitions cross-check, which binaryang derived from WebAssembly/wabt.
+> It is test-only and reaches no shipped binary. wasmrt still ships its **own**
+> `wasmrt.h` and does **not** vendor the standard wasm-c-api `wasm.h` (unlike
+> wazmrt).
 
 ---
 
@@ -69,8 +72,34 @@ allowed, and did we document it?).
 
 ## Component Ledger
 
-Newest first. **Empty** — wasmrt has adopted no third-party code. Copy the
-template below for each future adopted component.
+Newest first. Copy the template below for each future adopted component.
+
+### WebAssembly/wabt — instruction-table data, via binaryang's shared definitions (2026-10-23)
+- **Source:** https://github.com/WebAssembly/wabt, by way of the owner's own
+  https://github.com/synapticforge1/binaryang (`src/definitions/*.json`). binaryang
+  populated its D1 instruction table from its wabt-ts port's opcode table.
+- **Version / commit:** binaryang `v1.14.0` (commit `7ebcee3ad055cebbf801634242930858c96763c4`).
+  The license text was taken from wabt tag `1.0.41` (commit
+  `03a00a1334e6121fb0cce4fccbd6bb109b68acaa`). Which wabt revision binaryang's port is based on is
+  recorded in binaryang, not here.
+- **License (SPDX):** `Apache-2.0` (wabt's portion). binaryang's own additions are MIT (same owner).
+  Copyright notice retained: *Copyright 2016 WebAssembly Community Group participants*.
+- **License file:** `third_party/wabt/LICENSE`. wabt ships **no** `NOTICE` file (checked
+  2026-10-23: none at the repo root), so there is no NOTICE to propagate; the top-level `NOTICE`
+  carries the attribution instead.
+- **What we reused:** DATA, not code: the instruction table (mnemonic, encoding, immediate kinds,
+  stack signature, gating feature) and binaryang's feature and verdict lists.
+- **Where it lives in wasmrt:** `definitions/binaryang/{opcodes,features,verdicts}.json` (vendored,
+  unmodified, verified by hash), and `crates/wasmrt-core/src/definitions.rs`, which is GENERATED
+  from them by `scripts/definitions.ts`. Both modules are `#[cfg(test)]`: in the published crate's
+  source, in no shipped binary.
+- **Modifications:** the JSON is verbatim. `definitions.rs` re-expresses it as Rust constants (a
+  mechanical transformation), and its header says so.
+- **Obligations satisfied:** [x] license copied  [x] NOTICE (none upstream; attribution in ours)
+  [x] change-note in the generated source  [x] SPDX header in the generated source
+- **Benefit / drawback note:** it lets a test hold wasmrt's own opcode and feature tables to the
+  workspace's single source (letter H10). It found a real gating defect on its first run. It costs
+  nothing at run time and about 130 KB of test-only crate source.
 
 <!--
 ### <component-name>

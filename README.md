@@ -134,6 +134,8 @@ runs today, verified against the official spec testsuite.
 `SPDX-License-Identifier: MIT OR Apache-2.0`
 
 Dual-licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-wasmrt has **no third-party dependencies** and incorporates no third-party code — see
-[`NOTICE`](NOTICE) and [`third_party/LICENSES.md`](third_party/LICENSES.md), whose Component Ledger is
-empty.
+wasmrt has **no third-party dependencies**, and its engine incorporates no third-party code. One
+test-only component is recorded: WebAssembly instruction-table data derived from
+[wabt](https://github.com/WebAssembly/wabt) (Apache-2.0), used to check wasmrt's opcode tables. It
+is not part of any binary. See [`NOTICE`](NOTICE) and
+[`third_party/LICENSES.md`](third_party/LICENSES.md).
