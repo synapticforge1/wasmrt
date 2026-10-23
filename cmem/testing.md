@@ -1126,6 +1126,12 @@ Two of them earn their keep beyond coverage:
 steady (`sum(n)` dispatch throughput), reported separately and never conflated. It **asserts the
 workload's own result before timing**, so it cannot measure a computation that is wrong, and it warms up
 outside the timer. Numbers live in `vision.md` and `roadmap.md` T9c. Compare **same-session A/B/A only**.
+🆕 **Cross-runtime (2026-10-23): `bun scripts/cross-runtime-bench.ts --wasmrt <release exe>`** runs the
+same workloads against wasmtime, Bun and Deno, end to end with each runtime's start-up floor measured
+beside it, plus in process in Bun and Deno. Every run's answer is checked. Results: `bench/README.md`.
+⚠️ **Point `--wasmrt` at the binary cargo just built**: on this host cargo's target directory is NOT
+`./target` (a stale September copy lives there), so `target/release/wasmrt.exe` would benchmark an old
+build (`cargo metadata` → `target_directory`).
 T8 added 70 over v0.8.0's 281: the proposal-gate vectors (14 modules, each checked **both** ways —
 valid with all features on, and refused *naming that exact proposal* with one flag cleared, because a
 one-sided "assert it errors" test proves nothing about *why*), the resource-ceiling tests, 14 linker

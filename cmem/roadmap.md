@@ -204,8 +204,15 @@ Open, each the owner's call:
 1. ✅ **CLOSED 2026-10-23 (owner: "update those references").** `Cargo.toml`'s `repository` field
    now names `synapticforge1/wasmrt`, which answers HTTP 200 with no redirect. crates.io shows the
    new value from the next publish.
-2. **The JavaScript-runtime comparison in T11.** The cold-start wins on record are against Deno/V8.
-   Whether to switch the comparison to Bun is undecided (`vision.md`, "Fast").
+2. **The JavaScript-runtime comparison in T11.** 🆕 **MEASURED 2026-10-23** (owner: "perform the
+   speed benchmark"): `scripts/cross-runtime-bench.ts` runs wasmrt against wasmtime 50, Bun 1.4.4
+   and Deno 2.9.8 on one machine, with numbers in `bench/README.md`. **Bun is the harder competitor**
+   (start-up floor 36.7 ms vs Deno's 57.0; wasmrt beats Deno on `sum(1e6)` and loses to Bun).
+   Which one T11 quotes as the headline is still the owner's call. **Three T11 leads came out of it:**
+   (a) the in-process 48 KB cold start (3.2–3.5 ms) trails JSC (2.0) and V8 (1.2), which compile
+   lazily; (b) the CLI's 48 KB end-to-end cost runs ~3.4 ms above `bench.rs`, and a second decode
+   for run-mode dispatch is one **unverified** candidate; (c) the interpreter crossover against a JIT
+   is ~3.8 M wasm ops (wasmtime) / ~6.5 M (Bun).
 3. ✅ **Already done; this entry was stale.** On 2026-10-23, `git remote -v` showed
    `origin = https://github.com/synapticforge1/wasmrt.git`.
 

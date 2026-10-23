@@ -63,10 +63,19 @@ and the wasmtk WASI corpus. Those were always the harder test; the oracle was sc
 2. **Fast** — beat wasmtk/Deno/V8. Preserve wazmrt's confirmed **cold-start win** (2.4× on a trivial
    call, 1.5× on `sum(1e6)` vs Deno/V8, which pays ~110 ms of V8 init + JIT + JS marshalling per run).
    wasmrt cedes sustained hot loops to a JIT — **accepted**; win short-lived / native-FFI, not hot loops.
-   ⚠️ **OPEN, 2026-10-21: Deno is going away** (owner; `design-decisions.md` TOOLING RULES §1). The
-   figures above were measured against Deno/V8 and stay as measured. Whether T11's JavaScript-runtime
-   comparison moves to **Bun** (JavaScriptCore, not V8) is the **owner's decision, not yet made**. A
-   Bun figure would need a new measurement; the Deno numbers must not be relabelled.
+   ⚠️ **The 2.4× / 1.5× figures are wazmrt's**, measured on another machine and inherited with the
+   oracle. wasmrt never measured them itself.
+   🆕 **MEASURED 2026-10-23 (owner: "perform the speed benchmark"): wasmrt vs wasmtime 50, Bun 1.4.4
+   and Deno 2.9.8, same machine, same bytes** (`bench/README.md`; `scripts/cross-runtime-bench.ts`).
+   End to end, median ms: trivial call **15.3** vs wasmtime 31.5 / Bun 42.8 / Deno 85.5; 48 KB module
+   **21.9** vs 61.9 / 49.2 / 86.9; but `sum(1e6)` **68.4** vs **31.5** / 44.6 / 85.3. So wasmrt wins
+   short runs, mostly through START-UP (its no-wasm floor is 15.3 ms against 26.3 / 36.7 / 57.0), and
+   **loses from about 3.8 M wasm ops against wasmtime and 6.5 M against Bun**.
+   ⚠️ **Bun is the harder competitor here**: on `sum(1e6)` wasmrt is 17 ms ahead of Deno but 24 ms
+   behind Bun. ⚠️ **In process, wasmrt's 48 KB cold start (3.2–3.5 ms) is slower than JSC (2.0) and
+   V8 (1.2)**, which compile lazily. The real-module win is start-up, not decode. Both are T11 leads.
+   **Whether T11's headline JS comparison becomes Bun is still the owner's call.** The data now
+   exists for both, and the harness runs both.
 3. **Small** — minimize **every** artifact (freestanding wasm, cdylib, static lib, CLI); aim smaller
    than the next-smallest runtime (wasm3 / WAMR), benchmarked later. See [design-decisions.md](design-decisions.md)
    for the size levers.
@@ -79,7 +88,7 @@ Recorded because the axes above are the *destination* and are easy to read as a 
 | Axis | Standing | Gap |
 | --- | --- | --- |
 | **Canonical** | **99.7%** of the official spec testsuite (**63,333 / 172 / 1,024** over 284 files, 2026-08-19 — was 62,238 / 378 / 2,038; ⚠️ the denominator grew to 63,505 as skips became verdicts, so the rate understates the move); the `.wat` corpus figure is ⚠️ UNVERIFIED since its denominator moved (`testing.md`, 2026-08-19), and every CLI command that takes a module accepts `.wat` directly; **every proposal in the scope list now runs, tail calls included** — ✅ **CORRECTED THEN FIXED 2026-08-19: six in-scope WasmGC ARRAY instructions were MISSING and now ship** (+197 passes, −213 skips) (`array.new_data`/`new_elem`/`init_data`/`init_elem`/`fill`/`copy`; `any.convert_extern` is a **documented deliberate** deferral, not an oversight) — no `Op`, no interpreter arm. They produced only SKIPS, never failures, so no conformance number could show them. See `known-issues.md` | ✅ **T9f landed 2026-08-14, so there is no unimplemented scope item and 1.0 is not blocked on a feature.** ⚠️ It landed with a warning attached: `return_call_ref` had shipped for releases as a FAKE tail call — correct results, native stack growing per hop — while its conformance file read 40/7. **A high conformance score can coexist with an absent feature** (`best-practices.md` §3.10). What remains on this axis is not scope but **172 failures + 1,024 skips**, now scoped as **F1–F7 / S1–S7** in `roadmap.md`: 114 of the failures are untargeted proposals, the largest in-scope class is **accept-invalid (32)**, and **91% of the skips are cascades** behind seven roots — the biggest being the externref/anyref bridge at ~181 assertions. ✅ table64 is DONE. |
-| **Fast** | ✅ **MEASURED 2026-08-07.** Cold start **4.48 ms** for a 48 KB module (3.5 µs for a toy); steady state **~237 Mops/s** on a tight `loop`/`br_if`. Bench: `cargo run --release -p wasmrt-core --example bench`. | ⚠️ **A ~5% steady-state regression from the ninth T9 pass is still unattributed** and handed to T11 — two hypotheses were tested and rejected. That was a footnote while the oracle defined success; **under a contest decided on speed it is a live liability.** No cross-runtime comparison has been run on this machine. |
+| **Fast** | ✅ **MEASURED 2026-08-07.** Cold start **4.48 ms** for a 48 KB module (3.5 µs for a toy); steady state **~237 Mops/s** on a tight `loop`/`br_if`. Bench: `cargo run --release -p wasmrt-core --example bench`. | ⚠️ **A ~5% steady-state regression from the ninth T9 pass is still unattributed** and handed to T11 — two hypotheses were tested and rejected. That was a footnote while the oracle defined success; **under a contest decided on speed it is a live liability.** ~~No cross-runtime comparison has been run on this machine.~~ 🆕 **2026-10-23: the first same-machine comparison exists** (wasmtime / Bun / Deno; `bench/README.md`). It shows the win is start-up, that the in-process 48 KB cold start trails both JS engines, and that the crossover against a JIT is a few M wasm ops. Still missing: wasm3, WAMR, wazmrt, and **rsxtk on wasmtime vs on wasmrt** (the headline experiment above). |
 | **Small** | 🆕 **2026-09-19: the SHIPPED cdylib was 1,363,968 B, not the 493.5 KiB below** — `rlib` in `wasmrt-capi`'s crate-type defeated LTO's dead-code removal, so the text assembler and the `.wast` runner rode along. Removed: shipped dll **521,216 B (509.0 KiB)**, staticlib 21.99 → **5.54 MB**. ✅ **MEASURED 2026-08-07.** CLI **621 KiB**, cdylib **493.5 KiB**, freestanding `wasm32` engine **158.1 KiB** (**137.5 KiB** after `wasm-opt -Oz`), engine + text toolchain **260.9 KiB**. Still **zero third-party dependencies**. | **The rlib-in-rsxtk figure has never been measured at all** — and that is the artifact the default consumer links. `wasm-opt -Oz` is worth ~13% and is **not wired into any build script**. No comparison against wasm3 / WAMR / wazmrt. |
 
 **Honest summary:** *canonical* is the axis driven hardest and is nearly done. *Fast* and *small* have
