@@ -1409,6 +1409,25 @@ while the oracle defined success:
 you rather than the thing the consumer uses.** The `.wat` corpus gate ran `wat -o` and called it
 verified; the size axis measures three artifacts and skips the default one.
 
+### 🔒 T11 direction (owner, 2026-10-23): "Bun to start. Then work on closing in on wasmtime in the long run."
+
+Baseline measured the same day (`bench/README.md`). In order:
+1. **Bun is the JS baseline.** Start-up and short runs are where wasmrt wins today (trivial call
+   15.3 ms vs Bun 42.8; 48 KB module 21.9 vs 49.2). Keep it that way; the first gauge is that no T11
+   change moves those the wrong way.
+2. **The three leads from the baseline**, cheapest first: (b) the ~3.4 ms between the CLI's 48 KB end
+   to end and `bench.rs` (is the CLI decoding twice? **unverified**); (a) the 48 KB in-process cold
+   start trailing JSC and V8, both lazy; plus the older unattributed ~5% steady regression.
+3. **Close in on wasmtime: the perf ladder** (`design-decisions.md`): A.5 superinstructions /
+   partial evaluation, then B register machine. Gauges: the end-to-end crossover against
+   `wasmtime run -C cache=n` (**~3.8 M wasm ops**, 2026-10-23) and steady Mops/s (**~235** vs
+   wasmtime/JIT ~55,000). Each rung reports both. ⚠️ The JIT rung is an owner decision once A.5 and B
+   are measured (binary size, `wasm32`, `forbid(unsafe_code)`).
+4. The rsxtk headline experiment below is the consumer-level version of the same comparison.
+
+⚠️ **Order against the ladder:** T11 is `1.0.3`. `1.0.0` release prep is still NEXT
+(`releasing.md`), and it is blocked on the H6 gated-bump work (track C above).
+
 ### 🎯 T11's headline experiment — rsxtk on wasmtime vs rsxtk on wasmrt (added 2026-08-11)
 
 `rsxtk` (`../rsxtk`, v0.4.4, one 463-line `main.rs`) runs

@@ -61,6 +61,10 @@ so a difference smaller than that is noise.
 section). V8 caches compiled modules by their bytes within a process, so compiling the same bytes
 repeatedly timed a **cache hit**: Deno read 3.4 µs that way, against 24–26 µs uncached.
 
+🔒 **Owner, 2026-10-23: Bun is the JS baseline, and the long-run target is wasmtime** — the end-to-end
+crossover and the steady Mops/s against `wasmtime run -C cache=n` are the gauges every T11 step reports
+(`../cmem/roadmap.md`, "T11 direction").
+
 What this shows, without overreading it:
 
 1. **wasmrt wins every run whose engine work is small**, and the margin is mostly START-UP: its

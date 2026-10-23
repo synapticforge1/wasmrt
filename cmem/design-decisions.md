@@ -267,6 +267,12 @@ Switch over a pre-decoded IR; untyped `u64` slots; one shared opcode table for v
 assembler-in-reverse. Interpreter, **not** JIT/AOT (smallest-binary + wasm-freestanding self-embed).
 Perf ladder: A → A.5 (superinstructions / partial-eval) → B (register machine) → JIT (native-only,
 later). Decide A→B with benchmarks, not upfront.
+🔒 **2026-10-23 (owner): the ladder is now the plan, not a contingency.** *"Work on closing in on
+wasmtime in the long run."* Each rung is measured with `scripts/cross-runtime-bench.ts` against
+wasmtime (the target) and Bun (the JS baseline), and reported as a move in the end-to-end crossover
+and the steady Mops/s. The JIT rung conflicts with three standing constraints: smallest binary, the
+`wasm32`-freestanding target, and `forbid(unsafe_code)` in core. It stays **an owner decision taken
+once A.5 and B are measured** (`vision.md`, "Fast").
 
 ## 🔒 Safety directive — no unsafe constructs migrated from Zig (owner, 2026-08-04)
 

@@ -168,7 +168,9 @@ proves types). The slot was `u64` through v0.6.4; widened at the SIMD slice (v0.
 one slot (scalars/refs use the low 64) — wazmrt instead uses two `u64` slots + width tables. Keep
 the IR a clean seam so a register-machine pass (Option B) is layerable later if benchmarks demand it.
 **Not a JIT/AOT** — a native codegen backend violates smallest-binary *and* can't run on the
-`wasm32`-freestanding self-embed target. See [design-decisions.md](design-decisions.md) for the perf
+`wasm32`-freestanding self-embed target. 🆕 *(2026-10-23, owner: the long-run target is wasmtime, so
+the perf ladder is now the plan. A JIT stays out unless the owner decides otherwise once the A.5 and B
+rungs are measured; `vision.md`, "Fast".)* See [design-decisions.md](design-decisions.md) for the perf
 ladder and the load-bearing invariants (ValType packing, slot encoding, the `#[inline(never)]` trap
 path, shared Memory/Table, etc.).
 

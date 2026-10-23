@@ -74,8 +74,23 @@ and the wasmtk WASI corpus. Those were always the harder test; the oracle was sc
    ⚠️ **Bun is the harder competitor here**: on `sum(1e6)` wasmrt is 17 ms ahead of Deno but 24 ms
    behind Bun. ⚠️ **In process, wasmrt's 48 KB cold start (3.2–3.5 ms) is slower than JSC (2.0) and
    V8 (1.2)**, which compile lazily. The real-module win is start-up, not decode. Both are T11 leads.
-   **Whether T11's headline JS comparison becomes Bun is still the owner's call.** The data now
-   exists for both, and the harness runs both.
+   🔒 **DECIDED (owner, 2026-10-23): "Bun to start. Then work on closing in on wasmtime in the long
+   run."**
+   * **Bun is the JavaScript baseline** for T11. It is the harder of the two here, and Deno is
+     going away. The harness keeps a Deno column while Deno is installed, but nothing is headlined
+     against it.
+   * 🆕 **The long-run target is WASMTIME, including the regime this file used to cede** ("cedes
+     sustained hot loops to a JIT — accepted"). That is no longer accepted as permanent. The gauge is
+     the measured **end-to-end crossover** against `wasmtime run -C cache=n` (~3.8 M wasm ops on
+     2026-10-23), plus the in-process steady-state ratio (~235 vs ~55,000 Mops/s). Every T11 step is
+     stated as a move in those two numbers.
+   * ⚠️ **The tension, stated so it is decided, not drifted into:** the last rung of the perf ladder
+     (`design-decisions.md`, "Interpreter = Option A + the perf ladder") is a native JIT. A JIT costs
+     binary size (the other half of the contest), cannot run on the `wasm32`-freestanding target, and
+     needs executable memory, which core's `forbid(unsafe_code)` and the safety directive rule out. The
+     interpreter rungs (A.5 superinstructions, B register machine) come first and touch none of that.
+     **Whether to take the JIT rung is an owner decision to make when the interpreter rungs are
+     measured, not now.**
 3. **Small** — minimize **every** artifact (freestanding wasm, cdylib, static lib, CLI); aim smaller
    than the next-smallest runtime (wasm3 / WAMR), benchmarked later. See [design-decisions.md](design-decisions.md)
    for the size levers.
