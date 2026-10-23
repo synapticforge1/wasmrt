@@ -246,11 +246,11 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 **B. Commit metadata — ✅ CLOSED BY OWNER DECISION 2026-10-23**
 * 🔒 **The owner's personal address stays as this repo's commit author/committer email** (owner,
   2026-10-23: *"I am okay with my private email address for the repo"*). The local `user.email` is
-  not changed, and **H19's email rewrite does not apply to wasmrt**. ⚠️ This departs from the
-  workspace Records rule ("author and committer email is the owner's GitHub noreply address"). The
-  workspace session should record it as an owner exception for wasmrt, or it will keep filing the
-  item as open. Reported to the owner the same day; not written into the workspace from here. The
-  address itself is not repeated in memory (workspace rule).
+  not changed, and **H19's email rewrite does not apply to wasmrt**. ✅ The workspace now carries it
+  as an **owner exception** (added by the owner 2026-10-23; verified here: `../cmem/working-rules.md`
+  § Records, "Owner exception (2026-10-23)", and the H19 row in `../cmem/handoffs.md`, which keeps
+  the old drive paths in history open). A review no longer files wasmrt's commit email as
+  non-compliant. The address itself is not repeated in memory (workspace rule).
 
 **C. Memory conformance (medium; repo-internal)**
 * **H2**: `CLAUDE.md` is **49,055 bytes** (2026-10-23); the letter asks for a pointer file. Move
