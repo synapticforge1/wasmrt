@@ -118,7 +118,7 @@ trees were checked unchanged afterwards. wasmrt itself passes all three.
 
 | sweep | wazmrt 1.0.3 | binaryang (`main` at the time) |
 | --- | --- | --- |
-| feature-gate (22 rows) | **3 accept with the proposal off**: `(table i64 …)` with memory64 off (and there is no separate `table64` flag); `call_ref` with function-references off **while GC is on** (refused once GC is off too — GC implies function-references there, a dependency rule the contract does not state); the table-initializer form even with function-references AND GC off | **3 accept**: multi-value, reference-types and the table-initializer form, even with a plain `--disable-…` (flag order verified not to be the cause) |
+| feature-gate (22 rows) | **3 accept with the proposal off**: `(table i64 …)` with memory64 off (and there is no separate `table64` flag); `call_ref` with function-references off **while GC is on** (refused once GC is off too, so GC implies function-references there). ⚠️ *Corrected the same day:* this first said "a dependency rule the contract does not state". That was read from wasmrt's copy, which is still at **v10**. wazmrt's **v30** (2026-09-21) makes `--features` take wasm-tools' vocabulary *with wasm-tools' meanings*, each dependency enforced on the module, and wasm-tools refuses this module. So the binary **appears to breach v30**, unless it predates v30 (both are dated 2026-09-21; unverified); the table-initializer form even with function-references AND GC off | **3 accept**: multi-value, reference-types and the table-initializer form, even with a plain `--disable-…` (flag order verified not to be the cause) |
 | index-type (23 × 2, and past 2^32) | PASSED | not run: no interpreter, and the typing half would need a new harness |
 | differential fuzz (300 + 1,200) | **refuse-valid 12**: all `ConstantExpressionRequired`, and a probe isolates **operand-stack depth > 8** (depth 8 accepted, 9 refused; wasm-tools and wasmrt accept to 64). That is wasmrt's day-6 defect; that all 12 are this cause is probable, not verified per case. **accept-invalid 3**: element-segment flags `0x41`, `0x4b`, `0x0d` (the spec allows 0–7) reported "validation: OK". A minimal flags-`8` module IS refused, so the mechanism is unverified | refuse-valid 0; **accept-invalid 2** ("func 0 failed to validate"; "invalid value type" at `0x3b`) |
 
@@ -142,6 +142,8 @@ harness should run the current build.
    needs function-references only. Also its validator's three accepted gate rows and two fuzz
    accept-invalid cases, as observations to triage.
 2. **To wazmrt:** the table64 gate, the table-initializer gate, const-expr depth > 8, the element
-   flags; and the GC-implies-function-references rule as a **contract** question for §2.2.
+   flags; and GC-implies-function-references, which its own **v30** appears to forbid. Each was
+   measured on its 2026-09-21 build; re-measure on a current build before calling any of them a
+   defect.
 3. **To the workspace:** I8 measured (the runtimes lose); the harness binary path; I5/I6 for wasmrt as
    above.

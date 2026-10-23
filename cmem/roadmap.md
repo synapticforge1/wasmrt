@@ -271,9 +271,19 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   release checklist.
 
 **D. Engine and contract work (technical; some cross the `interop.md` contract)**
-* **H1**: record the owner decisions in `interop.md` (any CLI syntax error throws; lockstep at
-  1.0.0+). Close §5 rows 10 and 12. Mirror wazmrt's v22 Z4 close and its v28 contract.
-  ⚠️ wazmrt moved the lockstep point to wasmrt `1.0.1`. Coordinate before release.
+* **H1 — mirror the contract, now v11–v31** (owner, 2026-10-23; verified the same day: wasmrt's
+  `interop.md` header says **v10**, wazmrt's **v31**, so this is 21 versions). It includes:
+  * the owner decisions (any CLI syntax error throws; lockstep);
+  * §5 rows 10 and 12, closed in wazmrt's **v27/v28**;
+  * the Z4 close (**v22**);
+  * 🆕 **v29: "`.wat` pin portability is BROKEN on purpose"**, which bears on I8/H13;
+  * 🆕 **v30: `--features` takes wasm-tools' WHOLE vocabulary with wasm-tools' meanings**, each
+    dependency enforced on the module. wasmrt's own `Feature::from_name` accepts only two
+    vocabularies today, so v30 is probably CODE work, not just text;
+  * **v31: wasmrt's post-rewrite commit ids**, so H21 closes with this mirror.
+
+  Regime A: wazmrt holds the pen and wasmrt mirrors; **verify each row by running both**. wazmrt
+  moved the lockstep point to wasmrt `1.0.1`. Do it before release.
 * **H13**: the assembler differs from wasm-tools on **539 of 603** files (workspace measurement).
   Three causes: locals written one entry per local instead of runs, exports grouped by kind instead
   of source order, and type interning order. wazmrt closed its copy. ⚠️ This changes emitted bytes,
@@ -295,9 +305,8 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   That touches `define_ops!`, the `0xFB`/`0xFC` dispatch, the SIMD/atomic tables and `op_feature`, all
   on the hot path. It needs an A/B/A benchmark, and the variant names D1 does not carry (`RefCastOp`,
   `TryLegacy`, `SelectT` …). D3 is vendored but not yet checked.
-* **H21 (new, 2026-10-23)**: `interop.md` quotes 3 old wasmrt commit ids (wazmrt's copy has the
-  same). Agree the change through the contract, keeping the old id in brackets once. Queued after
-  H8/H10.
+* **H21 (new, 2026-10-23)**: `interop.md` quotes 3 old wasmrt commit ids. wazmrt already fixed
+  its copy as contract **v31**, so this closes with the H1 mirror (v11–v31) rather than on its own.
 
 **E. Owner-gated and destructive — ✅ DONE 2026-10-23 (owner: "fix the old drive paths in the git history")**
 * ✅ **History rewritten and force-pushed with a lease on all 18 refs.** 217 commits, tip tree
