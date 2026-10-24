@@ -48,7 +48,8 @@ stays in the topic file named.
   2026-10-24 with wazmrt's own `cmem/probes/d2-matrix.ts --runtime` over **wasmrt's** S1 corpus: 54
   of 6,860 judgements differ, all this one module (27 configurations × its `.wat` and `.wasm`);
   over wazmrt's own corpus 0 of 2,352, because that corpus has no such module. v39's "AGREED on
-  both" holds for the corpus it was measured on. Suggest: run the row over both corpora. Also, for
+  both" holds for the corpus it was measured on. Suggest: run the row over both corpora. ⏳ **wazmrt is
+  fixing it (owner, 2026-10-24)**; re-run the matrix over wasmrt's corpus when it lands. Also, for
   the record: wasmrt 1.0.0 accepted an `exact` reference with reference-types off; fixed on `main`
   (`known-issues.md`, top); wazmrt already refused it. Still open: const-expr depth > 8 and the
   element flags, not re-measured since its 2026-09-21 build. *(Sent by the owner 2026-10-24: the
