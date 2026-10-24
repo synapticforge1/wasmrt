@@ -1193,7 +1193,12 @@ fn invalidity_report(e: &ValidateError) -> String {
     match (site.expected, site.found) {
         // Match wasmtime's wording exactly where we have the same facts.
         (Some(exp), Some(found)) => s.push_str(&format!(": type mismatch: expected {exp:?}, found {found:?}")),
-        _ => s.push_str(&format!(": {e}")),
+        // `ValidateError`'s Display already leads with "invalid module: "; say it once.
+        _ => {
+            let msg = e.to_string();
+            s.push_str(": ");
+            s.push_str(msg.strip_prefix("invalid module: ").unwrap_or(&msg));
+        }
     }
     s
 }
@@ -1493,33 +1498,33 @@ fn print_help() {
     println!(
         "wasmrt {} — a fast, small WebAssembly runtime\n\n\
          USAGE — both spellings work, so a command line written for either runtime runs here:\n    \
-         wasmrt <module> <export> [args...]     call an exported function\n    \
-         wasmrt <module> [wasi-flags] [-- argv] run a WASI `_start` command\n    \
-         wasmrt <module>                        summarize + type-check (executes nothing)\n    \
-         wasmrt <script.wast>                   run a .wast spec script\n    \
-         wasmrt run <file> <fn> [args...]       call an exported function\n    \
-         wasmrt wasi [flags] <file> [-- argv]   run a WASI preview-1 program (_start)\n    \
-         wasmrt wat <file.wat> [-o out.wasm]    assemble the text format to a binary\n    \
-         wasmrt wast <file|dir>... [-v]         run .wast spec scripts\n    \
-         wasmrt pin <file|dir> [--db <path>]    print (and record) pin digests\n    \
-         wasmrt -h | --help                     show this help\n    \
-         wasmrt -v | --version                  show the version\n\n\
+         wasmrt <module> <export> [args...]      call an exported function\n    \
+         wasmrt <module> [wasi-flags] [-- argv]  run a WASI `_start` command\n    \
+         wasmrt <module>                         summarize + type-check (executes nothing)\n    \
+         wasmrt <script.wast>                    run a .wast spec script\n    \
+         wasmrt run <file> <fn> [args...]        call an exported function\n    \
+         wasmrt wasi [flags] <file> [-- argv]    run a WASI preview-1 program (_start)\n    \
+         wasmrt wat <file.wat> [-o out.wasm]     assemble the text format to a binary\n    \
+         wasmrt wast <file|dir>... [-v]          run .wast spec scripts\n    \
+         wasmrt pin <file|dir> [--db <path>]     print (and record) pin digests\n    \
+         wasmrt -h | --help                      show this help\n    \
+         wasmrt -v | --version                   show the version\n\n\
          LANGUAGE (must come BEFORE the module path — it selects what is accepted, and\n\
          after the path it would already be too late, so it is an error there):\n    \
-           --features <list>           e.g. `mvp`, `all,-simd`, `gc` — bare names imply\n    \
-                                       `mvp`, a signed item implies `all`; comma-separated\n\n\
+           --features <list>           e.g. `mvp`, `all,-simd`, `gc` — bare names imply\n                                \
+           `mvp`, a signed item implies `all`; comma-separated\n\n\
          WASI — a guest reaches ONLY what you preopen:\n    \
-           --dir <host>[:<guest>]      grant read-write access to a directory (`::` also\n    \
-                                       accepted). <host> is `./rel`, `../rel`, `.` or an\n    \
-                                       absolute path (`C:/p` on Windows): a bare `data` is\n    \
-                                       an error — write `./data`\n    \
+           --dir <host>[:<guest>]      grant read-write access to a directory (`::` also\n                                \
+           accepted). <host> is `./rel`, `../rel`, `.` or an\n                                \
+           absolute path (`C:/p` on Windows): a bare `data` is\n                                \
+           an error — write `./data`\n    \
            --ro-dir <host>[:<guest>]   grant read-only access (propagates to the subtree)\n    \
            --allow-symlink             let the guest CREATE symlinks (off by default)\n    \
            --env KEY=VALUE             set one variable for the guest (repeatable)\n    \
            --max-memory <size>         linear-memory ceiling (e.g. 512M, 2G)\n    \
            --max-table-elems <count>   table-entry ceiling\n    \
-           --max-iterations <count>    stop a guest that never returns (default 1G, 0 = off;\n    \
-                                       one iteration = one loop back-edge or one tail call)\n\n\
+           --max-iterations <count>    stop a guest that never returns (default 1G, 0 = off;\n                                \
+           one iteration = one loop back-edge or one tail call)\n\n\
          With no --dir, every path call returns BADF — there is no implicit cwd.\n\n\
          VERIFICATION — off unless a pin DB is installed:\n    \
            --pins <path>               use this pin DB instead of the default\n    \

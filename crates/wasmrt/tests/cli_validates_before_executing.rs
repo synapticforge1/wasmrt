@@ -92,6 +92,22 @@ fn summarize_reports_invalidity_as_a_verdict() {
     );
 }
 
+/// A refusal that is not a type mismatch says "invalid module" ONCE. It used to read
+/// `invalid module: invalid module: uses the disabled proposal `memory64``, because the report
+/// prefixed a message whose Display already carried the prefix (found 2026-10-23, contract v33 probe).
+#[test]
+fn a_feature_refusal_says_invalid_module_once() {
+    let p = write_temp("wasmrt_cli_invalid_once.wat", b"(module (table i64 1 funcref))");
+    let out = Command::new(env!("CARGO_BIN_EXE_wasmrt"))
+        .args(["--features", "all,-memory64", p.to_str().unwrap()])
+        .output()
+        .expect("spawn wasmrt");
+    assert_eq!(out.status.code(), Some(1), "a 64-bit table needs memory64");
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert_eq!(text.matches("invalid module").count(), 1, "got: {text}");
+    assert!(text.contains("uses the disabled proposal `memory64`"), "got: {text}");
+}
+
 /// The other direction: a VALID module must still run. A guard that refuses everything would pass
 /// every assertion above (§4.1 — a gate that cannot fail is decoration).
 #[test]

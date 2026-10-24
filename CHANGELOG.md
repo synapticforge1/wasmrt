@@ -45,6 +45,9 @@ measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt a
   With every proposal enabled (the default), nothing changes. Found by
   `bun scripts/carry-forward.ts v0.9.0 WORKTREE`; the floor this sets is recorded in
   `cmem/releasing.md`.
+- **CLI messages:** a module refused for a disabled proposal now says "invalid module" once (it
+  read `invalid module: invalid module: …`), and `wasmrt --help` indents the wrapped lines of a
+  flag's description under that description instead of at column 0.
 - **C ABI, Windows static library:** with current Rust toolchains, link with
   `-lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp -lsynchronization`; the last two are new. See
   `crates/wasmrt-capi/README.md`. The DLL is unaffected.
