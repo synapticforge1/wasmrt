@@ -1,15 +1,15 @@
 {
   "source": "https://github.com/synapticforge1/binaryang",
-  "tag": "v2.1.0",
-  "commit": "b7fdb9de5785c53eba5a73d7c1f44d6dcdea4908",
+  "tag": "v2.2.0",
+  "commit": "6e1923397defc9def133ca0d450fcc22652a7cb9",
   "files": {
     "opcodes": {
       "blob": "e251cae123b249fa83abbf13b6711d67ab17629b",
       "sha256": "7552497df510ee2117d87e54f71081390e6ad80f27d6f0a6bcd4f705dcfb3cdc"
     },
     "features": {
-      "blob": "853c6e8cdd8ce2ff4a854d29ce78f313a37f8906",
-      "sha256": "81bc142b27ec9de4a9cd87644c4bbc405ad6cc4d1aa1ce0cef7712e1184a5ad9"
+      "blob": "9aa6c00271b4cf4af0dcec27222e335bd86524f4",
+      "sha256": "9da43d1142fb11c73302175df704b472035055e058c03f93c8a588a1482e525e"
     },
     "verdicts": {
       "blob": "8162660898b9541bd8bc6e3b7f731247aed14c14",

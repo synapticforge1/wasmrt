@@ -521,19 +521,25 @@ pub fn val_type_feature(v: ValType) -> Option<Feature> {
 /// No feature implies another (D2 `requires` is recorded, NOT enforced), so every proposal a type
 /// needs is checked. **Every reference VALUE type needs reference types** — including the GC and
 /// exception ones, which also need their own proposal. Then: a concrete `(ref null? $t)` needs
-/// **function-references OR gc** (GC defines typed references too); every other type keeps
-/// [`val_type_feature`]'s single answer, so a non-null `(ref func)` / `(ref extern)` needs
-/// function-references and gc does NOT admit it. Measured against `wasm-tools validate` over every
-/// value type and all 16 subsets of reference-types / function-references / gc / exceptions: 0
-/// differ, apart from wasm-tools' `gc-types` sub-feature, which D2 does not have (2026-10-24).
+/// **function-references OR gc** (GC defines typed references too), and an `exact` one
+/// custom-descriptors as well (D2 2.2.0's note); every other type keeps [`val_type_feature`]'s
+/// single answer, so a non-null `(ref func)` / `(ref extern)` needs function-references and gc does
+/// NOT admit it. Held to D2's `typeRules` by `definitions_check`, and measured against `wasm-tools
+/// validate` over every value type and all 16 subsets of reference-types / function-references / gc
+/// / exceptions: 0 differ, apart from wasm-tools' `gc-types` sub-feature, which D2 does not have
+/// (2026-10-24). ⚠️ Until the 2.2.0 re-pin an `exact` reference skipped the first two steps and was
+/// accepted with reference-types off; binaryang's matrix found it.
 #[must_use]
 pub(crate) fn val_type_unmet(v: ValType, features: &Features) -> Option<Feature> {
-    if v.is_ref() && !v.is_exact() {
+    if v.is_ref() {
         if !features.reference_types {
             return Some(Feature::ReferenceTypes);
         }
         if v.is_concrete() {
-            return (!features.function_references && !features.gc).then_some(Feature::FunctionReferences);
+            if !features.function_references && !features.gc {
+                return Some(Feature::FunctionReferences);
+            }
+            return (v.is_exact() && !features.custom_descriptors).then_some(Feature::CustomDescriptors);
         }
     }
     val_type_feature(v).filter(|&f| !features.has(f))

@@ -151,6 +151,16 @@ pub struct FeatureDef {
     pub since: &'static str,
 }
 
+/// One D2 \`typeRules\` / \`encodingRules\` row: what a value TYPE or an ENCODING needs.
+#[derive(Debug, Clone, Copy)]
+pub struct RuleDef {
+    /// The type or encoding, as D2 describes it (free text).
+    pub subject: &'static str,
+    /// Every group needs AT LEAST ONE of its features on; \`None\`: no feature enables it.
+    pub needs: Option<&'static [&'static [&'static str]]>,
+    pub note: Option<&'static str>,
+}
+
 /// One verdict class (D3).
 #[derive(Debug, Clone, Copy)]
 pub struct VerdictDef {
@@ -181,7 +191,24 @@ for (const e of src.features.entries) {
   out += `    FeatureDef { name: ${rs(e.name)}, cli: ${rs(e.cli)}, default_on: ${e.defaultOn}, implemented: ${e.implemented}, ` +
     `testsuite_dirs: ${strs(e.testsuiteDirs)}, only_in: ${strs(e.onlyIn ?? [])}, off_in: ${strs(e.offIn ?? [])}, since: ${rs(e.since)} },\n`;
 }
+// D2 2.2.0's type and encoding rules (binaryang § 44). Required: wasmrt's gates are held to them.
+const ruleRows = (key: string, field: string) => {
+  const rows = src.features[key] as { [k: string]: unknown; needs: string[][] | null; note?: string }[] | undefined;
+  if (!rows?.length) fail(`D2 has no \`${key}\` (binaryang D2 2.2.0 or later is required)`);
+  return rows.map((r) => {
+    const needs = r.needs === null ? "None" : `Some(&[${r.needs.map((g) => `&[${g.map(rs).join(", ")}]`).join(", ")}])`;
+    return `    RuleDef { subject: ${rs(r[field] as string)}, needs: ${needs}, note: ${opt(r.note)} },\n`;
+  }).join("");
+};
 out += `];
+
+/// D2 \`typeRules\`: which features each value TYPE needs, wherever it is written.
+pub const TYPE_RULES: &[RuleDef] = &[
+${ruleRows("typeRules", "type")}];
+
+/// D2 \`encodingRules\`: which features a binary encoding or module structure needs.
+pub const ENCODING_RULES: &[RuleDef] = &[
+${ruleRows("encodingRules", "encoding")}];
 
 ${header(src.verdicts, "verdicts")}
 pub const VERDICTS: &[VerdictDef] = &[

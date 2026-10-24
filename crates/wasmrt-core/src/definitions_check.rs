@@ -19,7 +19,10 @@
 //!   4. **membership**: nothing wasmrt accepts is absent from D1.
 //!
 //! D2 is checked both ways too: every D2 spelling wasmrt cannot resolve, and every wasmrt feature D2
-//! does not list.
+//! does not list. Since D2 2.2.0, also its `typeRules` (`features::val_type_unmet` under every subset
+//! of the features they name) and its `encodingRules` (a module per rule, refused with the rule's
+//! features off and valid with them on). Both inverted when added (2026-10-24): restoring the old
+//! `exact` exemption, and a "more than one table" fixture with one table, each failed the gate.
 //!
 //! A difference is a FINDING, not a test to relax. Each one that is classified (a recorded divergence
 //! or a deliberate wasmrt choice) is listed in [`KNOWN`] with its reason, so the gate still fails on
@@ -32,10 +35,10 @@ use alloc::vec::Vec;
 
 use alloc::string::ToString;
 
-use crate::definitions::{OpDef, FEATURES, OPCODES, VERDICTS};
-use crate::features::{op_feature, simd_sub_feature, Feature};
+use crate::definitions::{OpDef, ENCODING_RULES, FEATURES, OPCODES, TYPE_RULES, VERDICTS};
+use crate::features::{op_feature, simd_sub_feature, table_element_feature, val_type_unmet, Feature, Features};
 use crate::opcode::{decode_body, Imm, Op};
-use crate::types::DecodeError;
+use crate::types::{DecodeError, RefHeap, ValType};
 
 /// Differences that are classified. `(check, key, reason)`; `key` is the D1 encoding in hex or the
 /// D2 / wasmrt feature name. A KNOWN entry that stops occurring also fails the gate, so this list
@@ -145,6 +148,71 @@ fn body_for(e: &OpDef, instr: &[u8]) -> (Vec<u8>, usize) {
     };
     b.push(0x0b);
     (b, idx)
+}
+
+/// D2 `typeRules` subjects, verbatim, and the wasmrt types each names. Hand-kept because the subject
+/// is prose; the check fails on a subject missing here and on one here that D2 dropped.
+fn type_subjects() -> Vec<(&'static str, Vec<ValType>)> {
+    use RefHeap as H;
+    let c = |nullable, heap| ValType::concrete_ref(nullable, heap, 0);
+    vec![
+        ("funcref, externref \u{2014} (ref null func), (ref null extern)", vec![ValType::FUNCREF, ValType::EXTERNREF]),
+        ("(ref func), (ref extern) \u{2014} non-null", vec![ValType::FUNCREF_NN, ValType::EXTERNREF_NN]),
+        ("(ref $t), (ref null $t) \u{2014} a type index", vec![
+            c(true, H::Func), c(false, H::Func), c(true, H::Struct), c(false, H::Array),
+            ValType::exact_ref(true, H::Struct, 0), ValType::exact_ref(false, H::Func, 0),
+        ]),
+        ("exnref, nullexnref \u{2014} (ref null? exn), (ref null? noexn)", vec![
+            ValType::EXNREF, ValType::NULLEXNREF, ValType::EXNREF_NN, ValType::NULLEXNREF_NN,
+        ]),
+        ("anyref, eqref, i31ref, structref, arrayref, nullref, nullfuncref, nullexternref \u{2014} and (ref null? any | eq | i31 | struct | array | none | nofunc | noextern)", vec![
+            ValType::ANYREF, ValType::EQREF, ValType::I31REF, ValType::STRUCTREF, ValType::ARRAYREF,
+            ValType::NULLREF, ValType::NULLFUNCREF, ValType::NULLEXTERNREF,
+            ValType::ANYREF_NN, ValType::EQREF_NN, ValType::I31REF_NN, ValType::STRUCTREF_NN,
+            ValType::ARRAYREF_NN, ValType::NULLREF_NN, ValType::NULLFUNCREF_NN, ValType::NULLEXTERNREF_NN,
+        ]),
+        ("stringref", vec![]),
+    ]
+}
+
+enum Fixture {
+    Wat(&'static str),
+    Bytes(&'static [u8]),
+}
+
+/// D2 `encodingRules` subjects, verbatim, and modules that use exactly that encoding.
+fn encoding_fixtures() -> Vec<(&'static str, Vec<Fixture>)> {
+    use Fixture::{Bytes, Wat};
+    vec![
+        ("importing or exporting a mutable global", vec![
+            Wat(r#"(module (global (export "g") (mut i32) (i32.const 0)))"#),
+            Wat(r#"(module (import "m" "g" (global (mut i32))))"#),
+        ]),
+        // Not spellable in text: `call_indirect` with its table index written as `80 00`.
+        ("a call_indirect table index in more than one byte (an LEB other than the single byte 0x00)", vec![Bytes(&[
+            0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+            0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type: (func)
+            0x03, 0x02, 0x01, 0x00, // func 0: type 0
+            0x04, 0x04, 0x01, 0x70, 0x00, 0x01, // table: 1 funcref
+            0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x00, 0x11, 0x00, 0x80, 0x00, 0x0b, // i32.const 0; call_indirect 0 (80 00)
+        ])]),
+        ("more than one table", vec![Wat("(module (table 1 funcref) (table 1 funcref))")]),
+        ("a table initializer expression", vec![Wat("(module (table 1 funcref (ref.null func)))")]),
+        ("a function type with more than one result; a block, loop or if with parameters", vec![
+            Wat("(module (func (result i32 i32) i32.const 0 i32.const 0))"),
+            Wat("(module (func i32.const 0 (block (param i32) drop)))"),
+        ]),
+        ("more than one memory", vec![Wat("(module (memory 1) (memory 1))")]),
+        ("a shared memory", vec![Wat("(module (memory 1 1 shared))")]),
+        ("a 64-bit memory or table", vec![Wat("(module (memory i64 1))"), Wat("(module (table i64 1 funcref))")]),
+        ("a custom page size", vec![Wat("(module (memory 1 (pagesize 1)))")]),
+        ("a struct or array type definition", vec![Wat("(module (type (struct)))"), Wat("(module (type (array i32)))")]),
+        ("a tag (the tag section, imported or exported)", vec![
+            Wat("(module (tag))"),
+            Wat(r#"(module (import "m" "t" (tag)))"#),
+            Wat(r#"(module (tag (export "t")))"#),
+        ]),
+    ]
 }
 
 #[test]
@@ -259,6 +327,126 @@ fn wasmrt_agrees_with_the_shared_definitions() {
     for (m, _) in crate::wast::TRAP_VERDICTS {
         if !VERDICTS.iter().any(|v| v.message == *m) {
             found.push(("d3-membership", String::from(*m), String::from("in wast::TRAP_VERDICTS; D3 has no such message")));
+        }
+    }
+
+    // ---- D2 typeRules: `features::val_type_unmet` against every rule, under every subset ----
+    // Each rule's subject (free text) maps to the wasmrt types it names. A subject with no mapping is
+    // a finding, and so is a mapping D2 no longer has, so the two lists cannot drift apart. The
+    // subsets range over every feature any rule names, plus custom-descriptors for `exact`, with
+    // every other feature off: allowed iff each group has a member on.
+    let d2_feature = |name: &str| d2_cli(name).and_then(Feature::from_name);
+    let subjects = type_subjects();
+    let mut ruled: Vec<&str> = TYPE_RULES.iter().flat_map(|r| r.needs.unwrap_or(&[]).iter().flat_map(|g| g.iter().copied())).collect();
+    ruled.push("customDescriptors");
+    ruled.sort_unstable();
+    ruled.dedup();
+    for rule in TYPE_RULES {
+        let Some((_, types)) = subjects.iter().find(|(s, _)| *s == rule.subject) else {
+            found.push(("d2-type-rule", String::from(rule.subject), String::from("no wasmrt types mapped to this D2 typeRules subject")));
+            continue;
+        };
+        let Some(needs) = rule.needs else {
+            // No feature enables it: wasmrt must have no such type. `stringref` is the only one; its
+            // byte (0x67) as a block type must not decode.
+            if rule.subject != "stringref" || decode_body(&[0x02, 0x67, 0x0b, 0x0b]).is_ok() {
+                found.push(("d2-type-rule", String::from(rule.subject), String::from("D2: no feature enables it; wasmrt decodes it")));
+            }
+            continue;
+        };
+        // `exact` needs custom-descriptors as well — D2 says so in the `(ref $t)` row's note, and
+        // this check reads that note so a change to it is seen.
+        let exact_note = rule.note.is_some_and(|n| n.contains("exact") && n.contains("customDescriptors"));
+        for &t in types {
+            let mut groups: Vec<&[&str]> = needs.to_vec();
+            if t.is_exact() {
+                if !exact_note {
+                    found.push(("d2-type-rule", String::from(rule.subject), String::from("an exact type is mapped, but the note no longer says it needs customDescriptors")));
+                }
+                groups.push(&["customDescriptors"]);
+            }
+            for mask in 0u32..(1 << ruled.len()) {
+                let on: Vec<&str> = ruled.iter().enumerate().filter(|(i, _)| mask & (1 << i) != 0).map(|(_, n)| *n).collect();
+                let mut fs = Features::mvp();
+                for n in &on {
+                    match d2_feature(n) {
+                        Some(f) => fs.set(f, true),
+                        None => found.push(("d2-type-rule", String::from(*n), String::from("a typeRules feature wasmrt cannot resolve"))),
+                    }
+                }
+                let want = groups.iter().all(|g| g.iter().any(|m| on.contains(m)));
+                let got = val_type_unmet(t, &fs).is_none();
+                if want != got {
+                    found.push(("d2-type-rule", format!("{} {t:?}", rule.subject), format!("with {{{}}}: D2 {}, wasmrt {}", on.join(","), if want { "allows" } else { "refuses" }, if got { "allows" } else { "refuses" })));
+                    break;
+                }
+            }
+        }
+        if rule.subject.starts_with("funcref") && rule.note.is_some_and(|n| n.contains("funcref needs nothing")) && table_element_feature(ValType::FUNCREF).is_some() {
+            found.push(("d2-type-rule", String::from(rule.subject), String::from("D2: a funcref table needs nothing; wasmrt gates it")));
+        }
+    }
+    for (s, _) in &subjects {
+        if !TYPE_RULES.iter().any(|r| r.subject == *s) {
+            found.push(("d2-type-rule", String::from(*s), String::from("mapped here, but D2 has no such typeRules subject; remove it")));
+        }
+    }
+
+    // ---- D2 encodingRules: each one exercised on a module, both directions ----
+    // For every group: with ALL its members off the module is refused; with only one member off (a
+    // group with alternatives) it still validates; with every feature on it validates.
+    let judge = |bytes: &[u8], fs: &Features| crate::module::decode(bytes).ok().is_some_and(|m| crate::validate::validate_with_features(&m, fs).is_ok());
+    let fixtures = encoding_fixtures();
+    for rule in ENCODING_RULES {
+        let Some((_, mods)) = fixtures.iter().find(|(s, _)| *s == rule.subject) else {
+            found.push(("d2-encoding-rule", String::from(rule.subject), String::from("no wasmrt fixture for this D2 encodingRules subject")));
+            continue;
+        };
+        let needs = rule.needs.unwrap_or(&[]);
+        for (i, m) in mods.iter().enumerate() {
+            let key = || format!("{} #{i}", rule.subject);
+            let bytes = match m {
+                Fixture::Wat(src) => match crate::wat::assemble(src.as_bytes()) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        found.push(("d2-encoding-rule", key(), format!("the fixture does not assemble: {e:?}")));
+                        continue;
+                    }
+                },
+                Fixture::Bytes(b) => b.to_vec(),
+            };
+            if !judge(&bytes, &Features::all()) {
+                found.push(("d2-encoding-rule", key(), String::from("refused with every feature on")));
+                continue;
+            }
+            for g in needs {
+                let mut fs = Features::all();
+                for n in *g {
+                    match d2_feature(n) {
+                        Some(f) => fs.set(f, false),
+                        None => found.push(("d2-encoding-rule", String::from(*n), String::from("an encodingRules feature wasmrt cannot resolve"))),
+                    }
+                }
+                if judge(&bytes, &fs) {
+                    found.push(("d2-encoding-rule", key(), format!("accepted with {} off", g.join(" and "))));
+                }
+                if g.len() > 1 {
+                    for n in *g {
+                        let mut fs = Features::all();
+                        if let Some(f) = d2_feature(n) {
+                            fs.set(f, false);
+                        }
+                        if !judge(&bytes, &fs) {
+                            found.push(("d2-encoding-rule", key(), format!("refused with only {n} off; D2 says any of {} admits it", g.join(", "))));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (s, _) in &fixtures {
+        if !ENCODING_RULES.iter().any(|r| r.subject == *s) {
+            found.push(("d2-encoding-rule", String::from(*s), String::from("a fixture here, but D2 has no such encodingRules subject; remove it")));
         }
     }
 
