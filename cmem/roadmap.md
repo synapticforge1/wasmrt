@@ -393,9 +393,13 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   --index-filter` method, dry-run first: 163 of 304 historical file versions and 1 message → 0.
   **141 of 230 commits changed id** (all from 2026-08-10 on), **no tag moved**, identities and the
   tip tree identical. Map: **`history-map-2026-10-24.md`**. ⚠️ The sibling copies of the contract
-  quote four wasmrt ids from v31; three are old again: `c9c447f3` → `aa2769b8`, `ff99f6f1` →
-  `01d0dc42`, `da17c367` → `76e77ec7` (`4e3de996` is unchanged). Reported to the owner for wazmrt's
-  pen.
+  quote four wasmrt ids from v31, and ALL FOUR are old again: `c9c447f3` → `aa2769b8`, `ff99f6f1` →
+  `01d0dc42`, `da17c367` → `76e77ec7`, and `4e3de996` → `97b610c9`. ⚠️ This note first said the
+  fourth was "unchanged", and that was wrong: `4e3de996` was a typo in the contract since v31 and
+  resolves in NEITHER history (the commit is `4e3de99579cc`, "test: pin the anti-silent-disarm
+  rule…"). A search of the map for it found nothing, and "not found" was read as "unchanged".
+  wazmrt's session caught it and corrected the contract as v34. 🎓 An id is checked by resolving
+  it (`git log -1 <id>`), not by its absence from a list.
 * ✅ **History rewritten and force-pushed with a lease on all 18 refs.** 217 commits, tip tree
   byte-identical, 0 trees and 0 messages with a path (213 and 1 before), authors, emails and dates
   unchanged. ⚠️ **Every commit id changed**, so an id quoted anywhere from before 2026-10-23 is
