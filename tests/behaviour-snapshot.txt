@@ -888,7 +888,6 @@ all,-reference-types accepts core-mvp-elem-legacy.wasm
 all,-reference-types accepts core-mvp-memory-data.wasm
 all,-reference-types accepts core-mvp-mutable-global-internal.wasm
 all,-reference-types accepts gate-bulk-memory.wasm
-all,-reference-types accepts gate-custom-descriptors.wasm
 all,-reference-types accepts gate-custom-page-sizes.wasm
 all,-reference-types accepts gate-exceptions.wasm
 all,-reference-types accepts gate-extended-const.wasm

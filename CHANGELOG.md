@@ -23,6 +23,18 @@ _Next: **1.0.1** (T9, hardening), **1.0.2** (T10, a bug hunt and code-hygiene pa
 an optimization review of the shipped binaries and the C ABI) and **1.0.4** (T12, a security review),
 each version subject to the bump gate._
 
+### Fixed (2026-10-24)
+
+- ⚠️ **Breaking (validation, `--features`): an `exact` reference type needs reference-types.**
+  `(ref null (exact $t))` was judged by custom-descriptors alone, so it validated with
+  reference-types off; it now needs reference-types, function-references or gc, and
+  custom-descriptors, as binaryang D2 2.2.0's `typeRules` and wasm-tools 1.262 say. Found by
+  binaryang's feature matrix (one module of 140, under one configuration of 49). With every
+  proposal on, the default, nothing changes. ⚠️ The bump gate counts accepting less as MAJOR.
+- **wasmrt is held to binaryang D2 2.2.0's type and encoding rules in `cargo test`** (re-pinned
+  from 2.1.0): every value type under every combination of the features the rules name, and a
+  module per encoding rule in both directions.
+
 ## [1.0.0] — 2026-10-24 — the conformance clear-out (T13)
 
 **The official WebAssembly spec testsuite passes whole: 64,603 assertions over 288 files, none failed,
