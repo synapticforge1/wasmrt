@@ -258,6 +258,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   § Records, "Owner exception (2026-10-23)", and the H19 row in `../cmem/handoffs.md`, which keeps
   the old drive paths in history open). A review no longer files wasmrt's commit email as
   non-compliant. The address itself is not repeated in memory (workspace rule).
+* 🔒 **Re-confirmed 2026-10-24** (owner: *"Yes I approve my email in the maintainer's/authors
+  field"*), asked because the workspace rule names only the registry manifest field: the commit
+  author/committer fields keep it, and the 2026-10-24 rewrite left every identity unchanged.
 
 **C. Memory conformance (medium; repo-internal)**
 * **H2**: `CLAUDE.md` is **49,055 bytes** (2026-10-23); the letter asks for a pointer file. Move
@@ -384,6 +387,15 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   11 occurrences, all checked.
 
 **E. Owner-gated and destructive — ✅ DONE 2026-10-23 (owner: "fix the old drive paths in the git history")**
+* ✅ **2026-10-24: a SECOND rewrite** (owner: *"Yes I want the history rewrite"*), for what the path
+  purge missed. The repo is public, and four files still named the development drive's letter, a
+  volume query and an installed agent. Fourteen exact phrases were replaced, the same `filter-branch
+  --index-filter` method, dry-run first: 163 of 304 historical file versions and 1 message → 0.
+  **141 of 230 commits changed id** (all from 2026-08-10 on), **no tag moved**, identities and the
+  tip tree identical. Map: **`history-map-2026-10-24.md`**. ⚠️ The sibling copies of the contract
+  quote four wasmrt ids from v31; three are old again: `c9c447f3` → `aa2769b8`, `ff99f6f1` →
+  `01d0dc42`, `da17c367` → `76e77ec7` (`4e3de996` is unchanged). Reported to the owner for wazmrt's
+  pen.
 * ✅ **History rewritten and force-pushed with a lease on all 18 refs.** 217 commits, tip tree
   byte-identical, 0 trees and 0 messages with a path (213 and 1 before), authors, emails and dates
   unchanged. ⚠️ **Every commit id changed**, so an id quoted anywhere from before 2026-10-23 is

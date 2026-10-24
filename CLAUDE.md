@@ -358,6 +358,9 @@ per domain — same convention as wazmrt. **Start with [`cmem/INDEX.md`](cmem/IN
   it in `cargo test`. **Editing the generated file by hand is a DEFECT** (letter H10)
 - 🔑 [`cmem/history-map-2026-10-23.md`](cmem/history-map-2026-10-23.md) — **history was rewritten on
   2026-10-23** (drive-path purge), so every commit id quoted from before then is OLD: look it up here
+- 🔑 [`cmem/history-map-2026-10-24.md`](cmem/history-map-2026-10-24.md) — **and again on 2026-10-24**
+  (drive-letter and machine-detail purge; 141 commits from 2026-08-10 on, no tag moved): look an id
+  up in the 10-23 map first, then this one
 
 Detailed engineering reference (the wazmrt deep-read maps) is in [`docs/port/`](docs/port/).
 ⚠️ **`docs/port/wasmrt.h.draft` is HISTORICAL** — four of its shapes never matched the code. The
