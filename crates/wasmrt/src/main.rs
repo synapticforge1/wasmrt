@@ -1219,8 +1219,8 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
 /// *binary* reporting a decode error rather than being fed to the assembler and blamed for bad syntax.
 ///
 /// ⚠️ What executes is the **assembled bytes**, not the file on disk. That matters for anything that
-/// hashes what it runs — `pin` is still a stub (T9e), but when it lands it must hash the assembled
-/// module, exactly as wazmrt's `verifyGate` hashes the in-memory bytes rather than re-reading the path.
+/// hashes what it runs: [`load_module`] pins the assembled module, the in-memory bytes, never a
+/// re-read of the path.
 fn read_module_bytes(path: &str) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
     if std::path::Path::new(path)

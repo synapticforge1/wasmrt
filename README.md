@@ -7,7 +7,7 @@ Since 2026-08-11 the two are **independent runtimes** that stay command-line com
 replace the other. wasmrt's correctness is anchored on the official WebAssembly spec testsuite, on
 wasmtime's observable behaviour, and on a corpus of real WASI programs.
 
-> **Status: `0.9.0` is the latest release; the next is `1.0.0`.** wasmrt can **assemble**, **decode**, **type-check**, and **run**
+> **Status: `1.0.0`, the conformance clear-out.** wasmrt can **assemble**, **decode**, **type-check**, and **run**
 > WebAssembly — `wasmrt run fac.wasm fac 10` → `3628800`, `wasmrt wat mod.wat -o mod.wasm`. Execution
 > covers integer + floating-point compute, linear memory (incl. **multi-memory** and **memory64**),
 > tables / `call_indirect` / reference types, **WasmGC**, **SIMD** (the full `v128` set, incl. relaxed),
@@ -17,8 +17,8 @@ wasmtime's observable behaviour, and on a corpus of real WASI programs.
 >
 > It reads and writes the **text format** and runs the **official spec testsuite**: on the current
 > source, `wasmrt wast <dir>` passes **all 64,603 assertions in the suite's 288 files, with none
-> failed, skipped or unrun** (measured 2026-10-24; unreleased: at its release, `0.9.0` passed 98.8%
-> of the assertions it ran, against the smaller suite of the time). That is the `1.0.0` gate.
+> failed, skipped or unrun** (measured 2026-10-24). That is the `1.0.0` gate; `0.9.0` passed 98.8%
+> of the assertions it ran, against the smaller suite of the time.
 >
 > It is **embeddable from C** via [`wasmrt.h`](crates/wasmrt-capi/include/wasmrt.h) — compile,
 > link host functions, instantiate, call exports, and read or write guest memory. You can restrict
@@ -74,7 +74,7 @@ Sustained hot loops go to a JIT — that trade is deliberate. A comparison again
 | Crate | What it is | Install |
 | --- | --- | --- |
 | `wasmrt` | the command-line runtime | `cargo install wasmrt` |
-| `wasmrt-core` | the runtime as a Rust library (`no_std`-friendly) | `wasmrt-core = "0.9"` |
+| `wasmrt-core` | the runtime as a Rust library (`no_std`-friendly) | `wasmrt-core = "1.0"` |
 | `wasmrt-capi` | the C ABI ([`wasmrt.h`](crates/wasmrt-capi/include/wasmrt.h)) as a `cdylib` / `staticlib` | build from source |
 
 ## Embedding from C
@@ -138,15 +138,15 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 
 | Version | What changed | How to migrate |
 | --- | --- | --- |
-| _next release_ | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
-| _next release_ | **`--features`** takes binaryang D2's names and presets (`wasm1` `wasm2` `wasm3` `all`, plus `mvp` `lime1` `-all`); `mvp` and a bare list start from nothing, so exporting a mutable global needs `mutable-globals` (or `wasm1`); every reference type needs reference-types (the GC and exception types their own proposal as well), and a non-null `(ref func)` / `(ref extern)` needs function-references (gc admits only `(ref $t)`), as in wasm-tools; an overlong `call_indirect` index needs reference-types. No feature set is refused | use a preset (`--features wasm2`) or add `mutable-globals`; the wasm-tools spellings still work, with a warning |
-| _next release_ | **Rust API / C ABI:** `Feature::MutableGlobals` and `Features::mutable_globals`, `opcode::CallIndirect::overlong`; `WASMRT_FEATURE_MUTABLE_GLOBALS = 18`; `wasmrt_engine_new_with_config` no longer refuses a feature set | add the new arm / field; nothing to change in C |
-| _next release_ | **Traps:** `call_indirect` past the table's end now reports "undefined element", and an out-of-range float→int truncation "integer overflow" (as the spec says). **Rust API:** `interp::Trap` gains `UndefinedTableElement` | a `match` on `Trap` needs the new arm; code that matched the old message text should match the new one |
-| _next release_ | **WASI:** a guest sees ONLY the `--env` variables; it no longer inherits the host's environment. `--env =x` (an empty name) is an error | pass each variable the guest needs: `--env HOME=/home/me --env LANG=C.UTF-8` |
-| _next release_ | **CLI:** a host flag after the guest's first argument is an error (`prog.wasm install --yes`) | `prog.wasm install -- --yes` gives the guest its own flag |
-| _next release_ | **Validation:** with a proposal disabled, a table with an initializer needs function-references, and `nullexternref` / `nullfuncref` need GC (as in wasm-tools). With every proposal on, the default, nothing changes | enable the proposal: `--features …,function-references` or `…,gc` |
-| _next release_ | **Pins:** `wasmrt wat` now writes `wasm-tools parse`'s bytes, so a `.wat` file's pin digest changes (`.wasm` digests do not) | re-run `wasmrt pin` over pinned `.wat` files |
-| _next release_ | **Rust API (`wasmrt-core`):** `interp::PAGE_SIZE` removed (pages have a per-memory size); `opcode::Op` is `#[repr(u16)]` with renumbered internal tags; `module::Code::body` (the raw bytes) replaced by `Code::ir` (the decoded instructions); `interp::InstanceId` carries its store and is no longer a tuple struct; new enum variants in `opcode::Imm`, `DecodeError` and `wat::Error` | match on the new variants; take a page size from the memory's type. The C ABI (`wasmrt.h`) only added: `abi_version()` is still 1 |
+| 1.0.0 | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
+| 1.0.0 | **`--features`** takes binaryang D2's names and presets (`wasm1` `wasm2` `wasm3` `all`, plus `mvp` `lime1` `-all`); `mvp` and a bare list start from nothing, so exporting a mutable global needs `mutable-globals` (or `wasm1`); every reference type needs reference-types (the GC and exception types their own proposal as well), and a non-null `(ref func)` / `(ref extern)` needs function-references (gc admits only `(ref $t)`), as in wasm-tools; an overlong `call_indirect` index needs reference-types. No feature set is refused | use a preset (`--features wasm2`) or add `mutable-globals`; the wasm-tools spellings still work, with a warning |
+| 1.0.0 | **Rust API / C ABI:** `Feature::MutableGlobals` and `Features::mutable_globals`, `opcode::CallIndirect::overlong`; `WASMRT_FEATURE_MUTABLE_GLOBALS = 18`; `wasmrt_engine_new_with_config` no longer refuses a feature set | add the new arm / field; nothing to change in C |
+| 1.0.0 | **Traps:** `call_indirect` past the table's end now reports "undefined element", and an out-of-range float→int truncation "integer overflow" (as the spec says). **Rust API:** `interp::Trap` gains `UndefinedTableElement` | a `match` on `Trap` needs the new arm; code that matched the old message text should match the new one |
+| 1.0.0 | **WASI:** a guest sees ONLY the `--env` variables; it no longer inherits the host's environment. `--env =x` (an empty name) is an error | pass each variable the guest needs: `--env HOME=/home/me --env LANG=C.UTF-8` |
+| 1.0.0 | **CLI:** a host flag after the guest's first argument is an error (`prog.wasm install --yes`) | `prog.wasm install -- --yes` gives the guest its own flag |
+| 1.0.0 | **Validation:** with a proposal disabled, a table with an initializer needs function-references, and `nullexternref` / `nullfuncref` need GC (as in wasm-tools). With every proposal on, the default, nothing changes | enable the proposal: `--features …,function-references` or `…,gc` |
+| 1.0.0 | **Pins:** `wasmrt wat` now writes `wasm-tools parse`'s bytes, so a `.wat` file's pin digest changes (`.wasm` digests do not) | re-run `wasmrt pin` over pinned `.wat` files |
+| 1.0.0 | **Rust API (`wasmrt-core`):** `interp::PAGE_SIZE` removed (pages have a per-memory size); `opcode::Op` is `#[repr(u16)]` with renumbered internal tags; `module::Code::body` (the raw bytes) replaced by `Code::ir` (the decoded instructions); `interp::InstanceId` carries its store and is no longer a tuple struct; new enum variants in `opcode::Imm`, `DecodeError` and `wat::Error` | match on the new variants; take a page size from the memory's type. The C ABI (`wasmrt.h`) only added: `abi_version()` is still 1 |
 
 ## License
 

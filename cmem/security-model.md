@@ -7,9 +7,10 @@ neither binding on wasmrt nor a safe thing to inherit unread. Port detail remain
 `docs/port/05-wasi-cli-pin.md` + `docs/port/06-build-docs-licensing.md`.
 
 Two orthogonal properties, both required: **Authority** (what a running guest may touch — BUILT) and
-**Authenticity** (is this the code I approved — **`pin` is still a STUB**; a build performs *no*
-authenticity check, signatures design-only). ⚠️ Do not read "Authenticity" as implemented anywhere in
-this file.
+**Authenticity** (is this the code I approved — **`pin` BUILT 2026-09-19, T9e, shipped in 1.0.0**: a
+SHA-256 allow-list the CLI checks on every executing path before validation, fail-closed; signatures
+are still design-only). *(Until 2026-09-19 this line said `pin` was a stub; sections below written
+before then say so too, and are dated.)*
 
 ⚠️ **The record below already shows why inheriting was the wrong posture:** on 2026-08-10 wasmrt gated
 symlink *creation* correctly and wazmrt had **no `path_symlink` right at all**, so its `--ro-dir` never

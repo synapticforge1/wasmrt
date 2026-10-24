@@ -10,7 +10,8 @@ plus the size and speed numbers that decide inclusion. Detail:
 the universalWasmLoader-\* runtimes, so parity with one is not evidence about the other. What answers
 "is this correct?", in order of authority:
 
-1. **The official WebAssembly spec testsuite** — 62,616 adjudicated assertions over 284 files, vendored
+1. **The official WebAssembly spec testsuite** — 64,603 adjudicated assertions over 288 files
+   (2026-10-24, all passed; the corpus moves, so re-run before quoting), vendored
    at `../wasmtk/tests/module/wasm_wast/testsuite-main`. This is the anchor: it is the specification,
    executable. `wasmrt wast <dir>` runs it.
 2. **wasmtime's observable behaviour**, for questions the suite does not adjudicate — error wording,
@@ -20,7 +21,8 @@ the universalWasmLoader-\* runtimes, so parity with one is not evidence about th
    (`best-practices.md`).
 3. **The wasmtk WASI corpus** — real compiled guests, which is the only thing that exercises the WASI
    surface end to end.
-4. **wasmrt's own tests** — 458 of them, for the internal invariants none of the above can reach
+4. **wasmrt's own tests** — 606 of them (2026-10-24; the count lives in `open-work.md`), for the
+   internal invariants none of the above can reach
    (handle tagging, store isolation, encoding invariants, the `size_of` pins).
 
 ✅ **Tail calls** (`return_call`/`return_call_indirect`) were conformed exactly this way and **landed 2026-08-14** — they were the one

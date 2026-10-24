@@ -50,8 +50,8 @@ Legend: ✅ done & verified · 🚧 in progress · ⬜ planned
 | **0.7.0** | Text toolchain + Validate (complete) | `.wat` assembler + `.wast` runner, bringing the official spec testsuite online; plus the SIMD / atomics / GC / EH typing arms, so the type-checker covers everything the interpreter runs | ✅ |
 | **0.8.0** | WASI + CLI | host imports + module linking on a shared store + WASI preview 1 **including the sandboxed filesystem** (`--dir` / `--ro-dir` preopens); plus `#![forbid(unsafe_code)]` in the engine | ✅ |
 | **0.9.0** | C ABI | the `wasmrt.h` embedding surface — checked handles, caller-based host callbacks, configurable proposals + resource ceilings; gated by c-smoke, link-completeness and Miri | ✅ |
-| **1.0.0** | **Conformance clear-out** | the spec testsuite to **zero failures / zero skips / zero unrun**, empty baseline, zero deliberate deviations — which brings the proposals the corpus contains into scope | ⬜ |
-| 1.0.1 | Hardening | the correctness punch-list, **module authenticity (`pin`)**, licensing, docs, size minimization, all gates green | ⬜ |
+| **1.0.0** | **Conformance clear-out** | the spec testsuite to **zero failures / zero skips / zero unrun**, empty baseline, zero deliberate deviations — which brings the proposals the corpus contains into scope. Met: **64,603 / 0 / 0 over 288 files**. Also ships tail calls, module pinning (`wasmrt pin`), the iteration bound, wazmrt's CLI shape and binaryang D2's `--features` | ✅ |
+| 1.0.1 | Hardening | the correctness punch-list, licensing, docs, size minimization, all gates green (module authenticity, `pin`, landed early, in 1.0.0) | ⬜ |
 | 1.0.2 | Bug hunt + code hygiene | a comprehensive audit across tested **and** untested paths — bugs, fall-throughs, stale workarounds, dead code, missing documentation | ⬜ |
 | 1.0.3 | Optimization review | measured options for making the shipped artifacts faster and smaller — judged at the binary and C-ABI boundary, not by micro-benchmarks | ⬜ |
 | 1.0.4 | Security review | an adversarial review of the penetration surfaces — hostile guests, malformed input, and C-ABI misuse — with recommended mitigations | ⬜ |
@@ -79,21 +79,22 @@ Checked off as each capability lands and passes its gate.
 | Host imports (link a module against another) | ✅ | 0.8 |
 | Restrict which proposals a guest may use | ✅ | 0.9 |
 | Configurable resource ceilings (memory, call depth, GC) | ✅ | 0.9 |
-| Tail calls (`return_call`/`return_call_indirect`/`return_call_ref`) | ✅ | 0.10 |
+| Tail calls (`return_call`/`return_call_indirect`/`return_call_ref`) | ✅ | 1.0.0 |
 
 ### Text & conformance
 | Use case | Status | Lands in |
 | --- | --- | --- |
 | Assemble `.wat` → `.wasm` | ✅ | 0.7 |
 | Run `.wast` spec scripts | ✅ | 0.7 |
-| Pass the official WebAssembly spec testsuite | ✅ on the source tree: 64,603 / 0 / 0 over 288 files (2026-10-24), unreleased — **zero failures and zero skips is the `1.0.0` gate** | 0.7 → 1.0.0 |
+| Pass the official WebAssembly spec testsuite | ✅ **64,603 / 0 / 0 over 288 files**: zero failed, skipped or unrun (measured 2026-10-24) | 0.7 → 1.0.0 |
 
 ### WASI & the CLI
 | Use case | Status | Lands in |
 | --- | --- | --- |
 | Run a WASI preview-1 program (stdout/args/env/clock) | ✅ | 0.8 |
 | Sandboxed filesystem (`--dir` / `--ro-dir` preopens) | ✅ | 0.8 |
-| Module pin verification / signatures | ⬜ | 1.0.1 |
+| Module pin verification (a SHA-256 allow-list, `wasmrt pin`) | ✅ | 1.0.0 |
+| Module signatures | ⬜ | — |
 
 ### Embed wasmrt
 | Use case | Status | Lands in |

@@ -1,5 +1,35 @@
 # Known Issues
 
+## 🔧 2026-10-24 — D2's TYPE RULE (binaryang § 44, wasm-tools' rule), adopted owner-directed
+
+binaryang's § 44 (drafted, not yet sent) states D2 `typeRules` = wasm-tools 1.262's rule (owner:
+"wasm-tools' rule"); the owner directed wasmrt to adopt it before the binaryang release ("do the fix
+first"). Probe: 20 value types × all 16 on/off subsets of reference-types / function-references /
+gc / exceptions, `wasmrt --features` against `wasm-tools validate --features=-all,…`. **52 of 320
+judgements differed before, 0 after** (`cee7bd1`), plus 8 that are wasm-tools' `gc-types`
+sub-feature, which D2 does not have. Tables and element segments share the gate (spot-checked).
+
+| | what | state |
+| --- | --- | --- |
+| 🔒 | **The abstract GC types needed only gc**: `anyref`, `eqref`, `i31ref`, `structref`, `arrayref`, `nullref`, `nullfuncref`, `nullexternref`, `(ref any)`, `(ref noextern)` were accepted with reference-types off (40) | ✅ reference-types AND gc |
+| 🔒 | **`exnref` / `(ref exn)` needed only exceptions** (8) | ✅ reference-types AND exceptions |
+| 🔒 | **gc admitted a non-null `(ref func)` / `(ref extern)`** with function-references off (4). The 2026-10-24 v37 row below said "function-references OR gc" for every typed reference; that holds for a concrete `(ref null? $t)` only | ✅ function-references; `(ref $t)` keeps "function-references OR gc" |
+| ⚠️ | **A contract surface changed before the sibling moved.** wazmrt still has the 2.1.0 rule, so the two differ on exactly these classes until it adopts | relayed (`open-work.md`, "To relay") |
+| ⚠️ | **S1: 24 accepted → refused**, all in these classes | re-baselined in its own commit (`788bee5`); README Breaking Changes and CHANGELOG [1.0.0] |
+
+🟡 **OPEN, observed 2026-10-24 (S3 at the 1.0.0 release): the overlong `call_indirect` refusal
+reports a different OFFSET from wasm-tools.** `1_fib-rs.wasm` under `all,-reference-types`: wasmrt
+says `offset 598 (function 6)`, wasm-tools `zero byte expected (at offset 0x25c)` = 604, the
+table-index byte. The verdict agrees; the diagnostic offset does not, though offsets matched
+wasmtime byte-for-byte when that was measured (2026-08-10, type errors). Unmeasured whether other
+encoding refusals differ the same way.
+
+🎓 **Probe trap:** `wasm-tools validate --features -all,…` is a clap USAGE error (`-a` read as a
+flag, rc 2). The first run of this probe counted every rc ≠ 0 as "refuse" and reported 136
+differences, every one of them meaningless (no wasm-tools judgement had run at all); the probe now
+throws on a usage error. Spell it
+`--features=-all,…`.
+
 ## 🤝 2026-10-24 — contract v37: `--features` takes binaryang D2's names and meanings
 
 Measured by wazmrt's `cmem/probes/feature-matrix.ts` on both runtimes (86 lines each): **116 lines
@@ -64,7 +94,7 @@ Detail and method: [shared-definitions.md](shared-definitions.md).
 | --- | --- | --- |
 | 🔴 | **Six GC bulk array ops gated by no flag** (`array.new_data/new_elem/fill/copy/init_data/init_elem`), from 2026-08-19. Latent: an array TYPE is refused with GC off first (measured on wasmrt and wasm-tools 1.262) | ✅ **FIXED** — `op_feature`'s GC arm; `UNGATED_CORE_OPS` 178 → 172 (= D1's core count); pinned by name. Conformance 64,603 / 0 / 0 before and after, no file lost a pass; the three sweeps pass |
 | 🟠 | **I8: `(@custom "name" …)` plus identifiers gives TWO `name` sections** (the annotation, then a generated one). wasm-tools and binaryang emit one. wazmrt has the same behaviour, byte-identical | ✅ **FIXED 2026-10-23 with the H13 batch**: the annotation is the only `name` section, byte-identical to wasm-tools (unit test). No corpus file has the shape, so pin parity with wazmrt is unaffected |
-| 🟡 | **`--features` does not accept binaryang's `sat-float-to-int`** (it accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`) | OPEN — a contract surface. ~~v30: wasm-tools' vocabulary~~ was REVERSED by **v32/v33** (mirrored, wasmrt's copy is now v34): `--features` takes **binaryang's D2** names AND meanings, so `sat-float-to-int` becomes canonical. wasmrt migrates once, when binaryang's FL1 settles D2's spellings (2026-10-24) |
+| ✅ | **`--features` does not accept binaryang's `sat-float-to-int`** (it accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`) | **CLOSED 2026-10-24 (re-measured):** D2 2.1.0 settled the spelling as `saturating-float-to-int`, which wasmrt accepts; `sat-float-to-int` is not a D2 name and is refused as unknown, correctly. *(Was: OPEN — a contract surface.)* ~~v30: wasm-tools' vocabulary~~ was REVERSED by **v32/v33** (mirrored, wasmrt's copy is now v34): `--features` takes **binaryang's D2** names AND meanings, so `sat-float-to-int` becomes canonical. wasmrt migrates once, when binaryang's FL1 settles D2's spellings (2026-10-24) |
 | 🟡 | **`cli_review_regressions::env_flags_add_to_the_inherited_environment_rather_than_replacing_it` depends on the SHELL.** It overrides `PATH` and expects the count not to grow. Under PowerShell the inherited key is `Path` (Windows names are case-insensitive, wasmrt's comparison is not), so it fails: 126 vs 125. Under Git Bash (`PATH`) it passes. Measured 2026-10-23 | ✅ **FIXED 2026-10-24** (owner: "fix it"): the test now overrides a key it puts into wasmrt's own environment (`WASMRT_TEST_INHERITED`), so its spelling is known. Passes from PowerShell and Git Bash; inverted (overriding a key that was not inherited gives 129 vs 128). The second question, whether `--env PATH=x` should replace a host `Path` on Windows, stays open and is not obviously a defect: a POSIX guest sees two distinct keys |
 
 ## 🗂 BACKLOG AUDIT 2026-09-20 — **eight headings said OPEN; the code said otherwise**

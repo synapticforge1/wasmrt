@@ -17,7 +17,13 @@ regenerates it and diffs.
 | the generator | `scripts/definitions.ts` | verifies the source, writes the copy; `--check` regenerates and diffs; `fetch <tag> <commit>` re-pins |
 | the copy | `crates/wasmrt-core/src/definitions.rs` | GENERATED. **Hand-editing it is a DEFECT** (H10) |
 | the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test` |
-| 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables. Compiled into every binary |
+| 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables, the `0xFB`/`0xFC` dispatch (`fb_op`, `fc_op`, `prefixed`). Compiled into every binary |
+
+⚠️ **The TYPE rule is AHEAD of the pin (2026-10-24, owner-directed).** `features::val_type_unmet`
+implements D2's `typeRules` as binaryang § 44 states them (wasm-tools 1.262's rule), which the pinned
+D2 2.1.0 does not yet carry; it is held by a probe against wasm-tools and a unit test, not by the copy.
+When the next binaryang release is pinned, add `typeRules` / `encodingRules` to `definitions_check`
+(`open-work.md` item 2; `known-issues.md`, top).
 
 **Pinned 2026-10-24: binaryang `v2.1.0`, commit `b7fdb9de5785`** (D1 1.0.1, D2 2.1.0 with `requires`
 and `presets`, D3 1.0.0) — 582 instructions, 22 features, 20 verdicts. *(Was `v1.14.0` /

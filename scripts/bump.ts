@@ -111,12 +111,16 @@ function behaviourFloor(released: string): Floor {
   return m[1] as Floor;
 }
 
-function breakingRowPresent(): boolean {
+/** A Breaking Changes row for the coming release: `_next release_` before the bump, or, once the
+ *  release commit has renamed its rows, the manifest's version when that is past `released`. */
+function breakingRowPresent(released: string): boolean {
   const readme = readFileSync(join(repo, "README.md"), "utf8");
   const at = readme.indexOf("### ⚠️ Breaking Changes");
   if (at < 0) return false;
   const table = readme.slice(at).split("\n").slice(1).join("\n").split(/\n#{1,3} /)[0];
-  return /^\|\s*_next release_\s*\|/m.test(table);
+  const have = manifestVersion();
+  const names = ["_next release_", ...(cmp(parse(have), parse(released)) > 0 ? [have] : [])];
+  return names.some((n) => new RegExp(`^\\|\\s*${n.replace(/\./g, "\\.")}\\s*\\|`, "m").test(table));
 }
 
 /** Is `target` allowed after `released` given `floor`? Returns the reason it is not, or "". */
@@ -128,7 +132,7 @@ function judge(released: V, target: V, floor: Floor): string {
   if (RANK[step] >= RANK[floor]) return "";
   // Rule 6: pre-1.0, a minor stands in for a major — with the Breaking Changes row.
   if (released[0] === 0 && floor === "major" && step === "minor") {
-    return breakingRowPresent() ? "" : "pre-1.0 a minor may carry a major change, but README.md has no `### ⚠️ Breaking Changes` row for `_next release_`";
+    return breakingRowPresent(show(released)) ? "" : "pre-1.0 a minor may carry a major change, but README.md has no `### ⚠️ Breaking Changes` row for `_next release_`";
   }
   return `the floor is ${floor}, and ${show(released)} → ${show(target)} is a ${step}`;
 }
@@ -137,7 +141,7 @@ function floors(released: string): Floor {
   console.log(`floor since v${released}:`);
   const f = max(max(surfaceFloor(released), semverFloor(released)), behaviourFloor(released));
   console.log(`=> FLOOR ${f.toUpperCase()}`);
-  if (f === "major" && !breakingRowPresent()) console.log(`⚠ a major floor needs a \`_next release_\` row in README.md's ### ⚠️ Breaking Changes table`);
+  if (f === "major" && !breakingRowPresent(released)) console.log(`⚠ a major floor needs a \`_next release_\` (or the new version's) row in README.md's ### ⚠️ Breaking Changes table`);
   return f;
 }
 

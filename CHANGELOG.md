@@ -19,10 +19,40 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-_Next: **1.0.0 (T13)** — the conformance clear-out, which the unreleased work below completes. Then
-**1.0.1** (T9, hardening), **1.0.2** (T10, a bug hunt and code-hygiene pass), **1.0.3** (T11, an
-optimization review of the shipped binaries and the C ABI) and **1.0.4** (T12, a security review),
+_Next: **1.0.1** (T9, hardening), **1.0.2** (T10, a bug hunt and code-hygiene pass), **1.0.3** (T11,
+an optimization review of the shipped binaries and the C ABI) and **1.0.4** (T12, a security review),
 each version subject to the bump gate._
+
+## [1.0.0] — 2026-10-24 — the conformance clear-out (T13)
+
+**The official WebAssembly spec testsuite passes whole: 64,603 assertions over 288 files, none failed,
+skipped or unrun.** At 0.9.0 it was 98.8% of the assertions run, over a smaller suite. Getting there
+brought in every proposal the suite contains: custom descriptors (`exact` types), wide arithmetic,
+custom page sizes, table64, custom annotations, and the legacy `delegate` form. This release also
+ships tail calls, module pinning (`wasmrt pin`), a bound on runaway guests (`--max-iterations`),
+wazmrt's command-line shape (so the two are interchangeable), and binaryang D2's `--features`.
+⚠️ It is a **major** release: the README's Breaking Changes table lists every incompatible change
+since 0.9.0, each with how to migrate.
+
+### Size and speed (measured 2026-10-24, same machine and toolchain for both versions)
+
+| artifact | 0.9.0 | 1.0.0 | change |
+| --- | ---: | ---: | ---: |
+| CLI, `wasmrt.exe` | 644,608 B | 846,848 B | **+31%** |
+| C ABI, `wasmrt_capi.dll` | 1,235,456 B | 534,528 B | **−57%** |
+
+- **The cdylib is less than half its 0.9.0 size.** Its crate type list included `rlib`, which kept
+  link-time optimization from removing the engine's unused code. It is now a `cdylib` and
+  `staticlib` only.
+- ⚠️ **The CLI is 31% larger, and only part of that is attributed.** About 33 KiB is the static C
+  runtime that makes it a single standalone file. The rest grew with the features added since 0.9.0
+  (pinning and SHA-256, the WASI hardening, wazmrt's CLI shape, tail calls, the proposals above,
+  the stricter text assembler), and has not been measured item by item. The optimization review (1.0.3)
+  carries it.
+- **Speed:** in process, cold start on a 48 KB module is 3.24–3.54 ms and the steady `sum(n)` loop
+  197–226 Mops/s (three runs). 0.9.0 has no benchmark to run beside it. The loop is about 5% below
+  the 2026-08 figure (~237 Mops/s, another session); that regression is still unattributed, and
+  1.0.3 carries it too.
 
 ### Changed (2026-10-24)
 

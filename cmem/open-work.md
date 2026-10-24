@@ -7,10 +7,11 @@ stays in the topic file named.
 ## 🚦 State — measured 2026-10-24
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
-* **605 workspace tests**, 0 failed, 1 ignored (2026-10-24, after H10 stage 2); clippy clean;
+* **606 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the D2 type rule); clippy clean;
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
-* Version **0.9.0** (last release). The bump floor since then is **MAJOR** (`releasing.md`, "THE
-  NUMBER"), which `1.0.0` meets.
+* Version **1.0.0 in the manifest**, the release commit pushed, **NOT tagged and NOT published** (the
+  owner's steps; `releasing.md`, checklist 7–9). `bun scripts/bump.ts --verify-tag v1.0.0` passes
+  locally. Last published release: **0.9.0**.
 * Contract mirror **v38**, byte-identical to wazmrt's (`interop.md`); `--features` AGREED (v38); release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
@@ -19,59 +20,44 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-1. **D2's TYPE RULE — waiting on binaryang's next release (≥ 2.2.0) and the contract.** binaryang's
-   § 44 (drafted 2026-10-24, NOT yet sent by the owner) states `typeRules` = wasm-tools 1.262's rule
-   (owner: "wasm-tools' rule"). Measured here the same day: every value type × all 16 on/off
-   subsets of reference-types / function-references / gc / exceptions, wasmrt vs `wasm-tools
-   validate`. **52 judgements differ, all wasmrt accepting**: `(ref func)` / `(ref extern)` with gc
-   on and function-references off (4); `exnref` / `(ref exn)` without reference-types (8); the ten
-   abstract GC types without reference-types (40). Six more are wasm-tools' `gc-types` sub-feature,
-   which D2 lacks (`externref` under `-all`), and are not ours. The fix is `features::val_type_unmet`.
-   It is a `--features` contract surface, so it lands with the re-pin and wazmrt's matching change,
-   not before. § 44's other rows (mutable globals, the overlong index) wasmrt already applies.
-   ⚠️ A probe spelling: `wasm-tools validate --features -all,…` is a clap usage error (rc 2), so
-   pass `--features=-all,…`; a probe that counts rc ≠ 0 as "refuse" reads that as 288 refusals.
-   ✅ H10 step 2 is DONE (stage 1 and stage 2, `bfde4a2`; `shared-definitions.md`).
-2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
-   checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
+1. **Publish 1.0.0 (owner).** `git tag v1.0.0`, `git push origin v1.0.0`; the tag runs the
+   compatibility gate job (its **first run on a runner**), then the GitHub Release. Only when the
+   gate is green: `cargo publish -p wasmrt-core`, then `-p wasmrt-capi`, then `-p wasmrt`. Then the
+   agent records the surface in its own commit: `bun scripts/surface.ts --release-from v1.0.0`.
    Record: `releasing.md`.
-3. ✅ **DONE 2026-10-24 — the v37 migration** (matrix identical to wazmrt, 0 of 86 lines differ;
-   `known-issues.md`, top). Kept for the record of what it was:
-   **The D2 `--features` migration — UNBLOCKED, and now directed (contract v37, 2026-10-24).**
-   wazmrt implemented it; "wasmrt migrates once, to this". binaryang **v2.1.0** (`b7fdb9de`) carries
-   D1 1.0.1 (`return_call_ref` → function-references, so wasmrt's one override goes stale and the
-   generator will say so) and D2 2.1.0 (`requires`, recorded NOT enforced; `presets` wasm1/wasm2/
-   wasm3/all). The work: re-pin to v2.1.0; D2 `cli` names in `Feature::from_name`; the presets plus
-   `mvp`, `lime1`, `-all`; the six wasm-tools-only names as deprecated aliases with a warning; stop
-   refusing incoherent CONFIGURATIONS (`check_coherent`), so `call_ref` is refused while a GC struct
-   is accepted with gc on and function-references off; verify with wazmrt's
-   `cmem/probes/feature-matrix.ts` run on both binaries. Guide: binaryang `docs/opcode-guide.md`.
-   S1 will report a MAJOR floor (wazmrt's did). Record: `shared-definitions.md`, `interop.md` §2.2.
-4. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
+2. **Re-pin to binaryang's next release (≥ 2.2.0) when it ships**, and re-run both matrices
+   (`feature-matrix`, D1 gating) with every difference back to binaryang (its § 44 asks this). D2
+   gains `typeRules` and `encodingRules`: once vendored, `definitions_check` should hold
+   `features::val_type_unmet` and the encoding gates to them, so the rule adopted on 2026-10-24
+   cannot drift from the data. Record: `shared-definitions.md`.
+3. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
    T12 security `1.0.4`. T11 decides the contest: the CLI's 3.4 ms on the 48 KB module, in-process
-   cold start, the unattributed ~5% loop regression, the interpreter ladder, rsxtk on wasmtime vs
-   wasmrt, the cdylib size gap, and the rlib (what rsxtk links) never measured. Record: `roadmap.md`
-   (T9–T12), `vision.md`, `bench/README.md`.
+   cold start, the unattributed ~5% loop regression, **the CLI's +31% since 0.9.0 (≈33 KiB of it
+   attributed)**, the interpreter ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap, and the
+   rlib (what rsxtk links) never measured. Record: `roadmap.md` (T9–T12), `vision.md`,
+   `bench/README.md`, `CHANGELOG.md` [1.0.0] "Size and speed".
 
 ## To relay — wasmrt cannot write there
 
-* **binaryang** (its letter of 2026-10-24 asked two things): ✅ D1's `return_call_ref` and D2's rules
-  are fixed upstream and adopted. **(a) The two fuzz inputs** are in the gitignored
-  `cmem/local/handoffs/binaryang-fuzz-2026-10-23/` (with a README): both STILL reproduce on binaryang
-  `v2.1.0-6-g521c5db02` (binaryang "OK"; wasm-tools and wasmrt refuse). **(b) The matrix against
-  D1/D2 2.1.0**: wasmrt = wazmrt on all 86 lines; D1 per-instruction gating has 0 unexplained
-  differences. Two rules wasmrt and wazmrt apply that D1/D2 do not STATE, for binaryang to record if
-  it wants them in the data: a typed reference needs reference-types AND (function-references OR
-  gc); an overlong `call_indirect` table index needs reference-types (an encoding, not an
-  instruction). Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of `ref.test` /
+* **wazmrt:** 🔴 **wasmrt adopted D2's TYPE RULE on 2026-10-24, owner-directed, ahead of the
+  binaryang release** (`cee7bd1`; `known-issues.md`, top). It is a `--features` contract surface, so
+  the two runtimes now DIFFER where wazmrt still has the 2.1.0 rule: the abstract GC types and
+  `exnref` with reference-types off, and a non-null `(ref func)` / `(ref extern)` with gc on and
+  function-references off (wasmrt refuses all of these; wasm-tools 1.262 too). wazmrt's own § 43
+  rows (3) and (4) found the same rule missing. Proposed for the contract: a row stating that
+  `--features` judges value types by D2's `typeRules`. Also open: const-expr depth > 8 and the
+  element flags are not re-measured since its 2026-09-21 build. *(Closed 2026-10-24: `call_ref` with
+  GC on and function-references off is refused (v37, measured); §5 #13 AGREED (v36); `--features`
+  AGREED and the ladder line corrected (v38).)*
+* **binaryang:** ✅ § 43 delivered both fuzz inputs and the matrix; § 44 (drafted, not yet sent by
+  the owner) answers them, all fixed on its `main`. wasmrt already implements § 44's type rule
+  (measured 0 of 320 judgements differ from wasm-tools 1.262), its mutable-globals rows and the
+  overlong index. Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of `ref.test` /
   `ref.cast` / `ref.cast_desc_eq`.
 * **wasmtk:** its generated (gitignored) `tests/wasi/wasm_wasi_bundle/**/*.wat` include about ten
   modules that `throw 0` with no tag declared (`dynrt_eval_bundle/main_*.wat`,
   `sharedheap_bundle/main_wasic.wat`): wasm-tools refuses the source, and so does wasmrt. A
   generator defect, found by `scripts/wat-corpus.ts` on 2026-10-24 (the files appear and disappear
   between runs, so their builds are live).
-* **wazmrt:** const-expr depth > 8 and the element flags are not re-measured since its 2026-09-21
-  build. *(Closed 2026-10-24: `call_ref` with GC on and function-references off is now refused
-  (v37, measured); §5 #13 AGREED (v36); `--features` AGREED and the ladder line corrected (v38).)*
 * **GitHub:** old commit ids from both rewrites stay retrievable until its garbage collection; a full
   purge is a Support request (owner).

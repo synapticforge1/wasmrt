@@ -109,7 +109,7 @@ Two regimes, reported separately — never conflated:
   throughput across days (run-to-run spread ~8%).
 - The cross-process cold-start-vs-Deno numbers are recorded in `cmem/testing.md`.
 - Canonical workload: `sum(n)` over a tight `loop`/`br_if` (see wazmrt bench).
-- Later: also measure SHA-256 (pin verify — `pin` is still a stub, T9e).
+- Later: also measure SHA-256 (pin verify; `pin` was built 2026-09-19 and has not been benchmarked).
 - **Per-artifact binary size is measured** (T9b, 2026-08-07) — the numbers are in
   `../cmem/roadmap.md` (T9b) and `../cmem/vision.md`. The wasm3/WAMR comparison is
   still outstanding: it needs those binaries present, not an estimate.

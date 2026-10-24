@@ -13,8 +13,8 @@
 //! `cmem/roadmap.md` (T1 types+reader → T2 opcode → T3 decode → T4 validate → T5 interp →
 //! T6 text → T7 wasi → T8 features+linker, for the C ABI).
 //!
-//! **Complete as of T8 / v0.9.0 except [`pin`]**, which is still a stub — so a wasmrt build
-//! performs no module-authenticity check (T9; see `cmem/security-model.md`).
+//! **Complete as of 1.0.0**, including [`pin`], the SHA-256 module allow-list, which the CLI checks
+//! on every executing path before validation (see `cmem/security-model.md`).
 #![cfg_attr(not(feature = "std"), no_std)]
 // **The safety directive, made mechanical** (owner, 2026-08-05; `cmem/design-decisions.md`).
 // The oracle is Zig and leans on raw pointers, manual lifetimes and an arena; none of that

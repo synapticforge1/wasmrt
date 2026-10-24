@@ -20,7 +20,7 @@ them will produce work that helps neither:
 | consumer | artifact | what "small and fast" means there |
 | --- | --- | --- |
 | **rsxtk** (default, native) | `wasmrt-core` **rlib** | what LTO leaves in *rsxtk's* final binary — dead-code elimination across the crate boundary, generic bloat, and whether unused subsystems (WAT assembler, `.wast` runner, WASI) actually drop out. Calls are direct: **no FFI cost to shave**. rsxtk already builds `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, so those levers are live. |
-| **wasmtk**, **universalWasmLoader-\*** | `wasmrt_capi` **cdylib** + `wasmrt.h` | the shipped **493.5 KiB** on disk, plus per-call FFI overhead at the C boundary. Nothing is dead-code-eliminated here — every exported symbol is reachable by definition. |
+| **wasmtk**, **universalWasmLoader-\*** | `wasmrt_capi` **cdylib** + `wasmrt.h` | the shipped **522.0 KiB** on disk (534,528 B at 1.0.0, measured 2026-10-24; was 493.5 KiB in 2026-08), plus per-call FFI overhead at the C boundary. Nothing is dead-code-eliminated here — every exported symbol is reachable by definition. |
 
 The practical consequence: a size win in the cdylib may be invisible to rsxtk, and an rlib win may not
 show up in the cdylib at all. **Measure the artifact the consumer actually links.**

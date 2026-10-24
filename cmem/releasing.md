@@ -266,7 +266,25 @@ bump + public trackers + **full `cmem/` sync** + release commit (checklist steps
 hands over the publish commands. Established rhythm since v0.1.0; the pre-publish doc-sync gate added
 2026-07-31 (v0.6.4) after earlier releases shipped with docs lagging a turn behind.
 
-## Status (2026-08-06)
+## Status (2026-10-24)
+
+- 🚦 **1.0.0 — the release commit is made and pushed; NOT tagged, NOT published.** T13, the
+  conformance clear-out: 64,603 / 0 / 0 over 288 files. Checklist steps 1–6 done: 606 workspace
+  tests and clippy clean; S1 re-baselined for every intended change, S2 0 regressed; sizes and speed
+  re-measured beside a v0.9.0 build on the same toolchain (CLI 644,608 → 846,848 B, +31%; cdylib
+  1,235,456 → 534,528 B, −57%; CHANGELOG [1.0.0] "Size and speed"); the CLI and the DLL import only
+  Windows-provided DLLs, and the CLI runs from an empty directory on a system-only `PATH`; `bump.ts
+  major` applied 0.9.0 → 1.0.0, and `--verify-tag v1.0.0` passes locally. The README's Breaking
+  Changes rows are renamed `_next release_` → `1.0.0`; `bump.ts` accepts a row named for the
+  manifest's new version as well (inverted: with the rows renamed away, it warns). S3 (the wasmtk-wide
+  carry-forward, local, not binding) over v0.9.0 → the tree: 89 accepted → refused, 447 refused →
+  accepted, **none of the 89 under `all`**, the default. Sampled, all three are intended classes and
+  wasm-tools 1.262 refuses the same files: `mutable-globals` under `mvp`-based sets (v37), the overlong
+  `call_indirect` index LLVM writes (`1_fib-rs.wasm` under `all,-reference-types`, v37), and the D2
+  type rule (`gc-cast-type.wat` under gc without reference-types). **Owner next:** steps
+  7–8 (tag, the gate job's first run on a runner, publish); then the agent's step 9.
+
+### 0.9.0
 
 - **✅ v0.9.0 PUBLISHED and pushed (2026-08-06, release commit `a7abd83`, tag `v0.9.0`) — no release is
   pending.** T8 — the **`wasmrt.h` C ABI** — shipped with all three gates green (`abi_symbols.c` 74/74,
