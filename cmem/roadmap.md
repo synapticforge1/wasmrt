@@ -298,10 +298,26 @@ repo's `cmem/`.** Ordered by size and by who has to act:
     feature set from wasm-tools 1.262 (492 swept), the bulk-memory / reference-types / GC splits,
     and the name lists. They are re-derivable, and they are the input to the D2 migration.
 
-  ⏳ v29 waits on H13. 📬 **Tell the owner: wazmrt's copy lacks wasmrt's §2.2f and §2.2m**, both to fold.
+  ✅ **Mirrored to v33** (owner: "yes", after the review), byte-identical to wazmrt's committed
+  copy (last changed in `a580d1b`; wazmrt has since released 2.0.0). v33 folds §2.2f and §2.2m, so
+  wasmrt has no unfolded annex left. It also ends release lockstep (§1e) and extends v32 to
+  MEANINGS: gating follows D1's `feature` column, and the rules follow D2. Review findings,
+  measured 2026-10-23 on wasmrt HEAD, wazmrt 2.0.0 and wasm-tools 1.262:
+  * `(table i64 …)` under `all,-memory64`: all three refuse. wasmrt already did; nothing to do.
+  * `call_ref` under `all,-function-references`: three answers. wasmrt refuses the
+    CONFIGURATION ("gc requires function-references"), wazmrt accepts the module, and wasm-tools
+    refuses the module. v33 says the D2 migration settles it, but **D2 has no preset or dependency
+    rules**: not at our pin (v1.14.0, D2 1.0.0) and not in binaryang's current tree (v1.17.0,
+    D2 1.1.0). Reported to the workspace.
+  * `return_call_ref` under `all,-tail-call`: all three ACCEPT. D1 gates it under `tailCall`, so
+    reading v33 literally would make both runtimes refuse what wasm-tools accepts. This is the
+    same D1 report already in `shared-definitions.md`. wasmrt keeps its gating until D1 changes or
+    the row says otherwise.
+  * Found by the probe and fixed in wasmrt: a feature refusal printed "invalid module: invalid
+    module: …" (`cli_validates_before_executing.rs`, inverted).
 
   📋 **The workspace's list of what waits on wasmrt** (2026-10-23), with today's state:
-  1. mirror `interop.md` → ✅ at **v32**;
+  1. mirror `interop.md` → ✅ at **v33**;
   2. letter H13's three assembler fixes → ✅ **DONE 2026-10-23, night** (owner: "yes H13 next").
      Bodies = `wasm-tools parse` on 603/603 (was 64), I8 fixed too, and `.wat` / `.wasm` pins =
      wazmrt's on 603/603 and 584/584, which restores contract v29. New gate
@@ -322,7 +338,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
        function-references. Fixed, and S1's corpus widened so S1 catches it too;
      * the v0.9.0 → HEAD floor is MAJOR (pre-1.0: minor + Breaking Changes rows), for two intended
        tightenings, both now in the CHANGELOG;
-  5. reach `1.0.1`, where lockstep releases engage → ⏳ after `1.0.0`.
+  5. ~~reach `1.0.1`, where lockstep releases engage~~ → 🗄️ **lockstep ENDED by contract v33**
+     (owner: *"we are officially out of lock step now due to differences"*). Neither runtime waits
+     on the other to release; the contract rows and the mirror rule stay.
 
   Letters H1 and H8 close in the workspace once wasmrt records its side: H8 is in
   `shared-definitions.md`, and H1 is this mirror.
@@ -338,7 +356,8 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   * **v31: wasmrt's post-rewrite commit ids**, so H21 closes with this mirror.
 
   Regime A: wazmrt holds the pen and wasmrt mirrors; **verify each row by running both**. wazmrt
-  moved the lockstep point to wasmrt `1.0.1`. Do it before release.
+  moved the lockstep point to wasmrt `1.0.1`. Do it before release. *(Lockstep ended at v33; the
+  mirror itself is done through v33, above.)*
 * **H13**: the assembler differs from wasm-tools on **539 of 603** files (workspace measurement).
   Three causes: locals written one entry per local instead of runs, exports grouped by kind instead
   of source order, and type interning order. wazmrt closed its copy. ⚠️ This changes emitted bytes,
