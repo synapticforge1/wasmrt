@@ -19,9 +19,10 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-_Next: **1.0.1** (T9, hardening), **1.0.2** (T10, a bug hunt and code-hygiene pass), **1.0.3** (T11,
-an optimization review of the shipped binaries and the C ABI) and **1.0.4** (T12, a security review),
-each version subject to the bump gate._
+_Next: **2.0.0** — the change below refuses a module 1.0.0 accepted, which the bump gate counts as
+major. Then the review stages, in order: T9 (hardening), T10 (a bug hunt and code-hygiene pass), T11
+(an optimization review of the shipped binaries and the C ABI) and T12 (a security review), each
+numbered by the bump gate._
 
 ### Fixed (2026-10-24)
 

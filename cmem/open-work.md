@@ -11,9 +11,11 @@ stays in the topic file named.
   clippy clean; `surface.ts --check`, eol, definitions and the C-ABI gate green.
 * **1.0.0 RELEASED 2026-10-24**: tag `v1.0.0` = release commit `9871fd4`; `wasmrt-core`,
   `wasmrt-capi` and `wasmrt` at 1.0.0 on crates.io (verified through its API);
-  `surface/released.txt` records it. ⚠️ **The bump floor since then is MAJOR** (one module accepted
-  → refused: the `exact`-type fix; `bump.ts patch --dry-run` refuses), so the next release is
-  `2.0.0` unless the owner decides otherwise (item 1).
+  `surface/released.txt` records it. The bump floor since then is **MAJOR** (one module accepted →
+  refused: the `exact`-type fix), so 🔒 **the next release is `2.0.0` (owner, 2026-10-24: "2.0.0 is
+  fine")**, and ⏳ **it WAITS for the next contract version** (owner, 2026-10-24: "we will wait on
+  the latest contract version before the release") — expected to carry wazmrt's table-initializer
+  fix; mirror it, re-run the matrix over both corpora, then prep 2.0.0.
 * **binaryang pinned at v2.2.0** (`6e1923397def`; D2 2.2.0 with `typeRules` / `encodingRules`).
   **wasmrt = binaryang 2.2.0 on all 6,860 judgements** (wazmrt's `d2-matrix.ts`: wasmrt's S1 corpus
   × D2's 49 configurations), and `definitions_check` holds both rule lists in `cargo test`.
@@ -26,14 +28,10 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-1. **OWNER DECISION: the next version number.** The gate says MAJOR since 1.0.0 (`bump.ts`: accepting
-   less is major even when correct), for one correction: `(ref null (exact $t))` now needs
-   reference-types (README Breaking Changes `_next release_`; CHANGELOG Unreleased). The ladder
-   planned `1.0.1` for T9. Either the next release is `2.0.0`, or the owner rules on how a conformance
-   fix that only refuses more under a non-default feature set is numbered. Record: `releasing.md`,
-   "THE NUMBER".
-2. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
-   T12 security `1.0.4` (the numbers wait on item 1). T11 decides the contest: the CLI's 3.4 ms on
+1. **The review ladder** — T9 hardening, T10 bug hunt, T11 optimization, T12 security, in that
+   order. 🔒 **Their version numbers come from the gate, not the plan** (owner, 2026-10-24, accepting
+   `2.0.0` for the `exact`-type correction): the next release is `2.0.0`, and each later one is
+   whatever `bump.ts` says. *(The ladder had pre-assigned `1.0.1`–`1.0.4`.)* T11 decides the contest: the CLI's 3.4 ms on
    the 48 KB module, in-process cold start, the unattributed ~5% loop regression, **the CLI's +31%
    since 0.9.0 (≈33 KiB of it attributed)**, the interpreter ladder, rsxtk on wasmtime vs wasmrt, the
    cdylib size gap, and the rlib (what rsxtk links) never measured. Record: `roadmap.md` (T9–T12),

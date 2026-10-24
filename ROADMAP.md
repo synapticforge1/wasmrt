@@ -20,8 +20,9 @@ maturity:
   in-scope proposal is already implemented (tail calls landed 2026-08-14), so what remains is the
   residual itself — the proposals the corpus contains that wasmrt had not targeted, and the blocks that
   never ran at all.
-- **`1.0.x`** — the four review phases behind it, in a deliberate order: **`1.0.1`** hardening (incl.
-  module authenticity), **`1.0.2`** bug hunt + code hygiene, **`1.0.3`** optimization review, **`1.0.4`**
+- **After `1.0.0`** — the next release is **`2.0.0`** (a validation correction that refuses a module
+  `1.0.0` accepted, which the bump gate counts as major), then the four review phases, in a deliberate
+  order, each numbered by the bump gate: hardening, bug hunt + code hygiene, optimization review,
   security review. The last two are **review-and-recommend**: they produce costed findings for a
   decision, not a unilateral pass.
 
@@ -51,10 +52,11 @@ Legend: ✅ done & verified · 🚧 in progress · ⬜ planned
 | **0.8.0** | WASI + CLI | host imports + module linking on a shared store + WASI preview 1 **including the sandboxed filesystem** (`--dir` / `--ro-dir` preopens); plus `#![forbid(unsafe_code)]` in the engine | ✅ |
 | **0.9.0** | C ABI | the `wasmrt.h` embedding surface — checked handles, caller-based host callbacks, configurable proposals + resource ceilings; gated by c-smoke, link-completeness and Miri | ✅ |
 | **1.0.0** | **Conformance clear-out** | the spec testsuite to **zero failures / zero skips / zero unrun**, empty baseline, zero deliberate deviations — which brings the proposals the corpus contains into scope. Met: **64,603 / 0 / 0 over 288 files**. Also ships tail calls, module pinning (`wasmrt pin`), the iteration bound, wazmrt's CLI shape and binaryang D2's `--features` | ✅ |
-| 1.0.1 | Hardening | the correctness punch-list, licensing, docs, size minimization, all gates green (module authenticity, `pin`, landed early, in 1.0.0) | ⬜ |
-| 1.0.2 | Bug hunt + code hygiene | a comprehensive audit across tested **and** untested paths — bugs, fall-throughs, stale workarounds, dead code, missing documentation | ⬜ |
-| 1.0.3 | Optimization review | measured options for making the shipped artifacts faster and smaller — judged at the binary and C-ABI boundary, not by micro-benchmarks | ⬜ |
-| 1.0.4 | Security review | an adversarial review of the penetration surfaces — hostile guests, malformed input, and C-ABI misuse — with recommended mitigations | ⬜ |
+| **2.0.0** | Type-rule correction | an `exact` reference type needs reference-types (binaryang D2 2.2.0, wasm-tools); wasmrt held to D2's type and encoding rules in `cargo test` | 🚧 |
+| T9 | Hardening | the correctness punch-list, licensing, docs, size minimization, all gates green (module authenticity, `pin`, landed early, in 1.0.0) | ⬜ |
+| T10 | Bug hunt + code hygiene | a comprehensive audit across tested **and** untested paths — bugs, fall-throughs, stale workarounds, dead code, missing documentation | ⬜ |
+| T11 | Optimization review | measured options for making the shipped artifacts faster and smaller — judged at the binary and C-ABI boundary, not by micro-benchmarks | ⬜ |
+| T12 | Security review | an adversarial review of the penetration surfaces — hostile guests, malformed input, and C-ABI misuse — with recommended mitigations | ⬜ |
 
 ## What you can do with wasmrt (use-case matrix)
 

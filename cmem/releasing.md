@@ -21,9 +21,10 @@ matrix + a fast cadence).
   proposals the corpus contains into scope (custom-descriptors/`exact`, table64, wide-arithmetic,
   custom-page-sizes, custom-annotations, memory64-imports, legacy `delegate`). WASI p2/p3 and the
   component model stay out. Task **T13** in `roadmap.md`.
-- **`1.0.x`** — the four review phases, behind it and in this order: **`1.0.1`** T9 hardening (incl.
-  `pin`), **`1.0.2`** T10 bug hunt + code hygiene, **`1.0.3`** T11 optimization review, **`1.0.4`** T12
-  security review. ⚠️ **The API stability promise starts at `1.0.0`**, so the C ABI and `wasmrt-core`
+- **After `1.0.0`** — **`2.0.0`** (owner, 2026-10-24: the `exact`-type correction is major by the
+  gate), then the four review phases, in this order: T9 hardening, T10 bug hunt + code hygiene, T11
+  optimization review, T12 security review, **each numbered by the gate** *(they were pre-assigned
+  `1.0.1`–`1.0.4` until 2026-10-24)*. ⚠️ **The API stability promise starts at `1.0.0`**, so the C ABI and `wasmrt-core`
   surfaces freeze when the clear-out ships — a proposal added at 1.0.0 may add a `wasmrt_feature_t`
   value, which is additive and keeps `abi_version() == 1`; anything that is not additive must land
   BEFORE 1.0.0 or wait for 2.0.
@@ -86,7 +87,7 @@ component. The rule is why the 0.6 line closed at v0.6.9 and the next release wa
 one from 0.8 onward when the 0.6 line filled up; T6 and the T4 completion then shipped together in 0.7.0*:
 0.1 T0 scaffold · 0.2 T1 types+reader · 0.3 T2 opcode · 0.4 T3 decode · 0.5 T4 validate (core) ·
 0.6.x T5 interp (patch per feature slice, 0.6.0–0.6.9) · **0.7 T6 text toolchain + T4 completion (the deferred SIMD/atomics/GC/EH typing arms)** ·
-0.8 T7 wasi+cli · 0.9 T8 C-ABI · 🆕 **1.0.0 T13 conformance clear-out** · **1.0.1 T9 hardening** · **1.0.2 T10 bug hunt + code hygiene** · **1.0.3 T11 optimization review** · **1.0.4 T12 security review**.
+0.8 T7 wasi+cli · 0.9 T8 C-ABI · 🆕 **1.0.0 T13 conformance clear-out** · **2.0.0 the `exact`-type correction** · then T9 hardening · T10 bug hunt + code hygiene · T11 optimization review · T12 security review, numbered by the gate.
 
 🆕 **RE-CUT 2026-08-19 (owner).** The `0.10`–`0.13` rungs are gone: T9–T12 became the `1.0.x` line and a
 new task, **T13 — the conformance clear-out — takes `1.0.0` and runs FIRST**. ⚠️ **T-numbers are
@@ -270,9 +271,10 @@ hands over the publish commands. Established rhythm since v0.1.0; the pre-publis
 
 - **✅ v1.0.0 PUBLISHED (2026-10-24, release commit `9871fd4`, tag `v1.0.0`)** — all three crates at
   1.0.0 on crates.io (checked through its API), and `surface/released.txt` re-recorded from the tag
-  (step 9, its own commit). ⚠️ **The floor since then is MAJOR** (the `exact`-type correction refuses
-  one module more; `open-work.md` item 1, an owner decision): the next release is `2.0.0` by the gate,
-  where the ladder planned `1.0.1` (T9, hardening). T13, the
+  (step 9, its own commit). The floor since then is MAJOR (the `exact`-type correction refuses one
+  module more), and 🔒 **the next release is `2.0.0` (owner, 2026-10-24: "2.0.0 is fine")** — the
+  ladder had planned `1.0.1` (T9, hardening). The review stages keep their order; their numbers are
+  whatever the gate says. T13, the
   conformance clear-out: 64,603 / 0 / 0 over 288 files. Checklist steps 1–6 done: 606 workspace
   tests and clippy clean; S1 re-baselined for every intended change, S2 0 regressed; sizes and speed
   re-measured beside a v0.9.0 build on the same toolchain (CLI 644,608 → 846,848 B, +31%; cdylib
