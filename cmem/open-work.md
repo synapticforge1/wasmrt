@@ -11,7 +11,7 @@ stays in the topic file named.
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
 * Version **0.9.0** (last release). The bump floor since then is **MAJOR** (`releasing.md`, "THE
   NUMBER"), which `1.0.0` meets.
-* Contract mirror **v35**, byte-identical to wazmrt's (`interop.md`); release lockstep ended at v33.
+* Contract mirror **v37**, byte-identical to wazmrt's (`interop.md`); release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 step 1, H13, H15, H16, H18, H19,
@@ -27,10 +27,16 @@ stays in the topic file named.
 2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
    checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
    Record: `releasing.md`.
-3. **The D2 `--features` migration**, names and meanings (contract v32/v33), once binaryang's FL1
-   settles D2's spellings; re-pin binaryang (v1.14.0 → v1.17.0 or later) with it. Blocked upstream:
-   D2 has no dependency or preset rules, and D1 gates `return_call_ref` under `tailCall`. Record:
-   `shared-definitions.md`, `known-issues.md` (top).
+3. **The D2 `--features` migration — UNBLOCKED, and now directed (contract v37, 2026-10-24).**
+   wazmrt implemented it; "wasmrt migrates once, to this". binaryang **v2.1.0** (`b7fdb9de`) carries
+   D1 1.0.1 (`return_call_ref` → function-references, so wasmrt's one override goes stale and the
+   generator will say so) and D2 2.1.0 (`requires`, recorded NOT enforced; `presets` wasm1/wasm2/
+   wasm3/all). The work: re-pin to v2.1.0; D2 `cli` names in `Feature::from_name`; the presets plus
+   `mvp`, `lime1`, `-all`; the six wasm-tools-only names as deprecated aliases with a warning; stop
+   refusing incoherent CONFIGURATIONS (`check_coherent`), so `call_ref` is refused while a GC struct
+   is accepted with gc on and function-references off; verify with wazmrt's
+   `cmem/probes/feature-matrix.ts` run on both binaries. Guide: binaryang `docs/opcode-guide.md`.
+   S1 will report a MAJOR floor (wazmrt's did). Record: `shared-definitions.md`, `interop.md` §2.2.
 4. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
    T12 security `1.0.4`. T11 decides the contest: the CLI's 3.4 ms on the 48 KB module, in-process
    cold start, the unattributed ~5% loop regression, the interpreter ladder, rsxtk on wasmtime vs
