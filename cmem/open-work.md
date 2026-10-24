@@ -9,9 +9,9 @@ stays in the topic file named.
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
 * **606 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the D2 type rule); clippy clean;
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
-* Version **1.0.0 in the manifest**, the release commit pushed, **NOT tagged and NOT published** (the
-  owner's steps; `releasing.md`, checklist 7–9). `bun scripts/bump.ts --verify-tag v1.0.0` passes
-  locally. Last published release: **0.9.0**.
+* **1.0.0 RELEASED 2026-10-24**: tag `v1.0.0` = release commit `9871fd4`; `wasmrt-core`,
+  `wasmrt-capi` and `wasmrt` at 1.0.0 on crates.io (verified through its API);
+  `surface/released.txt` records it. The bump floor since then: **PATCH** (`bump.ts --dry-run`).
 * Contract mirror **v38**, byte-identical to wazmrt's (`interop.md`); `--features` AGREED (v38); release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
@@ -20,17 +20,12 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-1. **Publish 1.0.0 (owner).** `git tag v1.0.0`, `git push origin v1.0.0`; the tag runs the
-   compatibility gate job (its **first run on a runner**), then the GitHub Release. Only when the
-   gate is green: `cargo publish -p wasmrt-core`, then `-p wasmrt-capi`, then `-p wasmrt`. Then the
-   agent records the surface in its own commit: `bun scripts/surface.ts --release-from v1.0.0`.
-   Record: `releasing.md`.
-2. **Re-pin to binaryang's next release (≥ 2.2.0) when it ships**, and re-run both matrices
+1. **Re-pin to binaryang's next release (≥ 2.2.0) when it ships**, and re-run both matrices
    (`feature-matrix`, D1 gating) with every difference back to binaryang (its § 44 asks this). D2
    gains `typeRules` and `encodingRules`: once vendored, `definitions_check` should hold
    `features::val_type_unmet` and the encoding gates to them, so the rule adopted on 2026-10-24
    cannot drift from the data. Record: `shared-definitions.md`.
-3. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
+2. **The `1.0.x` ladder** — T9 hardening `1.0.1`, T10 bug hunt `1.0.2`, T11 optimization `1.0.3`,
    T12 security `1.0.4`. T11 decides the contest: the CLI's 3.4 ms on the 48 KB module, in-process
    cold start, the unattributed ~5% loop regression, **the CLI's +31% since 0.9.0 (≈33 KiB of it
    attributed)**, the interpreter ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap, and the

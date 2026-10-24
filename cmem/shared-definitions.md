@@ -23,7 +23,7 @@ regenerates it and diffs.
 implements D2's `typeRules` as binaryang § 44 states them (wasm-tools 1.262's rule), which the pinned
 D2 2.1.0 does not yet carry; it is held by a probe against wasm-tools and a unit test, not by the copy.
 When the next binaryang release is pinned, add `typeRules` / `encodingRules` to `definitions_check`
-(`open-work.md` item 2; `known-issues.md`, top).
+(`open-work.md` item 1; `known-issues.md`, top).
 
 **Pinned 2026-10-24: binaryang `v2.1.0`, commit `b7fdb9de5785`** (D1 1.0.1, D2 2.1.0 with `requires`
 and `presets`, D3 1.0.0) — 582 instructions, 22 features, 20 verdicts. *(Was `v1.14.0` /

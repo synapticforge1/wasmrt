@@ -268,7 +268,9 @@ hands over the publish commands. Established rhythm since v0.1.0; the pre-publis
 
 ## Status (2026-10-24)
 
-- 🚦 **1.0.0 — the release commit is made and pushed; NOT tagged, NOT published.** T13, the
+- **✅ v1.0.0 PUBLISHED (2026-10-24, release commit `9871fd4`, tag `v1.0.0`)** — all three crates at
+  1.0.0 on crates.io (checked through its API), and `surface/released.txt` re-recorded from the tag
+  (step 9, its own commit); the floor since is PATCH. **Next release: 1.0.1 (T9, hardening).** T13, the
   conformance clear-out: 64,603 / 0 / 0 over 288 files. Checklist steps 1–6 done: 606 workspace
   tests and clippy clean; S1 re-baselined for every intended change, S2 0 regressed; sizes and speed
   re-measured beside a v0.9.0 build on the same toolchain (CLI 644,608 → 846,848 B, +31%; cdylib
@@ -281,8 +283,8 @@ hands over the publish commands. Established rhythm since v0.1.0; the pre-publis
   accepted, **none of the 89 under `all`**, the default. Sampled, all three are intended classes and
   wasm-tools 1.262 refuses the same files: `mutable-globals` under `mvp`-based sets (v37), the overlong
   `call_indirect` index LLVM writes (`1_fib-rs.wasm` under `all,-reference-types`, v37), and the D2
-  type rule (`gc-cast-type.wat` under gc without reference-types). **Owner next:** steps
-  7–8 (tag, the gate job's first run on a runner, publish); then the agent's step 9.
+  type rule (`gc-cast-type.wat` under gc without reference-types). Steps 7–8 were
+  the owner's (tag, then publish).
 
 ### 0.9.0
 
