@@ -215,23 +215,17 @@ for (const m of fromBody.matchAll(/((?:"[a-z0-9_]+"\s*\|\s*)*"[a-z0-9_]+")\s*=>\
   for (const s of m[1].matchAll(/"([a-z0-9_]+)"/g)) spellings.set(s[1], m[2]);
 }
 if (spellings.size < 10) fail(`features.rs: parsed only ${spellings.size} from_name spellings`);
-/** D2 spellings wasmrt's `--features` does not take yet (contract v32: migrate once, at FL1). */
-const D2_ALIASES: Record<string, string> = { satFloatToInt: "SaturatingFloatToInt" };
 function featureVariant(d2name: string): string {
-  if (D2_ALIASES[d2name]) return D2_ALIASES[d2name];
   const cli = src.features.entries.find((f: any) => f.name === d2name)?.cli as string | undefined;
   const variant = cli ? spellings.get(cli.toLowerCase().replace(/-/g, "_")) : undefined;
   if (!variant) fail(`D2 feature \`${d2name}\` (cli \`${cli}\`) maps to no wasmrt Feature`);
   return variant;
 }
 
-/** Where wasmrt deliberately differs from D1, each with its measured reason. A stale entry fails. */
-const OVERRIDES: Record<string, { feature: string; d1: string; why: string }> = {
-  return_call_ref: {
-    feature: "FunctionReferences", d1: "tailCall",
-    why: "wasm-tools 1.262 gates it on function-references ONLY (measured 2026-10-23); D1's single column says tail-call. Reported to binaryang.",
-  },
-};
+/** Where wasmrt deliberately differs from D1, each with its measured reason. A stale entry fails.
+ *  Empty since binaryang v2.1.0 (D1 1.0.1): the one entry, `return_call_ref` → function-references,
+ *  became D1's own answer, and the staleness check reported it (2026-10-24). */
+const OVERRIDES: Record<string, { feature: string; d1: string; why: string }> = {};
 
 const d1 = src.opcodes.entries as any[];
 const strip = (n: string) => n.replace(/ null$/, "");

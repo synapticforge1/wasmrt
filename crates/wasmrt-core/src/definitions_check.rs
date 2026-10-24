@@ -41,12 +41,8 @@ use crate::types::DecodeError;
 /// D2 / wasmrt feature name. A KNOWN entry that stops occurring also fails the gate, so this list
 /// cannot outlive the difference it excuses.
 const KNOWN: &[(&str, &str, &str)] = &[
-    // ---- the D1 table differs from wasm-tools; wasmrt agrees with wasm-tools (reported upstream) ----
-    ("feature", "15",
-     "return_call_ref: D1 gates it under tail-call. MEASURED 2026-10-23, wasm-tools 1.262: it needs \
-      function-references ONLY (accepted with tail-call off; refused with function-references off, \
-      'function references support is not enabled'), and wasmrt does exactly that. Reported to \
-      binaryang through the workspace; the change flows source → copy."),
+    // (`return_call_ref`'s D1 feature, and D2's `sat-float-to-int` spelling, were KNOWN here until
+    // binaryang v2.1.0 adopted wasmrt's answers; both became stale on 2026-10-24 and were removed.)
     // ---- naming conventions of the two TABLES; the bytes and the text forms agree ----
     ("name", "1c",
      "D1 names both select opcodes `select`. wasmrt's 0x1c carries the internal sentinel `select.t`, \
@@ -56,11 +52,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("name", "fb 17", "as fb 15, for `ref.cast null`."),
     ("name", "fb 24", "as fb 15, for `ref.cast_desc_eq null`."),
     // ---- D2 vocabulary: what wasmrt's --features accepts (a CONTRACT surface, interop.md §2.2) ----
-    ("d2-spelling", "satFloatToInt",
-     "wasmrt accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`, not \
-      binaryang's `sat-float-to-int`. Adding it is a --features change, so it is coordinated first. \
-      The gating itself agrees: see D2_ALIASES."),
-    ("d2-membership", "nontrapping-float-to-int-conversions", "the same gap, seen from wasmrt's side."),
     ("d2-spelling", "mutableGlobals",
      "no wasmrt flag: importing/exporting mutable globals is always on (WebAssembly 2.0)."),
     ("d2-spelling", "annotations",
@@ -70,10 +61,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
      "no wasmrt flag; binaryang marks it implemented:false too. Whether wasmrt decodes the compact \
       import form is UNMEASURED."),
 ];
-
-/// D2 features whose CLI spelling wasmrt does not accept (each has a `d2-spelling` KNOWN entry),
-/// mapped to the wasmrt feature they are, so the per-op gating check still runs for their ops.
-const D2_ALIASES: &[(&str, Feature)] = &[("satFloatToInt", Feature::SaturatingFloatToInt)];
 
 fn leb(mut v: u32) -> Vec<u8> {
     let mut out = Vec::new();
@@ -208,13 +195,7 @@ fn wasmrt_agrees_with_the_shared_definitions() {
         }
         let want = match e.feature {
             None => Ok(None),
-            Some(f) => match d2_cli(f).and_then(Feature::from_name) {
-                Some(w) => Ok(Some(w)),
-                None => match D2_ALIASES.iter().find(|(n, _)| *n == f) {
-                    Some(&(_, w)) => Ok(Some(w)),
-                    None => Err(f),
-                },
-            },
+            Some(f) => d2_cli(f).and_then(Feature::from_name).map(Some).ok_or(f),
         };
         match want {
             Ok(w) if w == feat => {}
