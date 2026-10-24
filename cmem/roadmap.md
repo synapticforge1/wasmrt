@@ -282,12 +282,36 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   All are pinned by `cli_contract_dir_and_guest_position.rs`, each inverted; 597 tests. The help
   states both new rules.
 
-  ⏳ **OPEN: v30.** The matrix differs from wazmrt's on 54/85 lines. Needed: wasm-tools 1.259's
-  vocabulary and presets, a `floats` gate, module-level dependencies with no configuration
-  refused, and `check_coherent`'s configuration refusals removed. Acceptance: `feature-matrix.ts`
-  on wasmrt = wazmrt's output, 0 lines. ⚠️ It touches the validator and `Feature` (whose C values
-  are append-only), so scope it before building. ⏳ v29 waits on H13.
-  📬 **Tell the owner: wazmrt's copy lacks wasmrt's §2.2f and §2.2m**, both to fold.
+  ✅ **Mirrored again to v32** the same evening: wazmrt's committed copy verbatim, with §2.2f and
+  §2.2m kept.
+
+  ⏸️ **v30 is PAUSED by v32** (owner: *"we need to align with binaryang not wasm-tools"*; the row
+  says "wasmrt: do NOT implement v30's wasm-tools vocabulary in the meantime"). Found by
+  re-reading wazmrt's copy **mid-build**: the design and the measurements were done, but no v30
+  code had been written.
+  * When binaryang's FL1 settles D2's `cli` spellings, both runtimes migrate ONCE to D2; the
+    wasm-tools-only names stay as deprecated aliases for one minor release.
+  * ⚠️ **Open question for the owner:** do v30's MEANINGS survive (no configuration refused;
+    dependencies checked on the module)? v32 reverses the vocabulary and is silent on these.
+    wasmrt still refuses `all,-simd` as a configuration.
+  * The measurements are kept locally (`cmem/local/measurements/`): each instruction's required
+    feature set from wasm-tools 1.262 (492 swept), the bulk-memory / reference-types / GC splits,
+    and the name lists. They are re-derivable, and they are the input to the D2 migration.
+
+  ⏳ v29 waits on H13. 📬 **Tell the owner: wazmrt's copy lacks wasmrt's §2.2f and §2.2m**, both to fold.
+
+  📋 **The workspace's list of what waits on wasmrt** (2026-10-23), with today's state:
+  1. mirror `interop.md` → ✅ at **v32**;
+  2. letter H13's three assembler fixes → ⏳ open (item 4 of the 1.0.0 list), together with
+     I8's duplicate `name` section;
+  3. the `--dir` help → ✅ done in the mirror commit (v27's grammar is in `--help`);
+  4. letter **H23**, behaviour carry-forward testing (S1 accepted-module corpus per feature and
+     preset; S2 per-file spec results pinned to a wasmtk commit; S3 the wide local net; stop at
+     the first stage that finds something) → ⏳ open, not started;
+  5. reach `1.0.1`, where lockstep releases engage → ⏳ after `1.0.0`.
+
+  Letters H1 and H8 close in the workspace once wasmrt records its side: H8 is in
+  `shared-definitions.md`, and H1 is this mirror.
 * **H1 — mirror the contract, now v11–v31** (owner, 2026-10-23; verified the same day: wasmrt's
   `interop.md` header says **v10**, wazmrt's **v31**, so this is 21 versions). It includes:
   * the owner decisions (any CLI syntax error throws; lockstep);
