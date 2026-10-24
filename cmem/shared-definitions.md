@@ -44,8 +44,19 @@ instruction onto a variant (199 single-byte by byte; 59 prefixed by name, the `n
   (`non-exhaustive patterns`), and the generator refuses it; a stale override fails the generator.
 * **Cost, measured back to back:** release CLI +1,024 bytes (845,312 → 846,336), cdylib −512 bytes
   (537,600 → 537,088). The interpreter's dispatch is untouched, so no hot-path benchmark applies.
-* **Not yet generated (stage 2):** the `define_ops!` list itself and the `0xFB`/`0xFC` decode
-  dispatch, whose variant names and internal tags are wasmrt's own and appear in the public surface.
+* **Stage 2 (2026-10-24, `bfde4a2`): the `0xFB`/`0xFC` dispatch is generated too.** `tables::fb_op` /
+  `fc_op` (decoder: sub-opcode → op, plus the encoding's nullability) and `tables::prefixed(op,
+  nullable)` (assembler: op → prefix + sub-opcode, including the nullable re-select for `ref.test` /
+  `ref.cast` / `ref.cast_desc_eq`). Immediates stay hand-written (`read_prefixed_immediate`, matched
+  on `Op`): they are wasmrt's representation, not D1's. A temporary test proved the generated and hand
+  tables equal on all 256 sub-opcodes of both prefixes before the swap. Hot path, so measured
+  interleaved A/B over 3 rounds: cold 48 KB 3.30/3.29/3.46 ms before vs 3.16/3.24/3.33 ms after,
+  steady 210–219 vs 209–227 Mops/s. No regression; the difference is within noise.
+* **Deliberately NOT generated: the `define_ops!` list.** `Op`'s variant names are public API, and
+  three are not a mechanical function of the D1 name (`try` → `TryLegacy`, `catch` → `CatchLegacy`,
+  `ref.cast` → `RefCastOp`). The 59 internal tags are contiguous from `0x100`. The list is already held
+  to D1 by `definitions_check` in `cargo test`, so generating it would add an exceptions table and
+  change nothing that is checked.
 
 ### How the source is verified (every run)
 

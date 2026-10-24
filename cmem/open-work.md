@@ -7,23 +7,31 @@ stays in the topic file named.
 ## 🚦 State — measured 2026-10-24
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
-* **604 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the trap fixes); clippy clean;
+* **605 workspace tests**, 0 failed, 1 ignored (2026-10-24, after H10 stage 2); clippy clean;
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
 * Version **0.9.0** (last release). The bump floor since then is **MAJOR** (`releasing.md`, "THE
   NUMBER"), which `1.0.0` meets.
 * Contract mirror **v38**, byte-identical to wazmrt's (`interop.md`); `--features` AGREED (v38); release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
-* Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 step 1, H13, H15, H16, H18, H19,
+* Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 (steps 1 and 2), H13, H15, H16, H18, H19,
   H20, H21, H22, H23 (both).
 
 ## Open, in the order they unblock each other
 
-1. **H10 step 2, stage 2** — generate the `define_ops!` list and the `0xFB`/`0xFC` decode dispatch
-   too (variant names and internal tags stay wasmrt's own: they are public surface). Hot path, so an
-   A/B/A benchmark first. ✅ Stage 1 done 2026-10-24 (`op_feature` exhaustive, the SIMD/atomic tables
-   and relaxed set generated and shipped; attribution updated). ✅ D3 checked. Also read binaryang's
-   new `opcode-guide.md` first (owner, 2026-10-24). Record: `shared-definitions.md`.
+1. **D2's TYPE RULE — waiting on binaryang's next release (≥ 2.2.0) and the contract.** binaryang's
+   § 44 (drafted 2026-10-24, NOT yet sent by the owner) states `typeRules` = wasm-tools 1.262's rule
+   (owner: "wasm-tools' rule"). Measured here the same day: every value type × all 16 on/off
+   subsets of reference-types / function-references / gc / exceptions, wasmrt vs `wasm-tools
+   validate`. **52 judgements differ, all wasmrt accepting**: `(ref func)` / `(ref extern)` with gc
+   on and function-references off (4); `exnref` / `(ref exn)` without reference-types (8); the ten
+   abstract GC types without reference-types (40). Six more are wasm-tools' `gc-types` sub-feature,
+   which D2 lacks (`externref` under `-all`), and are not ours. The fix is `features::val_type_unmet`.
+   It is a `--features` contract surface, so it lands with the re-pin and wazmrt's matching change,
+   not before. § 44's other rows (mutable globals, the overlong index) wasmrt already applies.
+   ⚠️ A probe spelling: `wasm-tools validate --features -all,…` is a clap usage error (rc 2), so
+   pass `--features=-all,…`; a probe that counts rc ≠ 0 as "refuse" reads that as 288 refusals.
+   ✅ H10 step 2 is DONE (stage 1 and stage 2, `bfde4a2`; `shared-definitions.md`).
 2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
    checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
    Record: `releasing.md`.
