@@ -597,7 +597,8 @@ pub enum Trap {
     IterationLimitExceeded { limit: u64 },
     DivByZero,
     IntOverflow,
-    /// A trapping float→int conversion of NaN, infinity, or an out-of-range value.
+    /// A trapping float→int conversion of NaN. (An out-of-range or infinite operand is
+    /// [`Trap::IntOverflow`], as the spec raises it; until 2026-10-24 this variant covered all three.)
     InvalidConversionToInt,
     CallStackExhausted,
     UndefinedExport,
@@ -623,6 +624,11 @@ pub enum Trap {
     NoTable,
     /// A table access (or element-segment init) outside the table bounds.
     TableOutOfBounds,
+    /// `call_indirect` / `return_call_indirect` with an index past the end of its table — the
+    /// spec's `"undefined element"`, distinct from a table ACCESS out of bounds. (Reported as
+    /// [`Trap::TableOutOfBounds`] until 2026-10-24: 29 spec assertions expected this message, and
+    /// the `.wast` runner, which then accepted any trap, could not tell.)
+    UndefinedTableElement,
     /// The declared/grown table exceeds this instance's budget.
     TableLimitExceeded,
     /// `call_indirect` hit an uninitialized (null) table element.
@@ -713,6 +719,7 @@ impl fmt::Display for Trap {
             Trap::UndefinedData => f.write_str("data segment index out of range"),
             Trap::NoTable => f.write_str("no table"),
             Trap::TableOutOfBounds => f.write_str("out of bounds table access"),
+            Trap::UndefinedTableElement => f.write_str("undefined element"),
             Trap::TableLimitExceeded => f.write_str("table exceeds the instance budget"),
             Trap::UninitializedElement => f.write_str("uninitialized table element"),
             Trap::IndirectTypeMismatch => f.write_str("indirect call type mismatch"),
@@ -3413,14 +3420,16 @@ fn run(
                     // 🔒 The index is the TABLE's, so a 64-bit table's `2^32` is out of bounds and
                     // must TRAP. Truncating it to 32 bits made it slot 0 — a call to a function
                     // the guest did not name, which is the silent-wrong-call class.
-                    let slot = table_slot(frame.pop_table(is64))?;
+                    // Past the table's end is the spec's "undefined element", not a table-access
+                    // bounds trap.
+                    let slot = table_slot(frame.pop_table(is64)).map_err(|_| Trap::UndefinedTableElement)?;
                     let entry = *store
                         .tables
                         .get(ti)
                         .ok_or(Trap::NoTable)?
                         .entries
                         .get(slot)
-                        .ok_or(Trap::TableOutOfBounds)?;
+                        .ok_or(Trap::UndefinedTableElement)?;
                     if entry == NULL_REF {
                         return Err(Trap::UninitializedElement);
                     }
@@ -5349,15 +5358,21 @@ fn nearest_f64(x: f64) -> f64 {
     r
 }
 
-/// Trapping float→int range check: NaN or `trunc(x) ∉ [lo, hi)` traps; else returns
-/// `trunc(x)` for the caller to cast (in range, the cast is exact).
+/// Trapping float→int range check: NaN traps as an invalid conversion, and `trunc(x) ∉ [lo, hi)`
+/// (infinity included) as an integer overflow; else returns `trunc(x)` for the caller to cast (in
+/// range, the cast is exact).
+///
+/// ⚠️ Two traps, as the reference interpreter raises them: `conversions.wast` expects
+/// `"integer overflow"` for an out-of-range or infinite operand and `"invalid conversion to
+/// integer"` only for NaN. Both were reported as an invalid conversion until 2026-10-24, which no
+/// gate saw while the `.wast` runner accepted any trap for any `assert_trap` (25 assertions).
 fn trap_trunc_f32(x: f32, lo: f32, hi: f32) -> Result<f32> {
     if x.is_nan() {
         return Err(Trap::InvalidConversionToInt);
     }
     let t = trunc_f32(x);
     if t < lo || t >= hi {
-        return Err(Trap::InvalidConversionToInt);
+        return Err(Trap::IntOverflow);
     }
     Ok(t)
 }
@@ -5367,7 +5382,7 @@ fn trap_trunc_f64(x: f64, lo: f64, hi: f64) -> Result<f64> {
     }
     let t = trunc_f64(x);
     if t < lo || t >= hi {
-        return Err(Trap::InvalidConversionToInt);
+        return Err(Trap::IntOverflow);
     }
     Ok(t)
 }
@@ -6852,7 +6867,12 @@ mod tests {
         // i32.trunc_f64_s traps on an out-of-range value; i32.trunc_sat clamps.
         let trap_entry = [0x00, 0x20, 0x00, 0xaa, 0x0b]; // local.get 0 ; i32.trunc_f64_s
         let mt = single_func(&[0x7c], &[0x7f], &trap_entry, "t");
-        assert_eq!(run1(&mt, "t", &[f64_value(1e300)]), Err(Trap::InvalidConversionToInt));
+        // Out of range and infinity are an integer OVERFLOW; only NaN is an invalid conversion.
+        // (This line expected InvalidConversionToInt for 1e300 until 2026-10-24: the test encoded
+        // the same misreading as the code.)
+        assert_eq!(run1(&mt, "t", &[f64_value(1e300)]), Err(Trap::IntOverflow));
+        assert_eq!(run1(&mt, "t", &[f64_value(f64::INFINITY)]), Err(Trap::IntOverflow));
+        assert_eq!(run1(&mt, "t", &[f64_value(f64::NAN)]), Err(Trap::InvalidConversionToInt));
         assert_eq!(as_i32(run1(&mt, "t", &[f64_value(42.9)]).unwrap()[0]), 42);
 
         // i32.trunc_sat_f64_s (0xfc 0x02) saturates instead of trapping.
@@ -6911,9 +6931,11 @@ mod tests {
         let d = |op, a, b| as_i32(run1(&m, "dispatch", &[i32_value(op), i32_value(a), i32_value(b)]).unwrap()[0]);
         assert_eq!(d(0, 40, 2), 42); // add
         assert_eq!(d(1, 40, 2), 38); // sub
+        // Past the table's end: the spec's "undefined element" (was TableOutOfBounds until
+        // 2026-10-24, the same misreading as the code).
         assert_eq!(
             run1(&m, "dispatch", &[i32_value(9), i32_value(1), i32_value(1)]),
-            Err(Trap::TableOutOfBounds)
+            Err(Trap::UndefinedTableElement)
         );
     }
 

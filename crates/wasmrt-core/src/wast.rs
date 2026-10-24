@@ -33,6 +33,100 @@ use crate::module::Module;
 use crate::sexpr::{self, Sexpr};
 use crate::wat;
 
+/// What an `assert_trap` / `assert_exhaustion` message asserts: the spec testsuite's verdict
+/// vocabulary, one variant per message.
+///
+/// ⚠️ Until 2026-10-24 the runner accepted ANY trap for any `assert_trap`, so a module trapping
+/// with "integer overflow" where the suite expected "integer divide by zero" scored a pass
+/// (`best-practices.md` §5.4c worked around it one test at a time). The message is now compared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Verdict {
+    Unreachable,
+    OutOfBoundsMemoryAccess,
+    OutOfBoundsTableAccess,
+    OutOfBoundsArrayAccess,
+    UndefinedElement,
+    UninitializedElement,
+    IndirectCallTypeMismatch,
+    IntegerDivideByZero,
+    IntegerOverflow,
+    InvalidConversionToInteger,
+    CastFailure,
+    DescriptorCastFailure,
+    NullReference,
+    NullStructureReference,
+    NullArrayReference,
+    NullI31Reference,
+    NullFunctionReference,
+    NullDescriptorReference,
+    UnalignedAtomic,
+    CallStackExhausted,
+}
+
+/// The expected messages the spec testsuite uses, each with the verdict it names. wasmrt's own
+/// table; `definitions_check` holds it to binaryang's D3 in both directions.
+pub(crate) const TRAP_VERDICTS: &[(&str, Verdict)] = &[
+    ("unreachable", Verdict::Unreachable),
+    ("out of bounds memory access", Verdict::OutOfBoundsMemoryAccess),
+    ("out of bounds table access", Verdict::OutOfBoundsTableAccess),
+    ("out of bounds array access", Verdict::OutOfBoundsArrayAccess),
+    ("undefined element", Verdict::UndefinedElement),
+    ("uninitialized element", Verdict::UninitializedElement),
+    ("indirect call type mismatch", Verdict::IndirectCallTypeMismatch),
+    ("integer divide by zero", Verdict::IntegerDivideByZero),
+    ("integer overflow", Verdict::IntegerOverflow),
+    ("invalid conversion to integer", Verdict::InvalidConversionToInteger),
+    ("cast failure", Verdict::CastFailure),
+    ("descriptor cast failure", Verdict::DescriptorCastFailure),
+    ("null reference", Verdict::NullReference),
+    ("null structure reference", Verdict::NullStructureReference),
+    ("null array reference", Verdict::NullArrayReference),
+    ("null i31 reference", Verdict::NullI31Reference),
+    ("null function reference", Verdict::NullFunctionReference),
+    ("null descriptor reference", Verdict::NullDescriptorReference),
+    ("unaligned atomic", Verdict::UnalignedAtomic),
+    ("call stack exhausted", Verdict::CallStackExhausted),
+];
+
+/// The verdict an expected message names: the LONGEST table message that prefixes it. That is the
+/// reference interpreter's rule — its own message carries detail (`"uninitialized element 2"`) and
+/// the suite's expectation is a prefix of it — and "longest" keeps `"null reference"` from
+/// swallowing `"null structure reference"`.
+pub(crate) fn verdict_of(expected: &str) -> Option<Verdict> {
+    TRAP_VERDICTS
+        .iter()
+        .filter(|(m, _)| expected.starts_with(m))
+        .max_by_key(|(m, _)| m.len())
+        .map(|&(_, v)| v)
+}
+
+/// Does trap `t` satisfy verdict `v`?
+pub(crate) fn satisfies(t: &Trap, v: Verdict) -> bool {
+    matches!(
+        (v, t),
+        (Verdict::Unreachable, Trap::Unreachable)
+            | (Verdict::OutOfBoundsMemoryAccess, Trap::MemoryOutOfBounds)
+            | (Verdict::OutOfBoundsTableAccess, Trap::TableOutOfBounds)
+            | (Verdict::OutOfBoundsArrayAccess, Trap::GcOutOfBounds)
+            | (Verdict::UndefinedElement, Trap::UndefinedTableElement)
+            | (Verdict::UninitializedElement, Trap::UninitializedElement)
+            | (Verdict::IndirectCallTypeMismatch, Trap::IndirectTypeMismatch)
+            | (Verdict::IntegerDivideByZero, Trap::DivByZero)
+            | (Verdict::IntegerOverflow, Trap::IntOverflow)
+            | (Verdict::InvalidConversionToInteger, Trap::InvalidConversionToInt)
+            | (Verdict::CastFailure, Trap::CastFailure)
+            | (Verdict::DescriptorCastFailure, Trap::CastFailure)
+            | (Verdict::NullReference, Trap::NullReference)
+            | (Verdict::NullStructureReference, Trap::NullReference)
+            | (Verdict::NullArrayReference, Trap::NullReference)
+            | (Verdict::NullI31Reference, Trap::NullReference)
+            | (Verdict::NullFunctionReference, Trap::NullReference)
+            | (Verdict::NullDescriptorReference, Trap::NullDescriptor)
+            | (Verdict::UnalignedAtomic, Trap::UnalignedAtomic)
+            | (Verdict::CallStackExhausted, Trap::CallStackExhausted)
+    )
+}
+
 /// Outcome of running a script.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Summary {
@@ -815,17 +909,36 @@ impl Runner {
         self.summary.passed += 1;
     }
 
+    /// The verdict an assertion's message (its last operand) names, or a failure message.
+    fn expected_verdict(form: &[Sexpr], what: &str) -> Result<Verdict, String> {
+        let Some(Sexpr::Str(m)) = form.get(2) else {
+            return Err(format!("{what}: missing expected message"));
+        };
+        let m = String::from_utf8_lossy(m);
+        verdict_of(&m).ok_or_else(|| format!("{what}: unknown expected message {m:?}"))
+    }
+
     fn assert_trap(&mut self, form: &[Sexpr]) {
         let Some(operand) = form.get(1) else {
             self.fail("assert_trap: missing operand".to_string());
             return;
+        };
+        let verdict = match Self::expected_verdict(form, "assert_trap") {
+            Ok(v) => v,
+            Err(m) => {
+                self.fail(m);
+                return;
+            }
         };
         // `assert_trap (module …)` — instantiation itself must trap (an active data or
         // element segment out of bounds, say). It does not become the current module.
         if operand.keyword() == Some("module") {
             match self.build(operand) {
                 Ok(_) => self.fail("assert_trap: module instantiated without trapping".to_string()),
-                Err(BuildErr::Instantiate(_)) => self.summary.passed += 1,
+                Err(BuildErr::Instantiate(t)) if satisfies(&t, verdict) => self.summary.passed += 1,
+                Err(BuildErr::Instantiate(t)) => self.fail(format!(
+                    "assert_trap (module): expected {verdict:?}, instantiation trapped with \"{t}\""
+                )),
                 Err(e) if e.is_unsupported() => {
                     self.skip(format!("assert_trap: unsupported ({e})"));
                 }
@@ -847,7 +960,11 @@ impl Runner {
                 "assert_trap {}: hit the engine's iteration budget, which is not a spec trap: {t}",
                 render(operand)
             )),
-            Err(ActionErr::Trap(_)) => self.summary.passed += 1,
+            Err(ActionErr::Trap(t)) if satisfies(&t, verdict) => self.summary.passed += 1,
+            Err(ActionErr::Trap(t)) => self.fail(format!(
+                "assert_trap {}: expected {verdict:?}, trapped with \"{t}\"",
+                render(operand)
+            )),
             Err(ActionErr::NoTarget) => {
                 self.skip(String::from("assert_trap: no target instance"));
             }
@@ -1600,6 +1717,42 @@ mod tests {
                (assert_trap (invoke "boom") "integer divide by zero")"#,
         );
         assert_eq!((s.passed, s.failed), (1, 0));
+    }
+
+    /// ⚠️ The runner compares the trap with the expected MESSAGE since 2026-10-24. Until then any trap
+    /// satisfied any `assert_trap`, and the suite hid 54 wrong traps (29 `call_indirect` past the
+    /// table, 25 float→int overflows reported as invalid conversions).
+    #[test]
+    fn a_trap_of_the_wrong_kind_is_a_failure() {
+        let boom = r#"(module (func (export "boom") (result i32)
+                 (i32.div_s (i32.const 1) (i32.const 0))))"#;
+        let wrong = run(&format!(r#"{boom} (assert_trap (invoke "boom") "integer overflow")"#));
+        assert_eq!((wrong.passed, wrong.failed), (0, 1), "a divide-by-zero is not an overflow");
+        // An expected message is a PREFIX of the reference interpreter's own (bulk.wast writes
+        // "uninitialized element 2"), so a suffixed message still names its verdict…
+        let table = r#"(module (table 1 funcref) (func (export "call") (result i32)
+                 (call_indirect (result i32) (i32.const 0))))"#;
+        let suffixed = run(&format!(r#"{table} (assert_trap (invoke "call") "uninitialized element 2")"#));
+        assert_eq!((suffixed.passed, suffixed.failed), (1, 0));
+        // …and a message outside the vocabulary is a failure, never a free pass.
+        let unknown = run(&format!(r#"{boom} (assert_trap (invoke "boom") "something else")"#));
+        assert_eq!((unknown.passed, unknown.failed), (0, 1));
+    }
+
+    /// `call_indirect` past the end of its table is the spec's "undefined element", and a float→int
+    /// truncation out of range is an "integer overflow" (only NaN is an "invalid conversion").
+    #[test]
+    fn the_two_traps_the_old_scoring_hid() {
+        let s = run(
+            r#"(module (table 1 funcref)
+                 (func (export "past") (result i32) (call_indirect (result i32) (i32.const 5)))
+                 (func (export "trunc") (param f32) (result i32) (i32.trunc_f32_s (local.get 0))))
+               (assert_trap (invoke "past") "undefined element")
+               (assert_trap (invoke "trunc" (f32.const 3e9)) "integer overflow")
+               (assert_trap (invoke "trunc" (f32.const inf)) "integer overflow")
+               (assert_trap (invoke "trunc" (f32.const nan)) "invalid conversion to integer")"#,
+        );
+        assert_eq!((s.passed, s.failed), (4, 0), "{:?}", s.failures);
     }
 
     #[test]

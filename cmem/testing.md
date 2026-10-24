@@ -1120,6 +1120,16 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 The `.wast` runner compares trap messages; D3 checked (2026-10-24) — **604 workspace tests**
+
+`assert_trap` (both forms) and `assert_exhaustion` now pass only when the trap matches the expected
+message's verdict: `wast::TRAP_VERDICTS`, longest-prefix, as the reference interpreter matches. An
+unknown message is a failure. Under it the spec suite is still **64,603 / 0 / 0** (S2: 0 regressed),
+after fixing the 54 wrong traps it exposed (`known-issues.md`, top). `definitions_check` holds
+`TRAP_VERDICTS` to binaryang's D3 both ways. New tests: `a_trap_of_the_wrong_kind_is_a_failure`,
+`the_two_traps_the_old_scoring_hid`; each piece was inverted against the code (accepting any trap,
+the truncation fix, the `call_indirect` fix, a D3 message mapped to the wrong verdict).
+
 ### 🆕 The compatibility gate, letter H6 (2026-10-24) — **602 workspace tests**
 
 Measured 2026-10-24 from Git Bash: **602 passed, 0 failed, 1 ignored**; spec suite **64,603 / 0 / 0**

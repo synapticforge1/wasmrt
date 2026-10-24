@@ -30,7 +30,9 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::definitions::{OpDef, FEATURES, OPCODES};
+use alloc::string::ToString;
+
+use crate::definitions::{OpDef, FEATURES, OPCODES, VERDICTS};
 use crate::features::{op_feature, simd_sub_feature, Feature};
 use crate::opcode::{decode_body, Imm, Op};
 use crate::types::DecodeError;
@@ -251,6 +253,33 @@ fn wasmrt_agrees_with_the_shared_definitions() {
     for w in Feature::ALL {
         if !FEATURES.iter().any(|f| Feature::from_name(f.cli) == Some(w)) {
             found.push(("d2-membership", String::from(w.name()), String::from("wasmrt has this feature; no D2 entry resolves to it")));
+        }
+    }
+
+    // ---- D3 both ways: the `.wast` runner's trap vocabulary (`wast::TRAP_VERDICTS`) ----
+    // Each D3 message must be in the table AND classify to a verdict whose name is D3's key (so a
+    // message mapped to the WRONG verdict is a finding too); and the table holds nothing D3 lacks.
+    // Every message the vendored spec suite uses is one of D3's (measured 2026-10-24: 5,267
+    // assertions, 20 messages, plus `bulk.wast`'s "uninitialized element 2", a prefix match).
+    for v in VERDICTS {
+        let key = || format!("{}:{}", v.verdict, v.key);
+        match crate::wast::TRAP_VERDICTS.iter().find(|(m, _)| *m == v.message) {
+            None => found.push(("d3-membership", key(), format!("D3's `{}` is not in wast::TRAP_VERDICTS", v.message))),
+            Some((_, verdict)) => {
+                let want: String = v.key.split('-').map(|w| {
+                    let mut c = w.chars();
+                    c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+                }).collect();
+                let got = format!("{verdict:?}");
+                if !got.eq_ignore_ascii_case(&want) {
+                    found.push(("d3-verdict", key(), format!("`{}` classifies as {got}, D3's key names {want}", v.message)));
+                }
+            }
+        }
+    }
+    for (m, _) in crate::wast::TRAP_VERDICTS {
+        if !VERDICTS.iter().any(|v| v.message == *m) {
+            found.push(("d3-membership", String::from(*m), String::from("in wast::TRAP_VERDICTS; D3 has no such message")));
         }
     }
 

@@ -26,6 +26,14 @@ each version subject to the bump gate._
 
 ### Changed (2026-10-24)
 
+- **Two traps now say what the spec says.** `call_indirect` / `return_call_indirect` with an index
+  past the end of the table traps as **"undefined element"** (it said "out of bounds table access"),
+  and a float→int truncation of an out-of-range or infinite value traps as **"integer overflow"** (it
+  said "invalid conversion to integer", which is now reserved for NaN). Whether a module traps is
+  unchanged. ⚠️ Rust API: `Trap` gains the variant `UndefinedTableElement`.
+- **`wasmrt wast` compares an `assert_trap`'s expected message** with the trap that happened; it used
+  to accept any trap, which is how the two above went unseen.
+
 - ⚠️ **Breaking (WASI): a guest sees ONLY the `--env` variables.** It no longer inherits the host's
   environment, which can carry secrets; with no `--env` the guest's environment is empty. Pass each
   variable it needs with `--env KEY=VALUE`. A repeated KEY replaces the earlier one, and an entry

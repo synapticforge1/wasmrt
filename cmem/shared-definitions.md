@@ -106,7 +106,12 @@ This is the fifth time the X3 shape has turned up, and again a sweep found it, n
 | D2 `sat-float-to-int` | wasmrt's `--features` accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`, not binaryang's spelling | vocabulary gap on a **contract surface** (`interop.md` §2.2) — coordinate before adding an alias. The gating itself agrees (`D2_ALIASES`) |
 | D2 `mutable-globals`, `annotations`, `code-metadata`, `compact-imports` | no wasmrt flag. The first two are always on; code metadata is not implemented; compact imports: binaryang `implemented:false` too, and whether wasmrt decodes the form is UNMEASURED | FEATURE |
 
-**D3 (verdicts) is vendored and generated but not yet checked** (H10: "verdict strings (later)").
+✅ **D3 (verdicts) is CHECKED since 2026-10-24**, both ways: every D3 message is in the `.wast`
+runner's `wast::TRAP_VERDICTS` and classifies to the verdict D3's key names, and the table holds
+nothing D3 lacks (`definitions_check`, kinds `d3-membership` / `d3-verdict`; inverted). D3 is exactly
+the vendored suite's vocabulary (5,267 assertions, 20 messages). Using it made the runner compare
+the trap message, which found 54 wrong traps the suite had been scoring as passes
+(`known-issues.md`, top). *(Until then: "D3 is vendored and generated but not yet checked".)*
 
 ## Cross-repo results (H8: I3/I4 sweeps, I8) — observations, for the workspace
 

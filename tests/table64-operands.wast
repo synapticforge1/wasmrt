@@ -46,15 +46,18 @@
 
 ;; 2^32 is out of bounds on a two-slot table. Truncated to 32 bits it is slot 0 — which exists,
 ;; holds `$zero`, and answers 100. That is the wrong answer this file exists to pin.
-(assert_trap (invoke "call" (i64.const 0x1_0000_0000)) "out of bounds table access")
-(assert_trap (invoke "tail" (i64.const 0x1_0000_0000)) "out of bounds table access")
+;; `call_indirect` / `return_call_indirect` past the end is the spec's "undefined element" (wasmtime:
+;; "undefined element: out of bounds table access"); a table ACCESS past the end is "out of bounds
+;; table access". The runner compares the message since 2026-10-24.
+(assert_trap (invoke "call" (i64.const 0x1_0000_0000)) "undefined element")
+(assert_trap (invoke "tail" (i64.const 0x1_0000_0000)) "undefined element")
 (assert_trap (invoke "get_is_null" (i64.const 0x1_0000_0000)) "out of bounds table access")
 (assert_trap (invoke "set_null" (i64.const 0x1_0000_0000)) "out of bounds table access")
 (assert_trap (invoke "fill" (i64.const 0x1_0000_0000)) "out of bounds table access")
 (assert_trap (invoke "copy" (i64.const 0x1_0000_0000)) "out of bounds table access")
 ;; …and 2^32 + 1 is slot 1 once truncated, which holds a DIFFERENT function: a probe that only
 ;; tried 2^32 could not tell "trapped" from "called the first entry".
-(assert_trap (invoke "call" (i64.const 0x1_0000_0001)) "out of bounds table access")
+(assert_trap (invoke "call" (i64.const 0x1_0000_0001)) "undefined element")
 
 ;; An i32 index on a 64-bit table is invalid for the tail form exactly as for the plain one.
 (assert_invalid

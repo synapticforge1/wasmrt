@@ -1,5 +1,15 @@
 # Known Issues
 
+## 🎯 2026-10-24 — H10's D3 check: the `.wast` runner accepted ANY trap, and hid 54 wrong ones
+
+| | what | state |
+| --- | --- | --- |
+| 🔴 | **`assert_trap` passed on any trap, never comparing the expected message** (recorded as a per-test workaround in `best-practices.md` §5.4c, never fixed at the runner). So the spec total could not see a WRONG trap. Making the runner compare (binaryang's D3 is exactly the suite's vocabulary: 5,267 assertions, 20 messages, measured) turned **54 passes into failures**, in two causes: | ✅ **FIXED**: the runner maps each expected message to a verdict (`wast::TRAP_VERDICTS`, longest-prefix, as the reference interpreter matches) and fails a trap of the wrong kind; an unknown message fails too. Pinned (`a_trap_of_the_wrong_kind_is_a_failure`) and inverted |
+| 🔴 | **25: a float→int truncation out of range, or of infinity, reported "invalid conversion to integer"**; the spec says "integer overflow" (only NaN is an invalid conversion). The doc comment on `Trap::InvalidConversionToInt` stated the misreading, and the unit test asserted it | ✅ **FIXED**: out of range and infinity → `Trap::IntOverflow`. The unit test now pins all three; `the_two_traps_the_old_scoring_hid`; inverted |
+| 🔴 | **29: `call_indirect` / `return_call_indirect` past the end of the table reported "out of bounds table access"**; the spec says "undefined element" (wasmtime: "undefined element: out of bounds table access"). The repo's own `tests/table64-operands.wast` and a unit test had encoded wasmrt's message | ✅ **FIXED**: a new `Trap::UndefinedTableElement` ("undefined element"); a table ACCESS past the end stays "out of bounds table access". wasmtime 50 passes the updated script, and fails it with a wrong message (so it compares). Inverted. ⚠️ Rust API: a new variant on the exhaustive `Trap` (README Breaking Changes) |
+| ✅ | Spec suite under the strict runner: **64,603 / 0 / 0** over 288 files, S2 0 regressed: every trap assertion now passes for the right reason | — |
+| 🟡 | **`wast::features_for_script` keys on the word `testsuite` in the PATH**: run from inside the suite directory (`wasmrt wast proposals/threads/imports.wast`) a proposal file gets every feature, and `threads/imports.wast` shows 3 extra "multiple memories" failures. Not a defect in the corpus run (its paths contain `testsuite`), but the result depends on the working directory | OPEN, observed 2026-10-24 |
+
 ## 🤝 2026-10-24 — contract v35: a WASI guest no longer inherits the host environment
 
 | | what | state |

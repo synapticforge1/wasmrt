@@ -23,7 +23,7 @@ gate · §1.9 a second authority on a grammar · §3.13 read-and-discard is not 
 outside reader is a gate · §8.1b line endings · §1.10 a grammar production has more than one site ·
 §3.14 a field recorded for one consumer · §1.11 sweep the axis · §1.12 a differential fuzz · §4.11 a
 contract row verified on parsing · §4.13 one module per feature misses the core · §4.12 a gate that
-finds its input by path.
+finds its input by path · §5.10 fix a weak scorer, not the tests you wrote.
 
 ---
 
@@ -1064,6 +1064,9 @@ satisfying `assert_trap` and never compares the message. The assertion read as s
 target would otherwise *succeed*, and a `br_on_cast_desc_eq_fail` would otherwise *branch*. Both
 mutations are now caught.
 
+🔁 *2026-10-24:* the runner itself now compares the message (§5.10), which found 54 wrong traps
+across the spec suite that this rule's per-test workaround could not reach.
+
 **Apply:** know what your harness actually compares. If it ignores the error text, an assertion that
 only names the text is decoration (§4.1) — find an input where the wrong behaviour produces a
 different value, exit status or control flow, and assert that instead.
@@ -1885,6 +1888,18 @@ the same drift §1.9 names for grammars.
 🎓 **"It passed" says nothing about WHICH artifact passed.** The tell was a timestamp: a "fresh"
 release binary dated the previous month. Look at the input's date before believing the verdict.
 Deleting a stale cache can turn a quiet pass into a loud failure. Do it on purpose.
+
+## §5.10 — **A WORKAROUND FOR A WEAK SCORER FIXES THE TESTS YOU WROTE, NOT THE CORPUS YOU DIDN'T** (2026-10-24)
+
+The `.wast` runner accepted any trap for any `assert_trap`. §5.4c found that on 2026-09-19 and
+fixed it the cheap way: rebuild OUR tests so the outcome, not the message, carried the meaning. The
+5,267 trap assertions in the spec suite stayed scored by the weak rule, and on 2026-10-24, when the
+runner was made to compare messages (binaryang's D3 vocabulary), **54 of them were wrong traps**:
+`call_indirect` past the table reported as a table access, and out-of-range float→int truncations
+reported as invalid conversions. Two unit tests and a repo `.wast` file had asserted the wrong
+messages, so the misreading was in the code, the doc comment and the tests at once. → **When a
+scorer is too weak, fix the scorer**; a workaround applied to the cases you wrote leaves every
+other case scored by the rule you already know is wrong. [wasmrt]
 
 ## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letters H6, H23)
 

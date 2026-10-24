@@ -7,7 +7,7 @@ stays in the topic file named.
 ## 🚦 State — measured 2026-10-24
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
-* **602 workspace tests**, 0 failed, 1 ignored, from PowerShell and from Git Bash; clippy clean;
+* **604 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the trap fixes); clippy clean;
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
 * Version **0.9.0** (last release). The bump floor since then is **MAJOR** (`releasing.md`, "THE
   NUMBER"), which `1.0.0` meets.
@@ -20,8 +20,10 @@ stays in the topic file named.
 ## Open, in the order they unblock each other
 
 1. **H10 step 2** — derive the hand tables (`define_ops!`, the `0xFB`/`0xFC` dispatch, the
-   SIMD/atomic tables, `op_feature`) from the generated `definitions.rs`, so nothing is hand-kept;
-   hot path, so an A/B/A benchmark first; and check D3. Record: `shared-definitions.md`.
+   SIMD/atomic tables, `op_feature`) from the generated definitions, so nothing is hand-kept; hot
+   path, so an A/B/A benchmark first. 🔒 The owner cleared SHIPPING D1-derived tables (2026-10-24:
+   attribution now; binaryang's future rewrite addresses it), so NOTICE, README and `licensing.md`
+   change with it. ✅ D3 is checked (2026-10-24). Record: `shared-definitions.md`.
 2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
    checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
    Record: `releasing.md`.

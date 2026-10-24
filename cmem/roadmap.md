@@ -418,7 +418,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   **Step 2 OPEN: derive the hand tables FROM the copy**, so there is nothing hand-kept to hold to it.
   That touches `define_ops!`, the `0xFB`/`0xFC` dispatch, the SIMD/atomic tables and `op_feature`, all
   on the hot path. It needs an A/B/A benchmark, and the variant names D1 does not carry (`RefCastOp`,
-  `TryLegacy`, `SelectT` …). D3 is vendored but not yet checked.
+  `TryLegacy`, `SelectT` …). ✅ *2026-10-24:* D3 is checked, and the runner now compares trap
+  messages (`shared-definitions.md`); the owner cleared shipping D1-derived tables (attribution now,
+  binaryang's rewrite later), so step 2 is unblocked.
 * ✅ **H21 CLOSED 2026-10-23 by the mirror**: wasmrt's copy now carries v31's post-rewrite ids.
   Each of the four old ids appears only in H21's bracketed form, "`c9c447f3` (was `7ce0dcd2`)":
   11 occurrences, all checked.

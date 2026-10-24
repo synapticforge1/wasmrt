@@ -139,6 +139,7 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 | Version | What changed | How to migrate |
 | --- | --- | --- |
 | _next release_ | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
+| _next release_ | **Traps:** `call_indirect` past the table's end now reports "undefined element", and an out-of-range float→int truncation "integer overflow" (as the spec says). **Rust API:** `interp::Trap` gains `UndefinedTableElement` | a `match` on `Trap` needs the new arm; code that matched the old message text should match the new one |
 | _next release_ | **WASI:** a guest sees ONLY the `--env` variables; it no longer inherits the host's environment. `--env =x` (an empty name) is an error | pass each variable the guest needs: `--env HOME=/home/me --env LANG=C.UTF-8` |
 | _next release_ | **CLI:** a host flag after the guest's first argument is an error (`prog.wasm install --yes`) | `prog.wasm install -- --yes` gives the guest its own flag |
 | _next release_ | **Validation:** with a proposal disabled, a table with an initializer needs function-references, and `nullexternref` / `nullfuncref` need GC (as in wasm-tools). With every proposal on, the default, nothing changes | enable the proposal: `--features …,function-references` or `…,gc` |
