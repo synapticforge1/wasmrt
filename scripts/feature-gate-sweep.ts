@@ -18,10 +18,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { releaseWasmrt } from "./target-dir.ts";
 
-const wasmrt = resolve(
-  process.argv[2] ?? join(import.meta.dirname!, "..", "target", "release", "wasmrt.exe"),
-);
+// Default: the binary cargo actually builds, which need not be `<repo>/target` (`target-dir.ts`).
+const wasmrt = resolve(process.argv[2] ?? releaseWasmrt());
 
 function run(cmd: string, args: string[]) {
   const r = spawnSync(cmd, args, { encoding: "utf8" });

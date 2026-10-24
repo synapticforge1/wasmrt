@@ -1,5 +1,12 @@
 # Known Issues
 
+## 🔧 2026-10-23, night — letter H13 done, and the C-ABI gate was linking a STALE library
+
+| | what | state |
+| --- | --- | --- |
+| ✅ | **H13: three encoder divergences from wasm-tools** (I12 locals one entry per local, I13 exports grouped instead of in source order, I14 implicit types interned in a different order). Bodies differed on **539/603** corpus files | ✅ **FIXED**: bodies = `wasm-tools parse` on **603/603** (`scripts/body-parity.ts`, a new gate, inverted). `.wat` pins = wazmrt's on 603/603 and `.wasm` on 584/584, which restores contract v29 |
+| 🔴 | **The C-ABI gate linked whatever static library it found under `<repo>/target`**, while cargo on this host builds to another directory. While the stale September `./target` existed, the gate built a FRESH library and then linked the OLD one. With the fresh one it fails: today's `std` needs `-lsynchronization` (`WaitOnAddress`) and `-ldbghelp`, which the gate's hand-kept list lacked | ✅ **FIXED**: every gate resolves cargo's real target directory (`scripts/target-dir.ts`), and `c-gate.ts` asks rustc for `--print native-static-libs` instead of remembering a list. Passes in release and debug. **For C users**: the static library now needs `-lsynchronization -ldbghelp` on Windows (`crates/wasmrt-capi/README.md`). ⚠️ The gate's earlier PASSED records may have measured the stale library; that cannot be re-checked, because the directory is gone |
+
 ## 🔬 2026-10-23 — held to binaryang's D1/D2 (letters H8, H10): one defect fixed, three open
 
 Detail and method: [shared-definitions.md](shared-definitions.md).
@@ -7,7 +14,7 @@ Detail and method: [shared-definitions.md](shared-definitions.md).
 | | what | state |
 | --- | --- | --- |
 | 🔴 | **Six GC bulk array ops gated by no flag** (`array.new_data/new_elem/fill/copy/init_data/init_elem`), from 2026-08-19. Latent: an array TYPE is refused with GC off first (measured on wasmrt and wasm-tools 1.262) | ✅ **FIXED** — `op_feature`'s GC arm; `UNGATED_CORE_OPS` 178 → 172 (= D1's core count); pinned by name. Conformance 64,603 / 0 / 0 before and after, no file lost a pass; the three sweeps pass |
-| 🟠 | **I8: `(@custom "name" …)` plus identifiers gives TWO `name` sections** (the annotation, then a generated one). wasm-tools and binaryang emit one. wazmrt has the same behaviour, byte-identical | OPEN — the fix changes emitted bytes, so `.wat` pin digests move. **Goes with the H13 assembler batch, coordinated with wazmrt** |
+| 🟠 | **I8: `(@custom "name" …)` plus identifiers gives TWO `name` sections** (the annotation, then a generated one). wasm-tools and binaryang emit one. wazmrt has the same behaviour, byte-identical | ✅ **FIXED 2026-10-23 with the H13 batch**: the annotation is the only `name` section, byte-identical to wasm-tools (unit test). No corpus file has the shape, so pin parity with wazmrt is unaffected |
 | 🟡 | **`--features` does not accept binaryang's `sat-float-to-int`** (it accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`) | OPEN — a contract surface. wazmrt's **v30** (not yet mirrored here; wasmrt's copy is v10) makes `--features` take **wasm-tools'** whole vocabulary. `sat-float-to-int` is wabt's and binaryang's spelling, not wasm-tools', so v30 does not require it; but v30 likely requires spellings wasmrt lacks. Settle it in the v11–v31 mirror |
 | 🟡 | **`cli_review_regressions::env_flags_add_to_the_inherited_environment_rather_than_replacing_it` depends on the SHELL.** It overrides `PATH` and expects the count not to grow. Under PowerShell the inherited key is `Path` (Windows names are case-insensitive, wasmrt's comparison is not), so it fails: 126 vs 125. Under Git Bash (`PATH`) it passes. Measured 2026-10-23 | OPEN — two questions: should the test pick a key it creates itself, and should `--env PATH=x` replace a host `Path` on Windows? A POSIX guest would see the two as distinct keys, so the second is not obviously a defect. Run `cargo test` from Git Bash until it is decided |
 

@@ -291,9 +291,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   code had been written.
   * When binaryang's FL1 settles D2's `cli` spellings, both runtimes migrate ONCE to D2; the
     wasm-tools-only names stay as deprecated aliases for one minor release.
-  * ⚠️ **Open question for the owner:** do v30's MEANINGS survive (no configuration refused;
-    dependencies checked on the module)? v32 reverses the vocabulary and is silent on these.
-    wasmrt still refuses `all,-simd` as a configuration.
+  * 🔒 **Owner, 2026-10-23: "use v32."** So v30's meanings (no configuration refused;
+    dependencies checked on the module) are not implemented either until the row is rewritten at
+    FL1. wasmrt still refuses `all,-simd` as a configuration until then.
   * The measurements are kept locally (`cmem/local/measurements/`): each instruction's required
     feature set from wasm-tools 1.262 (492 swept), the bulk-memory / reference-types / GC splits,
     and the name lists. They are re-derivable, and they are the input to the D2 migration.
@@ -302,8 +302,11 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 
   📋 **The workspace's list of what waits on wasmrt** (2026-10-23), with today's state:
   1. mirror `interop.md` → ✅ at **v32**;
-  2. letter H13's three assembler fixes → ⏳ open (item 4 of the 1.0.0 list), together with
-     I8's duplicate `name` section;
+  2. letter H13's three assembler fixes → ✅ **DONE 2026-10-23, night** (owner: "yes H13 next").
+     Bodies = `wasm-tools parse` on 603/603 (was 64), I8 fixed too, and `.wat` / `.wasm` pins =
+     wazmrt's on 603/603 and 584/584, which restores contract v29. New gate
+     `scripts/body-parity.ts`. On the way: the C-ABI gate was linking a STALE library, and today's
+     `std` needs `-lsynchronization -ldbghelp` (`known-issues.md`, top);
   3. the `--dir` help → ✅ done in the mirror commit (v27's grammar is in `--help`);
   4. letter **H23**, behaviour carry-forward testing (S1 accepted-module corpus per feature and
      preset; S2 per-file spec results pinned to a wasmtk commit; S3 the wide local net; stop at

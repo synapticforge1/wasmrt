@@ -13,4 +13,17 @@ raw-pointer work is confined to a single module, so the rest of the crate is ord
 
 The header ships at `include/wasmrt.h`.
 
+## Linking the static library
+
+A Rust static library does not carry its system dependencies, so name them when you link. The
+exact list depends on the Rust toolchain that built the library; ask it with
+`cargo rustc -p wasmrt-capi --release --crate-type staticlib -- --print native-static-libs`. On
+Windows (gnullvm/mingw) with current toolchains that is:
+
+```sh
+cc app.c libwasmrt_capi.a -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp -lsynchronization
+```
+
+The `cdylib` (`wasmrt_capi.dll`, `libwasmrt_capi.so`) needs none of this.
+
 `SPDX-License-Identifier: MIT OR Apache-2.0`

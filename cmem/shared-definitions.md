@@ -127,8 +127,10 @@ binaryang all emit one `name` section, the annotation. **With identifiers too (`
 and binaryang still emit ONE (the annotation), while wasmrt and wazmrt emit TWO** (the annotation,
 then a generated one; byte-identical between the runtimes). Two `name` sections are legal and still
 validate, but a reader picks one, and `.wat` pin digests move. **The runtimes are the losers**
-(the row's own wording). wasmrt's fix changes emitted bytes, so it goes with the H13 assembler batch,
-coordinated with wazmrt, not alone.
+(the row's own wording). ✅ **wasmrt FIXED it the same day with the H13 batch**: the annotation is now
+the only `name` section, byte-identical to wasm-tools' output and pinned by
+`an_annotated_name_section_is_the_only_name_section`. wazmrt still writes two (measured on its
+2026-09-21 build). The pins still agree corpus-wide, because no corpus file has the shape.
 
 **I7**: no wasmrt assembler commit since 2026-09-20, so the workspace's 2026-10-22 figures describe
 current source. ⚠️ **But the workspace harness (`tools/assembler-parity/measure.ts`) runs

@@ -29,10 +29,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { releaseWasmrt } from "./target-dir.ts";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const root = process.argv[2] ?? join(repo, "..", "wasmtk", "tests");
-const exe = join(repo, "target", "release", process.platform === "win32" ? "wasmrt.exe" : "wasmrt");
+// cargo's real target directory, which need not be `<repo>/target` (see `target-dir.ts`).
+const exe = releaseWasmrt();
 
 // Known corpus defects — NOT ours. wasm-tools refuses the same SOURCE on the same lines; they are
 // reported upstream and deliberately not worked around.

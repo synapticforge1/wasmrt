@@ -1120,6 +1120,43 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 Body parity and H13 (2026-10-23, night) — **599 workspace tests**
+
+    bun scripts/body-parity.ts                   # default binary: cargo's real target dir
+
+Every `.wat` in wasmtk's corpus is assembled by wasmrt and by `wasm-tools parse`; with custom
+sections stripped, the bodies must be byte-identical, and wasmrt may not write more `name` sections.
+Each difference is bucketed by the FIRST section that differs, so each cause is visible.
+
+| | identical | first differs in |
+| --- | --- | --- |
+| before H13 | 64/603 | code 533, type 4, export 2 |
+| after H13 | **603/603** | — |
+
+**Inverted:** a faithful revert of each fix reproduced 533 / 4 / 2 exactly. A first type mutation
+(tags first) changed nothing in the corpus, which showed the TAG half is unexercised there. It is
+pinned by a unit test instead (`the_encoding_matches_an_outside_reader_byte_for_byte`), proven
+needed: 3 of its 4 cases break under that mutation. Also `wasmrt pin` = `wazmrt pin` on 603/603
+`.wat` and 584/584 `.wasm`.
+
+⚠️ **Every gate's DEFAULT binary is now cargo's real target directory** (`scripts/target-dir.ts`,
+from `cargo metadata`). They defaulted to `<repo>/target/release`, which on this host was a STALE
+build. And `c-gate.ts` asks rustc for `--print native-static-libs`: it had been linking a stale
+library (`known-issues.md`, top). All gates were re-run with their defaults:
+
+| gate | result |
+| --- | --- |
+| `wat-corpus` | 603 accepted by wasm-tools |
+| `body-parity` | 603/603 |
+| feature-gate / index-type / fuzz sweeps | pass (fuzz: 300 modules, 1,200 mutations) |
+| custom-sections diff | pass |
+| C-ABI gate | PASSED, release and debug |
+| definitions | PASSED |
+| eol gate | PASSED |
+
+Spec suite 64,603 / 0 / 0, no file lost a pass. Miri was not re-run (no `unsafe` or C-ABI code
+changed).
+
 ### 🆕 Contract mirror (2026-10-23, evening) — **597 workspace tests**
 
 `crates/wasmrt/tests/cli_contract_dir_and_guest_position.rs` (7 tests) pins the three rows wasmrt was

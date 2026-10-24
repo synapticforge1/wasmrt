@@ -19,11 +19,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { releaseWasmrt } from "./target-dir.ts";
 
 const N = Number(process.argv[2] ?? 200);
-const wasmrt = resolve(
-  process.argv[3] ?? join(import.meta.dirname!, "..", "target", "release", "wasmrt.exe"),
-);
+// Default: the binary cargo actually builds, which need not be `<repo>/target` (`target-dir.ts`).
+const wasmrt = resolve(process.argv[3] ?? releaseWasmrt());
 
 // ⚠️ Judge with the proposal set wasmrt IMPLEMENTS, not with everything wasm-tools knows. `-f all`
 // enables compact-imports and stack-switching, which wasmrt does not implement at all, and the

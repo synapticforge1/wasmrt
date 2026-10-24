@@ -18,6 +18,29 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 _Next: **0.10.0 (T9)** — the correctness punch-list, tail calls, licensing and docs, size + performance
 measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt and code-hygiene pass; **0.12.0 (T11)** — an optimization review of the shipped binaries and the C ABI; and **0.13.0 (T12)** — a security review of the penetration surfaces, with recommended mitigations._
 
+### Changed (2026-10-23)
+
+- ⚠️ **Breaking (CLI): a `--dir` / `--ro-dir` host path must say whether it is relative.** Write
+  `./data`, `../data`, `.`, or an absolute path (`/p`; `C:/p`, `C:\p` or `\\srv\share` on Windows).
+  A bare `data`, and a drive with no separator (`C:`, `C:Users`), are now an error with exit status 1,
+  reported before anything touches the filesystem. This is the swappability contract's v27 rule;
+  wazmrt already applies it.
+- ⚠️ **Breaking (CLI): a host flag after the guest's first argument is an error.** In
+  `wasmrt prog.wasm install --yes`, the `--yes` would never reach wasmrt, so it now fails (exit 1)
+  instead of being passed to the guest. Write `prog.wasm install -- --yes` to give the guest its own.
+  This covers the eleven exact host-flag names; `--yess`, `--dir=x`, `-la` and the like stay the
+  guest's (contract v26/v28).
+- **`--features=<list>` is accepted**, the same flag as `--features <list>`, with the same
+  before-the-module-path rule.
+- **`wasmrt wat` writes the same module bytes as `wasm-tools parse`**: consecutive locals of one
+  type become one run, exports keep source order, and implicit types are numbered in source order.
+  The modules mean exactly what they did; only the bytes changed, so a `.wat` file's **pin digest
+  changes** with this release (and now matches wazmrt's). A `(@custom "name" …)` annotation is now
+  the module's only `name` section.
+- **C ABI, Windows static library:** with current Rust toolchains, link with
+  `-lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp -lsynchronization`; the last two are new. See
+  `crates/wasmrt-capi/README.md`. The DLL is unaffected.
+
 ### Added
 
 - **Tail calls — `return_call` and `return_call_indirect` (T9f).** The last unimplemented proposal in

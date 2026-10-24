@@ -1815,3 +1815,23 @@ command line. The row was verified on how the flag PARSES, which is the half tha
 🔒 Verify a flag row by asserting on **what the command did** — the verdict, the exit status, the
 output — in every position and on every path the flag claims to govern. §4.10 said *test the
 spellings*; this adds: **and test the PATHS**.
+
+## §4.12 — **A GATE THAT FINDS ITS INPUT BY PATH CAN TEST A STALE ARTIFACT** (2026-10-23)
+
+**The defect that bought it.** Five gate scripts found the binary they test at
+`<repo>/target/release`. cargo on this host builds to a different directory (set in cargo's own
+config), and `<repo>/target` still held a September build. The scripts still RAN and still
+PASSED, against a five-week-old binary. Worst was `c-gate.ts`: it BUILT a fresh static library,
+which went to the real target directory, then LINKED the stale one from `<repo>/target`. The day
+the stale directory was deleted, the gate failed for a reason it had been hiding: today's `std`
+needs `-lsynchronization` and `-ldbghelp`, which its hand-kept link list lacked. Every C user
+linking the current library needs them too, and nothing had said so.
+
+🔒 **A gate must locate its input the way the BUILD does, not where it is usually found.** Ask the
+build tool (`cargo metadata` → `target_directory`; `--print native-static-libs` for link
+dependencies). A remembered path is a second, silent copy of a fact the tool already knows,
+the same drift §1.9 names for grammars.
+
+🎓 **"It passed" says nothing about WHICH artifact passed.** The tell was a timestamp: a "fresh"
+release binary dated the previous month. Look at the input's date before believing the verdict.
+Deleting a stale cache can turn a quiet pass into a loud failure. Do it on purpose.

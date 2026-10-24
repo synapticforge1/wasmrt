@@ -1173,6 +1173,21 @@ struct ImportedTag {
     type_index: u32,
 }
 
+/// A defined item whose IMPLICIT type use is interned in source order (see `assemble_parts`).
+///
+/// 🔒 **Why the order matters** (workspace I14, letter H13): an implicit type use APPENDS to the type
+/// table, so the order in which uses are interned is the order of the type INDICES. wasm-tools
+/// interns field by field, a function's signature followed by its body's block and `call_indirect`
+/// types. wasmrt interned every defined tag at parse time, then every function signature, then
+/// every body, so a tag after a function, or a multi-value block type followed by another function,
+/// came out at a swapped index: a valid module with different bytes.
+enum DefItem {
+    /// The next entry of `ModuleBuild::funcs`.
+    Func,
+    /// Defined tag `index`: its explicit type index, or the inline signature to intern now.
+    Tag { index: usize, sig: core::result::Result<u32, Sig> },
+}
+
 /// Everything collected from the module's fields, before section emission.
 #[derive(Default)]
 struct ModuleBuild {
@@ -1221,6 +1236,10 @@ struct ModuleBuild {
     tags: Vec<u32>,
     tag_names: Vec<Option<String>>,
     tag_imports: Vec<ImportedTag>,
+
+    /// Every DEFINED function and tag, in SOURCE order, so implicit types are interned in the
+    /// order an outside reader interns them (workspace I14, letter H13). See [`DefItem`].
+    def_order: Vec<DefItem>,
 
     elems: Vec<ElemDef>,
     elem_names: Vec<Option<String>>,
@@ -1341,7 +1360,9 @@ fn assemble_parts(module: &[Sexpr], annots: &[Annot]) -> Result<Vec<u8>> {
     }
 
     // Pass 1: the remaining definitions, in source order.
-    let mut pending_exports: Vec<&[Sexpr]> = Vec::new();
+    // Each deferred export remembers how many exports existed when it was READ, so pass 2 can put
+    // it back at its source position (see pass 2).
+    let mut pending_exports: Vec<(usize, &[Sexpr])> = Vec::new();
     let mut seen_definition = false;
     for field in fields {
         let kw = field.keyword().ok_or(Error::BadModuleField)?;
@@ -1373,13 +1394,20 @@ fn assemble_parts(module: &[Sexpr], annots: &[Annot]) -> Result<Vec<u8>> {
             // in the file, and binaryen emits exactly that order (all exports, then the
             // funcs). Inline `(export …)` clauses stay immediate — they can only name the
             // item they sit inside.
-            "export" => pending_exports.push(items),
+            "export" => pending_exports.push((b.exports.len(), items)),
             _ => return Err(Error::BadModuleField),
         }
     }
 
     // Pass 2: module-level exports, now that every index space is complete.
-    for items in pending_exports {
+    //
+    // 🔒 **Each goes back to its SOURCE position** (workspace I13, letter H13). Appending them after
+    // the inline `(export …)` clauses, which pass 1 records as it meets them, reordered any module
+    // that mixes the two forms: `(export "memory" (memory 0))` before `(func (export "f"))` came out
+    // `f` first. Export order is observable: `WebAssembly.Module.exports()` and every loader's export
+    // listing return section order. `at` counts the exports read before this one; the `inserted`
+    // earlier deferred exports shift it.
+    for (inserted, (at, items)) in pending_exports.into_iter().enumerate() {
         let name = want_str(nth(items, 1)?)?.to_vec();
         let target = want_list(nth(items, 2)?)?;
         let idx_form = nth(target, 1)?;
@@ -1391,38 +1419,50 @@ fn assemble_parts(module: &[Sexpr], annots: &[Annot]) -> Result<Vec<u8>> {
             "tag" => (4, resolve_by_name(&b.tag_names, idx_form)?),
             _ => return Err(Error::BadModuleField),
         };
-        b.exports.push(ExportDef { name, kind, index });
+        b.exports.insert(at + inserted, ExportDef { name, kind, index });
     }
 
-    // Resolve each defined function's type index BEFORE emission: interning an inline
-    // signature can append to the type table, and the type section must already contain
-    // everything by the time it is written.
-    let mut func_sigs: Vec<u32> = Vec::with_capacity(b.funcs.len());
-    for i in 0..b.funcs.len() {
-        let ti = match b.funcs[i].type_ref {
-            Some(ti) => ti,
-            None => {
-                let sig = b.funcs[i].sig.clone();
-                intern_sig_outside_rec(&mut b.types, &b.rec_groups, sig)
-            }
-        };
-        func_sigs.push(ti);
-    }
-
-    // Encode every body and const-expr BEFORE any section is written: a multi-value block
-    // type or an inline `call_indirect` signature interns into the type table as it is
-    // encoded, so the type section is only complete once the last body is done.
+    // Resolve every defined function's and tag's type index, and encode every body, BEFORE any
+    // section is written: an inline signature, a multi-value block type or an inline
+    // `call_indirect` signature appends to the type table, so the type section is only complete
+    // once the last of them is done.
+    //
+    // 🔒 **In SOURCE order, one function at a time — its signature, then its body** (workspace I14,
+    // letter H13). That is the order wasm-tools interns implicit types in, so it is the order of the
+    // type INDICES. Interning every signature first and every body after put a multi-value block
+    // type behind later functions' signatures, and a tag after a function ahead of that function's
+    // body types: valid modules, different bytes.
     let funcs = core::mem::take(&mut b.funcs);
+    let def_order = core::mem::take(&mut b.def_order);
+    let mut func_sigs: Vec<u32> = Vec::with_capacity(funcs.len());
     let mut bodies: Vec<Vec<u8>> = Vec::with_capacity(funcs.len());
     let mut body_hints: Vec<Vec<(u32, u8)>> = Vec::with_capacity(funcs.len());
     let mut body_labels: Vec<NameMap> = Vec::with_capacity(funcs.len());
-    for f in &funcs {
-        let body = encode_body(f, &mut b)?;
-        bodies.push(body.bytes);
-        body_hints.push(body.hints);
-        body_labels.push(body.labels);
+    let mut next_func = 0;
+    for item in def_order {
+        match item {
+            DefItem::Func => {
+                let f = &funcs[next_func];
+                next_func += 1;
+                let ti = match f.type_ref {
+                    Some(ti) => ti,
+                    None => intern_sig_outside_rec(&mut b.types, &b.rec_groups, f.sig.clone()),
+                };
+                func_sigs.push(ti);
+                let body = encode_body(f, &mut b)?;
+                bodies.push(body.bytes);
+                body_hints.push(body.hints);
+                body_labels.push(body.labels);
+            }
+            DefItem::Tag { index, sig } => {
+                b.tags[index] = match sig {
+                    Ok(ti) => ti,
+                    Err(sig) => intern_sig_outside_rec(&mut b.types, &b.rec_groups, sig),
+                };
+            }
+        }
     }
-    let globals = core::mem::take(&mut b.globals);
+    debug_assert_eq!(next_func, funcs.len(), "every defined function is in def_order exactly once");    let globals = core::mem::take(&mut b.globals);
     let mut global_inits: Vec<Vec<u8>> = Vec::with_capacity(globals.len());
     for g in &globals {
         let mut out = Vec::new();
@@ -1515,7 +1555,16 @@ fn assemble_parts(module: &[Sexpr], annots: &[Annot]) -> Result<Vec<u8>> {
     let module_id = module.get(1).filter(|s| is_id(s)).and_then(Sexpr::as_atom);
     let first_def = b.func_imports.len() as u32;
     let hints = branch_hint_section(first_def, &body_hints);
-    let names = name_section(&b, &funcs, &plan, module_id, &body_labels);
+    // 🔒 A `(@custom "name" …)` annotation IS the module's name section (workspace I8), so none is
+    // generated beside it. Measured 2026-10-23: with identifiers present, wasm-tools and binaryang
+    // write ONE `name` section (the annotation), while wasmrt wrote two, the annotation and then a
+    // generated one. A reader picks one of the two, and `.wat` pin digests moved with it.
+    let annotated_names = plan.customs.iter().any(|c| c.name == b"name");
+    let names = if annotated_names {
+        None
+    } else {
+        name_section(&b, &funcs, &plan, module_id, &body_labels)
+    };
     Ok(annot::lay_out(&bytes, &plan.customs, hints.as_deref(), names.as_deref()))
 }
 
@@ -2319,6 +2368,7 @@ fn parse_func_field(items: &[Sexpr], annots: &[Annot], b: &mut ModuleBuild) -> R
                 .map(|a| Annot { before: a.before - k, ..a.clone() })
                 .collect(),
         });
+        b.def_order.push(DefItem::Func);
     }
     b.func_names.push(name);
     Ok(())
@@ -2662,6 +2712,15 @@ fn exact_import_sig(items: &[Sexpr], j: usize, b: &mut ModuleBuild) -> Result<Op
 /// clause order, never checked a `(type x)` against the clauses beside it (and dropped them),
 /// and skipped any other form in silence. wasm-tools refuses all of those.
 fn parse_tag_type(items: &[Sexpr], b: &mut ModuleBuild) -> Result<u32> {
+    Ok(match read_tag_type(items, b)? {
+        Ok(ti) => ti,
+        Err(sig) => intern_sig_outside_rec(&mut b.types, &b.rec_groups, sig),
+    })
+}
+
+/// [`parse_tag_type`] without the interning: the explicit type index, or the inline signature,
+/// so a DEFINED tag can intern at its source position (`DefItem::Tag`) rather than at parse time.
+fn read_tag_type(items: &[Sexpr], b: &mut ModuleBuild) -> Result<core::result::Result<u32, Sig>> {
     let mut j = 0;
     while items.get(j).is_some_and(|s| matches!(s.keyword(), Some("import" | "export"))) {
         j += 1;
@@ -2669,7 +2728,7 @@ fn parse_tag_type(items: &[Sexpr], b: &mut ModuleBuild) -> Result<u32> {
     let (type_ref, sig) =
         read_type_use(&b.types, &b.type_names, items, &mut j, true, &mut b.deferred_type_uses)?;
     after_import_signature(items.get(j))?;
-    Ok(type_ref.unwrap_or_else(|| intern_sig_outside_rec(&mut b.types, &b.rec_groups, sig)))
+    Ok(type_ref.ok_or(sig))
 }
 
 fn parse_tag_field(items: &[Sexpr], b: &mut ModuleBuild) -> Result<()> {
@@ -2683,12 +2742,16 @@ fn parse_tag_field(items: &[Sexpr], b: &mut ModuleBuild) -> Result<()> {
             index: b.tag_names.len() as u32,
         });
     }
-    let ti = parse_tag_type(&items[j..], b)?;
     if let Some(r) = import {
+        let ti = parse_tag_type(&items[j..], b)?;
         b.tag_imports.push(ImportedTag { r, type_index: ti });
         b.import_order.push(ImportKind::Tag);
     } else {
-        b.tags.push(ti);
+        // A DEFINED tag interns its implicit type at its source position, among the functions'
+        // (`DefItem`). The slot is filled in `assemble_parts`; `u32::MAX` never reaches the output.
+        let sig = read_tag_type(&items[j..], b)?;
+        b.def_order.push(DefItem::Tag { index: b.tags.len(), sig });
+        b.tags.push(u32::MAX);
     }
     b.tag_names.push(name);
     Ok(())
@@ -3420,10 +3483,21 @@ macro_rules! ctx_for {
 /// implicit `end`.
 fn encode_body(f: &Func, b: &mut ModuleBuild) -> Result<Body> {
     let mut out = Vec::new();
-    // One (count = 1, type) group per declared local — simple and always correct.
-    uleb(&mut out, f.locals.len() as u64);
+    // 🔒 Consecutive locals of one type are ONE `(count, type)` entry (workspace I12, letter H13).
+    // One entry per local is a valid encoding, but it is not the one wasm-tools, wabt or binaryang
+    // write: `(local i32 i32 i32)` is `01 03 7f`, not `03 01 7f 01 7f 01 7f`. It differed on 533 of
+    // 603 corpus files and cost +1.7 % in size, invisible to every round trip because our own decoder
+    // reads both. Runs only: a type that recurs after a different one starts a new entry, as theirs do.
+    let mut runs: Vec<(u64, ValType)> = Vec::new();
     for &t in &f.locals {
-        uleb(&mut out, 1);
+        match runs.last_mut() {
+            Some((n, last)) if *last == t => *n += 1,
+            _ => runs.push((1, t)),
+        }
+    }
+    uleb(&mut out, runs.len() as u64);
+    for (n, t) in runs {
+        uleb(&mut out, n);
         emit_val_type(&mut out, t)?;
     }
     let locals = f.local_names.clone();
@@ -8100,6 +8174,50 @@ mod emitter_coverage_tests {
             hex("00 61 73 6d 01 00 00 00 01 04 01 60 00 00 00 03 01 61 31 03 02 01 00 00 03 01 \
                  62 32 0a 04 01 02 00 0b")
         );
+    }
+
+    /// 🔒 Letter H13's three encoder rules, each pinned to wasm-tools 1.262's OWN bytes for the same
+    /// source (measured 2026-10-23). The corpus gate `scripts/body-parity.ts` covers the first two
+    /// and the multi-value half of the third over 603 files; the TAG half is pinned only here,
+    /// because no corpus file exercises it. Interning tags at parse time again breaks 3 of these.
+    #[test]
+    fn the_encoding_matches_an_outside_reader_byte_for_byte() {
+        for (src, want) in [
+            // I12: locals in RUNS; a type that recurs after another starts a new run.
+            ("(module (func (local i32 i32 i64 i32 i32 i32)))",
+             "00 61 73 6d 01 00 00 00 01 04 01 60 00 00 03 02 01 00 0a 0a 01 08 03 02 7f 01 7e 03 7f 0b"),
+            // I13: exports in SOURCE order, a module-level export before an inline one.
+            (r#"(module (export "m" (memory 0)) (memory 1) (func (export "f")))"#,
+             "00 61 73 6d 01 00 00 00 01 04 01 60 00 00 03 02 01 00 05 03 01 00 01 07 09 02 01 6d 02 00 \
+              01 66 00 00 0a 04 01 02 00 0b"),
+            // I14: a function's body types before a LATER tag's type...
+            ("(module (func (block (result i32 i64) i32.const 0 i64.const 0) drop drop) (tag (param f32)))",
+             "00 61 73 6d 01 00 00 00 01 0d 03 60 00 00 60 00 02 7f 7e 60 01 7d 00 03 02 01 00 0d 03 01 \
+              00 02 0a 0d 01 0b 00 02 01 41 00 42 00 0b 1a 1a 0b"),
+            // ...and a tag between two functions keeps its place.
+            ("(module (func (param i32)) (tag (param f64)) (func (param i64)))",
+             "00 61 73 6d 01 00 00 00 01 0d 03 60 01 7f 00 60 01 7c 00 60 01 7e 00 03 03 02 00 02 0d 03 \
+              01 00 01 0a 07 02 02 00 0b 02 00 0b"),
+        ] {
+            assert_eq!(asm(src).unwrap(), hex(want), "{src}");
+        }
+    }
+
+    /// 🔒 A `(@custom "name" …)` annotation IS the name section: with identifiers present too, no
+    /// second, generated one is written (workspace I8). The expected bytes are wasm-tools 1.262's
+    /// own output for this source, measured 2026-10-23; wasmrt wrote these plus a generated
+    /// `name` section naming `$m` and `$f`.
+    #[test]
+    fn an_annotated_name_section_is_the_only_name_section() {
+        assert_eq!(
+            asm(r#"(module $m (@custom "name" "\00\04\03mod") (func $f (export "f") (result i32) (i32.const 1)))"#)
+                .unwrap(),
+            hex("00 61 73 6d 01 00 00 00 01 05 01 60 00 01 7f 03 02 01 00 07 05 01 01 66 00 00 \
+                 0a 06 01 04 00 41 01 0b 00 0b 04 6e 61 6d 65 00 04 03 6d 6f 64")
+        );
+        // Without the annotation, the identifiers still produce a generated name section.
+        let plain = asm(r#"(module $m (func $f (export "f") (result i32) (i32.const 1)))"#).unwrap();
+        assert!(plain.windows(5).any(|w| w == b"\x04name"), "identifiers alone still name things");
     }
 
     /// Every malformed or misplaced annotation REFUSES the module — what wasm-tools does for

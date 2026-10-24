@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { targetDir } from "./target-dir.ts";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const release = process.argv.includes("--release");
@@ -41,23 +42,47 @@ try {
   if (run("cargo", ["build", "-p", "wasmrt-capi", ...cargoFlags]) !== 0) process.exit(1);
 
   // A Rust staticlib is named differently per toolchain; take whichever is there.
+  // ⚠️ In cargo's REAL target directory, not `<repo>/target`: on a host that builds elsewhere the
+  // build above writes the fresh library there, and `<repo>/target` can hold a STALE one that this
+  // gate would link instead (found 2026-10-23; see `target-dir.ts`).
+  const tdir = targetDir();
   const lib = [
-    join(repo, "target", profileDir, "libwasmrt_capi.a"),
-    join(repo, "target", profileDir, "wasmrt_capi.lib"),
+    join(tdir, profileDir, "libwasmrt_capi.a"),
+    join(tdir, profileDir, "wasmrt_capi.lib"),
   ].find(existsSync);
   if (!lib) {
-    console.error(`no static library found under target/${profileDir}`);
+    console.error(`no static library found under ${join(tdir, profileDir)}`);
     process.exit(1);
   }
   console.log(`   using ${lib}`);
 
   // A Rust staticlib does not carry its own system dependencies; the host libc and friends
   // must be named explicitly at link time.
-  const syslibs = process.platform === "win32"
+  //
+  // 🔒 **rustc is asked, not remembered** (2026-10-23). The list below was hand-kept and fell
+  // behind the toolchain: today's `std` locks through `WaitOnAddress` / `WakeByAddressSingle`
+  // (`-lsynchronization`) and needs `-ldbghelp`, neither listed, so the FRESH library did not link.
+  // The gate kept passing only while a stale library from an older toolchain sat in
+  // `<repo>/target`, which is where it used to look. `--print native-static-libs` is the compiler's
+  // own answer; the old entries stay as a union so nothing that linked before stops linking.
+  const known = process.platform === "win32"
     ? ["-lws2_32", "-lbcrypt", "-luserenv", "-lntdll", "-lole32", "-loleaut32", "-ladvapi32"]
     : process.platform === "darwin"
     ? ["-framework", "CoreFoundation", "-framework", "Security"]
     : ["-lpthread", "-ldl", "-lm"];
+  const printed = spawnSync(
+    "cargo",
+    ["rustc", "-q", "-p", "wasmrt-capi", ...cargoFlags, "--crate-type", "staticlib", "--", "--print", "native-static-libs"],
+    { cwd: repo, encoding: "utf8" },
+  );
+  const note = /native-static-libs:\s*(.*)/.exec(`${printed.stdout ?? ""}${printed.stderr ?? ""}`);
+  if (!note) {
+    console.error("rustc did not report native-static-libs — cannot know what to link");
+    process.exit(1);
+  }
+  const reported = note[1].trim().split(/\s+/).filter(Boolean);
+  const syslibs = [...known, ...reported.filter((l) => !known.includes(l))];
+  console.log(`   system libraries (rustc reports: ${reported.join(" ")})`);
 
   let failed = false;
   for (const gate of ["abi_symbols", "c_smoke"]) {
