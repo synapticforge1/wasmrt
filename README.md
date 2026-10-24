@@ -152,7 +152,7 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 
 Dual-licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 wasmrt has **no third-party dependencies**, and its engine incorporates no third-party code. One
-test-only component is recorded: WebAssembly instruction-table data derived from
-[wabt](https://github.com/WebAssembly/wabt) (Apache-2.0), used to check wasmrt's opcode tables. It
-is not part of any binary. See [`NOTICE`](NOTICE) and
-[`third_party/LICENSES.md`](third_party/LICENSES.md).
+component is recorded: WebAssembly instruction-table **data** derived from
+[wabt](https://github.com/WebAssembly/wabt) (Apache-2.0), by way of the owner's binaryang project.
+Since 2026-10-24 part of it ships: wasmrt's opcode gating and its SIMD and atomic mnemonic tables are
+generated from it. See [`NOTICE`](NOTICE) and [`third_party/LICENSES.md`](third_party/LICENSES.md).

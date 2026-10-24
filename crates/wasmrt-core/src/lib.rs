@@ -52,6 +52,12 @@ mod definitions;
 #[cfg(test)]
 mod definitions_check;
 
+// The SHIPPED instruction tables generated from D1 (letter H10 step 2; owner, 2026-10-24: shipping
+// D1-derived data is cleared, with the wabt attribution in NOTICE). `op_feature`, the SIMD/atomic
+// mnemonic tables and the relaxed-SIMD set read these; `scripts/definitions.ts --check` diffs them.
+#[rustfmt::skip]
+mod tables;
+
 // WASI + the secure sandbox resolve real OS paths → they require `std`.
 pub mod rng;
 #[cfg(feature = "std")]

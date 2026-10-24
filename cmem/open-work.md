@@ -19,11 +19,11 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-1. **H10 step 2** — derive the hand tables (`define_ops!`, the `0xFB`/`0xFC` dispatch, the
-   SIMD/atomic tables, `op_feature`) from the generated definitions, so nothing is hand-kept; hot
-   path, so an A/B/A benchmark first. 🔒 The owner cleared SHIPPING D1-derived tables (2026-10-24:
-   attribution now; binaryang's future rewrite addresses it), so NOTICE, README and `licensing.md`
-   change with it. ✅ D3 is checked (2026-10-24). Record: `shared-definitions.md`.
+1. **H10 step 2, stage 2** — generate the `define_ops!` list and the `0xFB`/`0xFC` decode dispatch
+   too (variant names and internal tags stay wasmrt's own: they are public surface). Hot path, so an
+   A/B/A benchmark first. ✅ Stage 1 done 2026-10-24 (`op_feature` exhaustive, the SIMD/atomic tables
+   and relaxed set generated and shipped; attribution updated). ✅ D3 checked. Also read binaryang's
+   new `opcode-guide.md` first (owner, 2026-10-24). Record: `shared-definitions.md`.
 2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
    checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
    Record: `releasing.md`.
@@ -40,6 +40,11 @@ stays in the topic file named.
 ## To relay — wasmrt cannot write there
 
 * **binaryang:** D1's `return_call_ref` feature, and D2's missing dependency rules (item 3).
+* **wasmtk:** its generated (gitignored) `tests/wasi/wasm_wasi_bundle/**/*.wat` include about ten
+  modules that `throw 0` with no tag declared (`dynrt_eval_bundle/main_*.wat`,
+  `sharedheap_bundle/main_wasic.wat`): wasm-tools refuses the source, and so does wasmrt. A
+  generator defect, found by `scripts/wat-corpus.ts` on 2026-10-24 (the files appear and disappear
+  between runs, so their builds are live).
 * **wazmrt:** `call_ref` with GC on and function-references off is admitted (measured on 2.0.0);
   const-expr depth > 8 and the element flags are not re-measured since its 2026-09-21 build.
   wasmrt implemented v35's §5 #13 in `cfeee31`, so the contract's wasmrt cell can read agreed.

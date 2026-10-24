@@ -67,6 +67,21 @@ const run = (cmd: string, args: string[]) => {
 
 let ok = 0;
 const bad: string[] = [];
+// A file whose SOURCE wasm-tools refuses, and that wasmrt refuses too: a corpus defect found by
+// measurement rather than listed by hand (2026-10-24: wasmtk's generated, gitignored
+// `wasm_wasi_bundle/**/main_wasic.wat` `throw`s an undeclared tag). Reported, never counted as ours.
+const corpusDefects: string[] = [];
+/** Does wasm-tools accept the SOURCE itself (parse, then validate)? */
+const sourceValid = (w: string, i: number) => {
+  const ref = join(tmp, `r${i}.wasm`);
+  const parsed = spawnSync("wasm-tools", ["parse", w, "-o", ref], { encoding: "utf8" }).status === 0;
+  return parsed && spawnSync("wasm-tools", ["validate", "--features", "all", ref], { encoding: "utf8" }).status === 0;
+};
+// ⚠️ wasmrt's refusal is read from its verdict text, and that text has three shapes: summarize
+// prints "validation FAILED", a decode error "decode failed", and the run path (a `_start` module)
+// "invalid module …". The gate knew only the first two until 2026-10-24, so a run-path refusal was
+// caught one step later, by wasm-tools, under the wrong heading.
+const refused = (v: string) => v.includes("FAILED") || v.includes("decode failed") || v.includes("invalid module");
 for (const [i, w] of wats.entries()) {
   const out = join(tmp, `c${i}.wasm`);
   const name = w.split(/[\\/]/).pop() ?? w;
@@ -76,21 +91,29 @@ for (const [i, w] of wats.entries()) {
     continue;
   }
   const val = run(exe, [out]);
-  if (val.includes("FAILED") || val.includes("decode failed")) {
-    bad.push(`VALIDATE   ${w}\n             ${val.split("\n").find((l) => l.includes("FAILED") || l.includes("decode"))?.trim()}`);
-    continue;
-  }
   const outside = run("wasm-tools", ["validate", "--features", "all", out]);
-  if (outside.includes("error")) {
-    bad.push(`WASM-TOOLS REFUSED OUR BYTES: ${w}\n             ${outside.trim().split("\n").slice(0, 3).join(" ")}`);
+  const weRefused = refused(val), theyRefused = outside.includes("error");
+  if (!weRefused && !theyRefused) { ok++; continue; }
+  if (!sourceValid(w, i)) {
+    // The source is invalid. wasmrt must refuse it too, or wasmrt accepted an invalid module.
+    if (weRefused) corpusDefects.push(`${w}\n             ${outside.trim().split("\n").slice(-1)[0]?.trim()}`);
+    else bad.push(`ACCEPTED AN INVALID MODULE: ${w}\n             wasm-tools refuses the source; wasmrt accepted it`);
     continue;
   }
-  ok++;
+  if (weRefused) {
+    bad.push(`VALIDATE   ${w}\n             ${val.split("\n").find((l) => refused(l))?.trim()}`);
+  } else {
+    bad.push(`WASM-TOOLS REFUSED OUR BYTES: ${w}\n             ${outside.trim().split("\n").slice(0, 3).join(" ")}`);
+  }
 }
 rmSync(tmp, { recursive: true, force: true });
 
 console.log(`.wat corpus: ${wats.length} files, ${KNOWN_BAD.length} known corpus defects skipped`);
 console.log(`  assembled, validated, and ACCEPTED BY WASM-TOOLS: ${ok}`);
+if (corpusDefects.length) {
+  console.log(`  corpus defects found (wasm-tools refuses the SOURCE, and so does wasmrt): ${corpusDefects.length}`);
+  for (const c of corpusDefects) console.log(`   ${c}`);
+}
 if (bad.length) {
   console.log(`  problems: ${bad.length}`);
   for (const b of bad) console.log(`   ${b}`);

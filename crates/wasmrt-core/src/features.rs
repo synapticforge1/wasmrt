@@ -394,81 +394,18 @@ impl Features {
 
 /// The proposal an opcode belongs to, or `None` for WebAssembly 1.0 core instructions.
 ///
-/// **One authority.** Every gate in the validator reads this table, so an instruction
-/// cannot be gated in one place and forgotten in another.
+/// **One authority, and now an EXHAUSTIVE one.** The match is GENERATED from binaryang's D1
+/// (`tables::op_feature`, letter H10 step 2; `scripts/definitions.ts`), with no catch-all: an op
+/// added to `define_ops!` without a D1 entry fails the generator, and one added without
+/// regenerating fails the build. The one place wasmrt differs from D1 (`return_call_ref` gated on
+/// function-references, as wasm-tools gates it) is an explicit, reasoned override in the generator.
 ///
-/// ⚠️ **The match is NOT exhaustive** (it ends in `_ => return None`), so a new opcode defaults to
-/// ungated. Two checks catch that instead: [`UNGATED_CORE_OPS`] pins the count, and
-/// `definitions_check` holds every op to binaryang's D1 `feature` column. *(This comment claimed
-/// exhaustiveness until 2026-10-23, after the defect it hid had already been found once.)*
+/// *(Until 2026-10-24 this was a hand-kept match ending in `_ => return None`, so a new opcode
+/// defaulted to ungated: the six GC bulk array ops shipped that way, and its doc comment had
+/// claimed exhaustiveness. `best-practices.md` §4.14.)*
 #[must_use]
 pub const fn op_feature(op: Op) -> Option<Feature> {
-    use Op::*;
-    Some(match op {
-        // --- exception handling (both encodings) ---
-        TryLegacy | CatchLegacy | Throw | Rethrow | ThrowRef | Delegate | CatchAll
-        | TryTable => Feature::Exceptions,
-
-        // --- tail calls ---
-        ReturnCall | ReturnCallIndirect => Feature::TailCall,
-
-        // --- typed function references ---
-        CallRef | ReturnCallRef | RefAsNonNull | BrOnNull | BrOnNonNull => {
-            Feature::FunctionReferences
-        }
-
-        // --- reference types ---
-        SelectT | TableGet | TableSet | RefNull | RefIsNull | RefFunc | TableGrow
-        | TableSize | TableFill => Feature::ReferenceTypes,
-
-        // --- bulk memory + table ---
-        MemoryInit | DataDrop | MemoryCopy | MemoryFill | TableInit | ElemDrop
-        | TableCopy => Feature::BulkMemory,
-
-        // --- vectors. The relaxed subset is decided by sub-opcode, not by the family
-        // tag, so `Simd` here is the floor; `simd_sub_feature` refines it. ---
-        Simd => Feature::Simd,
-
-        // --- threads / atomics ---
-        Atomic => Feature::Threads,
-
-        // --- WasmGC (the whole 0xFB family, plus `ref.eq`) ---
-        //
-        // 🔴 The six bulk array ops (`array.new_data` … `array.init_elem`, `0xFB 0x09/0x0a/0x10..0x13`)
-        // were MISSING from this arm from the day they landed (2026-08-19) until 2026-10-23, so no
-        // flag gated them. Latent, not live: each needs an array type index, and an array TYPE is
-        // refused with GC off first (measured: wasmrt "uses the disabled proposal `gc`", wasm-tools
-        // "array indexed types not supported without the gc feature"). Found by `definitions_check`
-        // against binaryang's D1, not by reading this arm — the X3 shape, a fifth time.
-        RefEq | ArrayNew | ArrayNewDefault | ArrayNewFixed | ArrayGet | ArrayGetS
-        | ArrayGetU | ArraySet | ArrayLen | ArrayNewData | ArrayNewElem | ArrayFill
-        | ArrayCopy | ArrayInitData | ArrayInitElem | RefTest | RefCastOp | RefI31 | I31GetS
-        | I31GetU | StructNew | StructNewDefault | StructGet | StructGetS | StructGetU
-        | StructSet | BrOnCast | BrOnCastFail | AnyConvertExtern | ExternConvertAny => {
-            Feature::Gc
-        }
-
-        // --- sign extension ---
-        I32Extend8S | I32Extend16S | I64Extend8S | I64Extend16S | I64Extend32S => {
-            Feature::SignExtension
-        }
-
-        // --- wide arithmetic ---
-        I64Add128 | I64Sub128 | I64MulWideS | I64MulWideU => Feature::WideArithmetic,
-
-        // --- custom-descriptors ---
-        StructNewDesc | StructNewDefaultDesc | RefGetDesc | RefCastDescEq | BrOnCastDescEq
-        | BrOnCastDescEqFail => Feature::CustomDescriptors,
-
-        // --- non-trapping float→int ---
-        I32TruncSatF32S | I32TruncSatF32U | I32TruncSatF64S | I32TruncSatF64U
-        | I64TruncSatF32S | I64TruncSatF32U | I64TruncSatF64S | I64TruncSatF64U => {
-            Feature::SaturatingFloatToInt
-        }
-
-        // Everything else is WebAssembly 1.0 and cannot be gated.
-        _ => return None,
-    })
+    crate::tables::op_feature(op)
 }
 
 /// The ops [`op_feature`] deliberately leaves ungated, by internal tag byte — WebAssembly 1.0,
@@ -493,16 +430,16 @@ pub const fn op_feature(op: Op) -> Option<Feature> {
 #[cfg(test)]
 const UNGATED_CORE_OPS: usize = 172;
 
-/// Lowest relaxed-SIMD sub-opcode in the `0xFD` space (`i8x16.relaxed_swizzle`).
-pub const RELAXED_SIMD_FIRST: u32 = 0x100;
-/// Highest relaxed-SIMD sub-opcode (`i16x8.relaxed_dot_i8x16_i7x16_add_s`).
-pub const RELAXED_SIMD_LAST: u32 = 0x113;
+/// Lowest relaxed-SIMD sub-opcode in the `0xFD` space (`i8x16.relaxed_swizzle`), from D1.
+pub const RELAXED_SIMD_FIRST: u32 = crate::tables::RELAXED_SIMD_FIRST;
+/// Highest relaxed-SIMD sub-opcode (`i32x4.relaxed_dot_i8x16_i7x16_add_s`), from D1.
+pub const RELAXED_SIMD_LAST: u32 = crate::tables::RELAXED_SIMD_LAST;
 
-/// The proposal a `0xFD` sub-opcode belongs to: relaxed SIMD for `0x100`–`0x113`, plain
-/// SIMD otherwise.
+/// The proposal a `0xFD` sub-opcode belongs to: relaxed SIMD for the sub-opcodes D1 marks
+/// `relaxedSimd` (generated, `tables::is_relaxed_simd`), plain SIMD otherwise.
 #[must_use]
 pub const fn simd_sub_feature(sub: u32) -> Feature {
-    if sub >= RELAXED_SIMD_FIRST && sub <= RELAXED_SIMD_LAST {
+    if crate::tables::is_relaxed_simd(sub) {
         Feature::RelaxedSimd
     } else {
         Feature::Simd

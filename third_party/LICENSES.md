@@ -16,7 +16,9 @@ license compliance. (Mirrors the source project `wazmrt`'s compliance scaffold.)
 > the owner's own code (not a third-party adoption). **One component is
 > recorded** (2026-10-23): the instruction-table DATA vendored for the
 > shared-definitions cross-check, which binaryang derived from WebAssembly/wabt.
-> It is test-only and reaches no shipped binary. wasmrt still ships its **own**
+> 🔁 Since 2026-10-24 part of it SHIPS (owner: shipping is cleared, with this
+> attribution, until binaryang's rewrite addresses it): the generated
+> `tables.rs`. wasmrt still ships its **own**
 > `wasmrt.h` and does **not** vendor the standard wasm-c-api `wasm.h` (unlike
 > wazmrt).
 
@@ -90,16 +92,19 @@ Newest first. Copy the template below for each future adopted component.
 - **What we reused:** DATA, not code: the instruction table (mnemonic, encoding, immediate kinds,
   stack signature, gating feature) and binaryang's feature and verdict lists.
 - **Where it lives in wasmrt:** `definitions/binaryang/{opcodes,features,verdicts}.json` (vendored,
-  unmodified, verified by hash), and `crates/wasmrt-core/src/definitions.rs`, which is GENERATED
-  from them by `scripts/definitions.ts`. Both modules are `#[cfg(test)]`: in the published crate's
-  source, in no shipped binary.
-- **Modifications:** the JSON is verbatim. `definitions.rs` re-expresses it as Rust constants (a
-  mechanical transformation), and its header says so.
+  unmodified, verified by hash), and two files GENERATED from them by `scripts/definitions.ts`:
+  `crates/wasmrt-core/src/definitions.rs` (`#[cfg(test)]`, for the cross-check) and, 🆕 since
+  2026-10-24, `crates/wasmrt-core/src/tables.rs`, which is **compiled into every binary**: the
+  exhaustive opcode → proposal map, the relaxed-SIMD set, and the `0xFD`/`0xFE` mnemonic tables.
+- **Modifications:** the JSON is verbatim. Both generated files re-express it as Rust (a mechanical
+  transformation, keyed on wasmrt's own `Op` variants in `tables.rs`, with one reasoned override),
+  and each file's header says so.
 - **Obligations satisfied:** [x] license copied  [x] NOTICE (none upstream; attribution in ours)
   [x] change-note in the generated source  [x] SPDX header in the generated source
 - **Benefit / drawback note:** it lets a test hold wasmrt's own opcode and feature tables to the
-  workspace's single source (letter H10). It found a real gating defect on its first run. It costs
-  nothing at run time and about 130 KB of test-only crate source.
+  workspace's single source (letter H10). It found a real gating defect on its first run. Since
+  2026-10-24 it also replaces the hand-kept tables (H10 step 2), measured at +1,024 bytes on the
+  release CLI and −512 bytes on the cdylib.
 
 <!--
 ### <component-name>

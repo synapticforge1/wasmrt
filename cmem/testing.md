@@ -1120,6 +1120,19 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 `wat-corpus.ts` classifies corpus defects by the SOURCE (2026-10-24)
+
+wasmtk's tree now holds **613** `.wat` files (it was 603 a day earlier, and the count moved between
+runs on 2026-10-24: wasmtk's generated `wasm_wasi_bundle` outputs are rebuilt live). About ten of
+them `throw` an undeclared tag. The gate now asks, for any file wasmrt or wasm-tools refuses, whether
+wasm-tools accepts the SOURCE: if not, and wasmrt refuses too, the file is a **corpus defect**,
+listed and not counted against wasmrt; if wasmrt ACCEPTED it, that is a failure ("accepted an invalid
+module", inverted). It also recognizes the run path's "invalid module" verdict, which it used to
+miss. Result: **602 accepted by wasm-tools, 4 known defects, 9 found**, PASSED. ⚠️ A first fix that
+enumerated only git-TRACKED files was measured and withdrawn: it shrank the corpus 612 → 95, because
+most of the `.wat` files are generated and gitignored. ⚠️ Observed, not changed: the gate's
+"validate" step is a bare `wasmrt <module>`, which RUNS a `_start` module (sandboxed, no preopens).
+
 ### 🆕 The `.wast` runner compares trap messages; D3 checked (2026-10-24) — **604 workspace tests**
 
 `assert_trap` (both forms) and `assert_exhaustion` now pass only when the trap matches the expected

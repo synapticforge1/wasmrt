@@ -16,11 +16,34 @@ regenerates it and diffs.
 | the pin | `definitions/binaryang/PIN.json` | repo, tag, commit, and each file's git blob id and content sha256 |
 | the generator | `scripts/definitions.ts` | verifies the source, writes the copy; `--check` regenerates and diffs; `fetch <tag> <commit>` re-pins |
 | the copy | `crates/wasmrt-core/src/definitions.rs` | GENERATED. **Hand-editing it is a DEFECT** (H10) |
-| the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's own tables to the copy; runs in `cargo test` |
+| the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test` |
+| 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables. Compiled into every binary |
 
 **Pinned 2026-10-23: binaryang `v1.14.0`, commit `7ebcee3ad055`** — 582 instructions, 22 features,
-20 verdicts. Both the copy and the cross-check are `#[cfg(test)]`, so they reach no shipped artifact.
-They are in the published crate's *source* (about 130 KB, test-only).
+20 verdicts. The copy and the cross-check are `#[cfg(test)]`; 🔁 since 2026-10-24 `tables.rs` ships
+(owner-cleared, with the wabt attribution in NOTICE).
+
+### 🆕 H10 step 2, stage 1 — the generated tables (2026-10-24)
+
+`scripts/definitions.ts` now also writes `tables.rs`, keyed on wasmrt's own `Op` variants: it reads
+`define_ops!` from `opcode.rs` and `Feature::from_name` from `features.rs`, and maps every D1
+instruction onto a variant (199 single-byte by byte; 59 prefixed by name, the `null` forms of
+`ref.test` / `ref.cast` / `ref.cast_desc_eq` sharing one; `Simd` / `Atomic` as family floors).
+* **It refuses, rather than guesses:** a variant D1 lacks, a D1 entry no variant takes, two D1 forms
+  of one variant disagreeing on the feature, a D2 feature `from_name` cannot resolve, a non-contiguous
+  relaxed-SIMD range, and a STALE override.
+* **One override, with its reason:** `return_call_ref` → function-references (D1 says tail-call;
+  wasm-tools 1.262 gates function-references only).
+* **Proved equal before the swap:** a temporary test compared every one of the 258 ops, every SIMD
+  and atomic entry, and the relaxed set, generated against hand-kept, and found no difference
+  (inverted by hand-editing one arm, which also failed `--check`). Then the hand code was deleted:
+  `lookup_simd`'s ~270-line table, `lookup_atomic`'s layout arithmetic, `op_feature`'s match.
+* **Inverted after it:** an op added to `define_ops!` without regenerating fails the BUILD
+  (`non-exhaustive patterns`), and the generator refuses it; a stale override fails the generator.
+* **Cost, measured back to back:** release CLI +1,024 bytes (845,312 → 846,336), cdylib −512 bytes
+  (537,600 → 537,088). The interpreter's dispatch is untouched, so no hot-path benchmark applies.
+* **Not yet generated (stage 2):** the `define_ops!` list itself and the `0xFB`/`0xFC` decode
+  dispatch, whose variant names and internal tags are wasmrt's own and appear in the public surface.
 
 ### How the source is verified (every run)
 

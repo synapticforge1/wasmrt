@@ -16,14 +16,17 @@ derived from wazmrt in design, and that history is real whatever the two project
   the work came from.*
 - `scripts/wazmrt-provenance.txt` records which wazmrt commits the port was developed against. It is a
   historical record; **nothing reads it**, and it is not a licence artifact.
-- ⚠️ The **Component Ledger stays EMPTY** — wasmrt is 100% original Rust. That was true when wazmrt was
+- ⚠️ The **Component Ledger stayed EMPTY until 2026-10-23** (now one DATA entry: wabt, by way of
+  binaryang; below) — wasmrt's CODE is 100% original Rust. That was true when wazmrt was
   the oracle and is unaffected by the split. Adopting *anyone's* code, wazmrt's included, still triggers
   the Adoption Checklist and a ledger entry.
 - 🆕 **2026-10-23: binaryang's shared-definitions DATA is vendored** (`definitions/binaryang/*.json`,
   pinned at `v1.14.0`), and `crates/wasmrt-core/src/definitions.rs` is generated from it (letter H10;
-  [shared-definitions.md](shared-definitions.md)). binaryang is the same owner's MIT project, and the
-  generated module is test-only (`#[cfg(test)]`), so it reaches no shipped binary, though it is in
-  the published crate's source. binaryang populated D1 from its wabt-ts table, a port of wabt
+  [shared-definitions.md](shared-definitions.md)). binaryang is the same owner's MIT project. The
+  generated `definitions.rs` is test-only; 🔁 **since 2026-10-24 the generated `tables.rs` SHIPS**
+  (owner: *"using op codes from binaryang will initially produce some licensing attribution
+  documentation. binaryang will perform a rewrite in the future that will address this issue."*), so
+  the attribution below now covers shipped binaries. binaryang populated D1 from its wabt-ts table, a port of wabt
   (Apache-2.0). 🔒 **Owner, 2026-10-23: "attribution: yes."** So the Component Ledger has its FIRST
   entry (wabt, by way of binaryang), and the rest follows the Adoption Checklist:
   * `third_party/wabt/LICENSE` is wabt's own text, taken at tag `1.0.41`.
@@ -31,7 +34,8 @@ derived from wazmrt in design, and that history is real whatever the two project
     so there is nothing to propagate.
   * The generated `definitions.rs` opens with an SPDX tag and a change-note (written by the
     generator, so regeneration keeps them).
-  * `README.md` says the engine is still 100% original and names the one test-only component.
+  * `README.md` says the engine incorporates no third-party CODE and names the one DATA component,
+    which partly ships since 2026-10-24.
 
 ## Files (mimic wazmrt) — **all four exist since the T0 scaffold**, verified 2026-08-06
 
