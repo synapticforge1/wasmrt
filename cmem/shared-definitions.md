@@ -19,14 +19,21 @@ regenerates it and diffs.
 | the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test` |
 | 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables, the `0xFB`/`0xFC` dispatch (`fb_op`, `fc_op`, `prefixed`). Compiled into every binary |
 
-⚠️ **The TYPE rule is AHEAD of the pin (2026-10-24, owner-directed).** `features::val_type_unmet`
-implements D2's `typeRules` as binaryang § 44 states them (wasm-tools 1.262's rule), which the pinned
-D2 2.1.0 does not yet carry; it is held by a probe against wasm-tools and a unit test, not by the copy.
-When the next binaryang release is pinned, add `typeRules` / `encodingRules` to `definitions_check`
-(`open-work.md` item 1; `known-issues.md`, top).
+✅ **D2's TYPE and ENCODING rules are held in `cargo test` (since the 2.2.0 re-pin, 2026-10-24).**
+The generator emits `TYPE_RULES` / `ENCODING_RULES`; `definitions_check` maps each rule's subject
+text to wasmrt types (`type_subjects`) or modules (`encoding_fixtures`, 11 rules, 17 modules) and
+checks `features::val_type_unmet` under every subset of the features the type rules name, and each
+module refused with its rule's features off and valid with all on. An unmapped subject, or a mapping
+D2 dropped, fails the gate. Inverted on adding: the old `exact` exemption and a one-table "more than
+one table" fixture each failed it. *(From 2026-10-24 morning until the re-pin the type rule ran
+AHEAD of the pin, held only by a wasm-tools probe and a unit test.)* The re-pin's first matrix found
+one wasmrt defect: an `exact` reference skipped the reference-types check (`known-issues.md`, top).
 
-**Pinned 2026-10-24: binaryang `v2.1.0`, commit `b7fdb9de5785`** (D1 1.0.1, D2 2.1.0 with `requires`
-and `presets`, D3 1.0.0) — 582 instructions, 22 features, 20 verdicts. *(Was `v1.14.0` /
+**Pinned 2026-10-24: binaryang `v2.2.0`, commit `6e1923397def`** (D1 1.0.1, D2 2.2.0 with
+`typeRules` and `encodingRules`, D3 1.0.0) — 582 instructions, 22 features, 20 verdicts; only
+`features.json` changed from 2.1.0. *(Was `v2.1.0` / `b7fdb9de5785` earlier the same day.)*
+*(Before that: binaryang `v2.1.0`, commit `b7fdb9de5785`* (D1 1.0.1, D2 2.1.0 with `requires`
+and `presets`, D3 1.0.0). *(Was `v1.14.0` /
 `7ebcee3ad055` from 2026-10-23; re-pinned for the contract v37 migration, where the one generator
 override and three KNOWN entries became stale because binaryang adopted wasmrt's answers.)* The copy and the cross-check are `#[cfg(test)]`; 🔁 since 2026-10-24 `tables.rs` ships
 (owner-cleared, with the wabt attribution in NOTICE).

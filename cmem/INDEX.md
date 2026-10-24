@@ -81,7 +81,7 @@ committed BEFORE the publish handoff.
 | [architecture.md](architecture.md) | the crates, the dual native/`wasm32` target, how a module flows through the engine |
 | [design-decisions.md](design-decisions.md) | 🔒 owner rules (PROVE DO NOT ASSUME, TOOLING, PRIVACY, oracle retired) and invariants not to revert |
 | [best-practices.md](best-practices.md) | 🎓 the lessons this port paid for, each with its defect; the workspace ★ rules copied at the end |
-| [interop.md](interop.md) | 🤝 the wasmrt ⇄ wazmrt swappability contract, mirrored verbatim (v35) |
+| [interop.md](interop.md) | 🤝 the wasmrt ⇄ wazmrt swappability contract, mirrored verbatim (v39; the version lives in `open-work.md`) |
 | [shared-definitions.md](shared-definitions.md) | binaryang's D1/D2/D3, vendored and GENERATED into `definitions.rs` and the shipped `tables.rs`; what the cross-check asserts; the type rule that is ahead of the pin |
 | [testing.md](testing.md) | every gate, how to run it, what it can and cannot see; dated counts |
 | [known-issues.md](known-issues.md) | the defect log, newest first: cause, fix, the test that pins it |

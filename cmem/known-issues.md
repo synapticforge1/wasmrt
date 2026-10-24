@@ -1,5 +1,16 @@
 # Known Issues
 
+## 🔁 2026-10-24 — the binaryang 2.2.0 re-pin: one wasmrt defect, one wazmrt finding
+
+Matrix: wazmrt's `cmem/probes/d2-matrix.ts`, wasmrt's S1 corpus (140 modules) × D2's 49
+configurations, against binaryang v2.2.0's `wasm-validate` (exported with `git archive v2.2.0`).
+
+| | what | state |
+| --- | --- | --- |
+| 🔴 | **An `exact` reference skipped the reference-types and typed-reference checks** — `(ref null (exact $a))` validated under `all,-reference-types`; wasm-tools 1.262 and binaryang refuse it. The 2026-10-24 type-rule fix exempted `exact` from its first step, and no test held an exact type to the rule | ✅ fixed (`val_type_unmet`: every reference needs reference-types; a concrete one function-references or gc; an exact one custom-descriptors too). Matrix 2 → 0 of 6,860. S1 −1, so the floor since 1.0.0 is **MAJOR** (`open-work.md` item 1). Now held by `definitions_check` against D2 `typeRules` |
+| 🟡 | **wazmrt accepts a table initializer with function-references off** (`(table 1 funcref (ref.null func))`), where wasmrt, wasm-tools 1.262 and binaryang 2.2.0 refuse it (D2 `encodingRules`). Contract v39 says wazmrt met the encoding rules; its own corpus has no such module, so its matrix read 0 | relayed (`open-work.md`); wazmrt's to fix. wasmrt ⇄ wazmrt: 0 of 2,352 over wazmrt's corpus, 54 of 6,860 over wasmrt's (all this module) |
+| 🎓 | **A fixture can be wrong in the same way as the code.** The first hand-built overlong-`call_indirect` module had both size prefixes one short; the gate reported it as "refused with every feature on", and wasm-tools confirmed the bytes, not wasmrt, were at fault | fixed before the gate was believed |
+
 ## 🔧 2026-10-24 — D2's TYPE RULE (binaryang § 44, wasm-tools' rule), adopted owner-directed
 
 binaryang's § 44 (drafted, not yet sent) states D2 `typeRules` = wasm-tools 1.262's rule (owner:
