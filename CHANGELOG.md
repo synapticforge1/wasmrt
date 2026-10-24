@@ -32,8 +32,14 @@ each version subject to the bump gate._
   - a bare list now starts from NOTHING, `mutable-globals` included, and the new
     **`mutable-globals`** feature gates importing or exporting a mutable global;
   - **no feature set is refused** any more (`--features gc` used to fail);
-  - a typed reference needs reference-types and (function-references or GC); an overlong
-    `call_indirect` table index needs reference-types (WebAssembly 1.0 writes one zero byte);
+  - **every reference type needs reference-types**, and the GC and exception types their own
+    proposal as well (`anyref` needs reference-types AND gc; `exnref` reference-types AND
+    exceptions); a concrete `(ref null? $t)` needs function-references or GC, while a non-null
+    `(ref func)` / `(ref extern)` needs function-references (GC does not admit it). This is
+    binaryang D2's `typeRules`, which are wasm-tools 1.262's rule, and matches `wasm-tools
+    validate` on every value type under every combination of the four features;
+  - an overlong `call_indirect` table index needs reference-types (WebAssembly 1.0 writes one zero
+    byte);
   - `floats`, `bulk-memory-opt`, `legacy-exceptions`, `call-indirect-overlong`, `gc-types` and
     `mutable-global` (wasm-tools spellings) still work, with a deprecation warning;
     `annotations`, `code-metadata` and `compact-imports` are accepted and switch nothing.
