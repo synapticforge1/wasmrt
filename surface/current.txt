@@ -41,6 +41,7 @@ c	enum wasmrt_feature_t WASMRT_FEATURE_GC = 12
 c	enum wasmrt_feature_t WASMRT_FEATURE_MEMORY64 = 10
 c	enum wasmrt_feature_t WASMRT_FEATURE_MULTI_MEMORY = 9
 c	enum wasmrt_feature_t WASMRT_FEATURE_MULTI_VALUE = 2
+c	enum wasmrt_feature_t WASMRT_FEATURE_MUTABLE_GLOBALS = 18
 c	enum wasmrt_feature_t WASMRT_FEATURE_REFERENCE_TYPES = 3
 c	enum wasmrt_feature_t WASMRT_FEATURE_RELAXED_SIMD = 7
 c	enum wasmrt_feature_t WASMRT_FEATURE_SATURATING_FLOAT_TO_INT = 1
@@ -1413,7 +1414,7 @@ rust:wasmrt-core	pub const fn wasmrt_core::types::ValType::inexact(self) -> wasm
 rust:wasmrt-core	pub const fn wasmrt_core::types::ValType::is_concrete(self) -> bool
 rust:wasmrt-core	pub const fn wasmrt_core::types::ValType::is_exact(self) -> bool
 rust:wasmrt-core	pub const wasmrt_core::VERSION: &str
-rust:wasmrt-core	pub const wasmrt_core::features::Feature::ALL: [wasmrt_core::features::Feature; 18]
+rust:wasmrt-core	pub const wasmrt_core::features::Feature::ALL: [wasmrt_core::features::Feature; 19]
 rust:wasmrt-core	pub const wasmrt_core::features::RELAXED_SIMD_FIRST: u32
 rust:wasmrt-core	pub const wasmrt_core::features::RELAXED_SIMD_LAST: u32
 rust:wasmrt-core	pub const wasmrt_core::interp::EXTERN_TAG: wasmrt_core::interp::Value
@@ -1558,6 +1559,7 @@ rust:wasmrt-core	pub fn wasmrt_core::features::Features::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::features::Features::default() -> Self
 rust:wasmrt-core	pub fn wasmrt_core::features::Features::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::features::Features::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+rust:wasmrt-core	pub fn wasmrt_core::features::Features::from_preset(&str) -> core::option::Option<wasmrt_core::features::Features>
 rust:wasmrt-core	pub fn wasmrt_core::features::IncoherentFeatures::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::features::IncoherentFeatures::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::features::IncoherentFeatures::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2050,6 +2052,7 @@ rust:wasmrt-core	pub wasmrt_core::features::Feature::Gc
 rust:wasmrt-core	pub wasmrt_core::features::Feature::Memory64
 rust:wasmrt-core	pub wasmrt_core::features::Feature::MultiMemory
 rust:wasmrt-core	pub wasmrt_core::features::Feature::MultiValue
+rust:wasmrt-core	pub wasmrt_core::features::Feature::MutableGlobals
 rust:wasmrt-core	pub wasmrt_core::features::Feature::ReferenceTypes
 rust:wasmrt-core	pub wasmrt_core::features::Feature::RelaxedSimd
 rust:wasmrt-core	pub wasmrt_core::features::Feature::SaturatingFloatToInt
@@ -2068,6 +2071,7 @@ rust:wasmrt-core	pub wasmrt_core::features::Features::gc: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::memory64: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::multi_memory: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::multi_value: bool
+rust:wasmrt-core	pub wasmrt_core::features::Features::mutable_globals: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::reference_types: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::relaxed_simd: bool
 rust:wasmrt-core	pub wasmrt_core::features::Features::saturating_float_to_int: bool
@@ -2246,6 +2250,7 @@ rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::TypeIndex(u32)
 rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::Value(wasmrt_core::types::ValType)
 rust:wasmrt-core	pub wasmrt_core::opcode::BrTable::default: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::BrTable::labels: alloc::vec::Vec<u32>
+rust:wasmrt-core	pub wasmrt_core::opcode::CallIndirect::overlong: bool
 rust:wasmrt-core	pub wasmrt_core::opcode::CallIndirect::table: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::CallIndirect::type_index: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::Catch::kind: wasmrt_core::opcode::CatchKind
