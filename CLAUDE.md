@@ -14,9 +14,8 @@ wasmtk WASI corpus.
 **Project memory is [`cmem/`](cmem/). Start at [`cmem/INDEX.md`](cmem/INDEX.md).** The current state
 and the open list are in [`cmem/open-work.md`](cmem/open-work.md), and nowhere else.
 
-**State (2026-10-24):** `1.0.0` released, the conformance clear-out (spec suite 64,603 / 0 / 0 over
-288 files); the `2.0.0` release commit is made (the owner's tag and publish
-are next), then the review stages T9–T12, each numbered by the bump gate. Detail: `cmem/open-work.md`.
+**State (2026-10-24):** `2.0.0` released (spec suite 64,603 / 0 / 0 over 288 files; `1.0.0` was the
+conformance clear-out); next are the review stages T9–T12, each numbered by the bump gate. Detail: `cmem/open-work.md`.
 
 ## Triggers (full text: `cmem/INDEX.md`)
 
