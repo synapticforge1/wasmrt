@@ -1,5 +1,12 @@
 # Known Issues
 
+## 🤝 2026-10-24 — contract v35: a WASI guest no longer inherits the host environment
+
+| | what | state |
+| --- | --- | --- |
+| 🔒 | **The guest inherited the WHOLE host environment**, with `--env` layered on top: measured 2026-10-24, **109** host variables reached a guest given no `--env` (wazmrt's guest: 0). An environment carries secrets, and a guest should reach only what it is granted. Also `--env =x` (an empty KEY) was accepted | ✅ **CHANGED to v35's rule** (§5 #13, owner 2026-10-24): the guest sees ONLY the `--env` variables; `KEY=VALUE` with a non-empty KEY, else rc 1 (`A`, `=x`, `=` refused; `A=` is a real variable); a repeated KEY replaces (last wins). Pinned by `a_wasi_guest_sees_only_the_env_flags` (which asserted the opposite until today), with each half inverted: inheriting gives 132 vs 0, accepting `=x` fails the refusal, appending a repeat gives 2 vs 1. ⚠️ **Breaking for guests that read a host variable without `--env`** (README Breaking Changes). The C ABI never inherited: it passes only what the embedder sets |
+| ✅ | **§5 #14: a `--pins` DB that cannot be read** | Already an error on wasmrt in every mode (re-measured 2026-10-24: rc 1, "cannot read pin DB"); wazmrt changed to match. No wasmrt change |
+
 ## 🤝 2026-10-24 — the contract v33 review: one CLI message fixed, one three-way divergence open
 
 Measured on wasmrt HEAD, wazmrt 2.0.0 and wasm-tools 1.262. Detail: `roadmap.md`, the v33 review.
@@ -331,7 +338,7 @@ warning. Each was reproduced on the real binary before the fix and is now pinned
 
 | # | what it did | measured |
 | --- | --- | --- |
-| 1 | 🔴 **`wasmrt wasi` WIPED the guest's environment.** `WasiCtx::with_env` **assigns**; calling it twice (inherited, then `--env`) read as layering and was replacement. | guest saw **0** variables where it had seen 97; `--env FOO=1` → exactly 1 |
+| 1 | 🔴 **`wasmrt wasi` WIPED the guest's environment.** `WasiCtx::with_env` **assigns**; calling it twice (inherited, then `--env`) read as layering and was replacement. 🗄️ *Superseded 2026-10-24 by contract v35 (§5 #13, owner): the guest now sees ONLY `--env`, so "0 variables with no `--env`" is the RULE. The single-call fix stays; the inheritance it protected is gone.* | guest saw **0** variables where it had seen 97; `--env FOO=1` → exactly 1 |
 | 2 | 🔒 **A pin DB that exists but cannot be READ counted as no DB** — root-owned `0600`, or a `0700` parent → `armed = false` → **everything ran unverified, silently.** Fail-OPEN, the mirror of the malformed-DB rule that fails closed. | `read_to_string(..).ok()` erased the distinction |
 | 3 | 🔒 **`wasmrt wast s.wast --verify enforce` accepted the flag and DROPPED it** — flags were parsed from a leading run only, while the file scan tolerated them anywhere. | after the path: **rc 0, script ran**; before it: rc 1, refused |
 | 4 | 🔒 **The bare-path `.wast` form discarded every flag written before the path**, because it rebuilt an argv and re-parsed it. | `wasmrt --verify enforce s.wast` → **rc 0, ran** |

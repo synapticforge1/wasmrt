@@ -57,39 +57,64 @@ const BOTH_NO_IMPORTS: &[u8] = br#"(module (memory (export "memory") 1)
   (func (export "_start"))
   (func (export "status") (result i32) (i32.const 42)))"#;
 
-/// ⚠️⚠️ `WasiCtx::with_env` ASSIGNS. Calling it twice — inherited environment, then `--env` —
-/// read as layering and was replacement: the guest saw **zero** variables.
+/// Exits with the third byte of the guest's FIRST environment entry: for `A=2` that is `'2'` (50).
+const ENV_VALUE_PROBE: &[u8] = br#"(module
+  (import "wasi_snapshot_preview1" "environ_get" (func $get (param i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
+  (memory (export "memory") 1)
+  (func (export "_start")
+    (drop (call $get (i32.const 0) (i32.const 64)))
+    (call $exit (i32.load8_u (i32.add (i32.load (i32.const 0)) (i32.const 2))))))"#;
+
+/// 🔒 **Contract v35, §5 #13 (owner, 2026-10-24): a WASI guest sees ONLY the `--env` variables,
+/// nothing from the host; an entry is `KEY=VALUE` with a non-empty KEY, else rc 1; a repeated KEY
+/// replaces the earlier entry (last wins), never a second entry.**
 ///
-/// The overridden key is one this test puts into wasmrt's OWN environment, so its spelling is
-/// known. It used to override `PATH`, which Windows hands a child as `Path` when the parent is
-/// PowerShell, so the override ADDED a key there (126 vs 125) and the test failed by shell, not by
-/// code. Whether `--env PATH=x` should replace a host `Path` is a separate question: a POSIX guest
-/// sees two distinct keys, so it is not obviously a defect.
+/// ⚠️ This test asserted the OPPOSITE until v35: that the guest inherits the host environment, with
+/// `--env` layered on top (it was written 2026-09-19, when `WasiCtx::with_env` assigning twice wiped
+/// the inherited environment and that read as a defect). The owner reversed the rule: a guest
+/// reaches only what it is granted, and an environment carries secrets.
+///
+/// The host key below is one this test puts into wasmrt's OWN environment, so the no-inheritance
+/// check cannot pass because a variable happened to be absent or spelled differently (Windows hands
+/// a child `Path`, not `PATH`, when the parent is PowerShell).
 #[test]
-fn env_flags_add_to_the_inherited_environment_rather_than_replacing_it() {
-    const KEY: &str = "WASMRT_TEST_INHERITED";
+fn a_wasi_guest_sees_only_the_env_flags() {
+    const HOST_KEY: &str = "WASMRT_TEST_INHERITED";
     let run = |args: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_wasmrt"))
             .args(args)
-            .env(KEY, "host")
+            .env(HOST_KEY, "host")
             .output()
             .expect("spawn wasmrt")
-            .status
-            .code()
-            .expect("exit code")
     };
+    let count = |args: &[&str]| run(args).status.code().expect("exit code");
     let m = write("env_probe.wat", ENV_PROBE);
-    let inherited = run(&["wasi", &m]);
-    assert!(inherited > 0, "the guest must inherit the host environment, saw {inherited}");
 
-    let with_new = run(&["wasi", "--env", "WASMRT_TEST_ONLY=1", &m]);
-    assert_eq!(with_new, inherited + 1, "a new variable is added");
+    assert_eq!(count(&["wasi", &m]), 0, "nothing from the host reaches the guest");
+    assert_eq!(count(&[&m]), 0, "nor on the bare-path run mode");
+    let leak = format!("{HOST_KEY}=x");
+    assert_eq!(count(&["wasi", "--env", "A=1", "--env", "B=2", &m]), 2, "exactly the --env variables");
+    assert_eq!(count(&["wasi", "--env", &leak, &m]), 1, "naming a host key is a new variable, not a merge");
 
-    // An override replaces in place: the count does not grow, and nothing is duplicated (two
-    // entries for one key is a shape no libc expects).
-    let override_arg = format!("{KEY}=guest");
-    let overridden = run(&["wasi", "--env", &override_arg, &m]);
-    assert_eq!(overridden, inherited, "an existing variable is replaced, not duplicated");
+    // A repeated KEY replaces in place: one entry, and it carries the LAST value.
+    assert_eq!(count(&["wasi", "--env", "A=1", "--env", "A=2", &m]), 1, "a repeated KEY is not duplicated");
+    let v = write("env_value_probe.wat", ENV_VALUE_PROBE);
+    assert_eq!(count(&["wasi", "--env", "A=1", "--env", "A=2", &v]), i32::from(b'2'), "the last value wins");
+
+    // Malformed entries are refused before anything runs. The probe's exit status is a COUNT, so
+    // rc 1 alone would also mean "one variable": the message is what proves the refusal.
+    for bad in ["A", "=x", "="] {
+        let out = run(&["wasi", "--env", bad, &m]);
+        assert_eq!(out.status.code(), Some(1), "--env {bad} must be refused");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("expected KEY=VALUE"),
+            "--env {bad}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    // An empty VALUE is a real variable: `A=` names A.
+    assert_eq!(count(&["wasi", "--env", "A=", &m]), 1, "`A=` sets A to the empty string");
 }
 
 /// ⚠️ `wast` has no guest argv, so a host flag is a host flag wherever it appears. Parsing only a

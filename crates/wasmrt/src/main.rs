@@ -181,13 +181,16 @@ struct VerifyFlags {
     opt_out: bool,
 }
 
-/// The environment the guest sees: the host's, with `--env KEY=VALUE` overriding a variable of the
-/// same name and appending any that are new.
+/// The environment the guest sees: ONLY the `--env KEY=VALUE` variables, in order, nothing from the
+/// host (contract v35, §5 #13, owner 2026-10-24). A guest reaches only what it is granted, and a
+/// process environment carries secrets. *(Until v35 the guest inherited the whole host
+/// environment, with `--env` layered on top.)*
 ///
-/// ⚠️ Override, not duplicate: WASI hands the guest a flat list, and two entries for one key is a
-/// shape no libc expects — `getenv` would return whichever the implementation happened to find.
-fn merged_env(overrides: &[(String, String)]) -> Vec<(String, String)> {
-    let mut env: Vec<(String, String)> = std::env::vars().collect();
+/// ⚠️ A repeated KEY replaces the earlier entry in place (last wins), never a second entry: WASI
+/// hands the guest a flat list, and two entries for one key is a shape no libc expects — `getenv`
+/// would return whichever the implementation happened to find.
+fn guest_env(overrides: &[(String, String)]) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = Vec::new();
     for (k, v) in overrides {
         match env.iter_mut().find(|(ek, _)| ek == k) {
             Some(slot) => slot.1 = v.clone(),
@@ -758,8 +761,9 @@ fn take_dir_flags(
             let Some(v) = args.get(i + 1) else {
                 return Err(String::from("--env needs KEY=VALUE"));
             };
-            let Some((k, val)) = v.split_once('=') else {
-                return Err(format!("--env {v}: expected KEY=VALUE"));
+            // `KEY=VALUE` with a NON-EMPTY KEY (v35, §5 #13): `=x` names no variable at all.
+            let Some((k, val)) = v.split_once('=').filter(|(k, _)| !k.is_empty()) else {
+                return Err(format!("--env {v}: expected KEY=VALUE with a non-empty KEY"));
             };
             hf.env.push((k.to_string(), val.to_string()));
             i += 2;
@@ -946,12 +950,10 @@ fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String]) ->
     // argv[0] is the module path, then whatever follows on our command line.
     let mut ctx = ctx
         .with_args(std::iter::once(path.to_string()).chain(guest_argv.iter().cloned()))
-        // ⚠️⚠️ ONE call, with the merge done here. `WasiCtx::with_env` ASSIGNS rather than
-        // appends, so calling it twice — inherited environment, then `--env` — did not layer
-        // them: it **wiped the inherited environment**, and a guest that had seen the whole
-        // process environment suddenly saw nothing (measured: 0 variables). A second call that
-        // reads as additive and is not.
-        .with_env(merged_env(&flags.env));
+        // ⚠️ ONE call: `WasiCtx::with_env` ASSIGNS rather than appends, so a second call replaces
+        // the first (2026-09-19, when the guest still inherited the host and a second call wiped
+        // it). Since v35 the guest sees only `--env`, so there is nothing else to layer.
+        .with_env(guest_env(&flags.env));
     // **The guest reaches nothing it was not explicitly granted.** With no `--dir`, every
     // path call returns BADF; there is no implicit cwd preopen.
     for p in &flags.preopens {
@@ -1520,7 +1522,9 @@ fn print_help() {
            an error — write `./data`\n    \
            --ro-dir <host>[:<guest>]   grant read-only access (propagates to the subtree)\n    \
            --allow-symlink             let the guest CREATE symlinks (off by default)\n    \
-           --env KEY=VALUE             set one variable for the guest (repeatable)\n    \
+           --env KEY=VALUE             set one variable for the guest (repeatable; the guest\n                                \
+           sees ONLY these, none of the host's; a repeated KEY\n                                \
+           replaces the earlier one)\n    \
            --max-memory <size>         linear-memory ceiling (e.g. 512M, 2G)\n    \
            --max-table-elems <count>   table-entry ceiling\n    \
            --max-iterations <count>    stop a guest that never returns (default 1G, 0 = off;\n                                \

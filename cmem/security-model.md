@@ -390,6 +390,12 @@ recorded deliberate decision, so the two stay distinct at link level by design. 
 
 #### 3b. The CLI options — the live diff, and one break that exists TODAY
 
+> 🗄️ **SUPERSEDED — a 2026-08-19 snapshot, kept as the record of the planning.** Every wasmrt ❌ below
+> has since shipped, and the `--dir` separator is settled by contract v27. **The live table is
+> `interop.md` §2.2, verified by running both runtimes (v35, 2026-10-24).** One rule there changed
+> what a guest can see: 🔒 **a WASI guest sees ONLY the `--env` variables, nothing from the host**
+> (v35, §5 #13, owner 2026-10-24: an environment carries secrets).
+
 **Run modes.** wazmrt dispatches on the file extension and on whether an export was named; wasmrt uses
 explicit subcommands.
 

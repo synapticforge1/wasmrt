@@ -444,7 +444,9 @@ this machine, so it lives in machine-local notes, not here (workspace rule).
 
 **State, measured 2026-10-24:** spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`:
 0 regressed); **602 workspace tests**, 0 failed, 1 ignored (from Git Bash); the surface gate, eol and
-definitions gates green. `main` = `origin/main`. Contract mirror at **v34**, byte-identical to wazmrt.
+definitions gates green. Contract mirror at **v35**, byte-identical to wazmrt (`5fe7138`). 🔒 v35's
+§5 #13 is IMPLEMENTED: a WASI guest sees only `--env`, an empty KEY is refused, a repeated KEY
+replaces (`known-issues.md`, top; Breaking Changes row in the README). §5 #14 needed no change.
 History rewritten twice (2026-10-23 paths, 2026-10-24 drive letters): look old ids up in
 `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`. Nothing is half-finished in this tree.
 

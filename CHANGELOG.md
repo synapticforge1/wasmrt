@@ -20,6 +20,12 @@ measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt a
 
 ### Changed (2026-10-24)
 
+- ⚠️ **Breaking (WASI): a guest sees ONLY the `--env` variables.** It no longer inherits the host's
+  environment, which can carry secrets; with no `--env` the guest's environment is empty. Pass each
+  variable it needs with `--env KEY=VALUE`. A repeated KEY replaces the earlier one, and an entry
+  with an empty name (`--env =x`) is now an error (exit 1). This is the swappability contract's v35
+  rule; wazmrt applies it. The C ABI is unchanged: it never inherited.
+
 - **Versioning is SemVer 2.0.0, and the bump is a gate result.** `bun scripts/bump.ts` diffs the
   public surface (the Rust API, `wasmrt.h`, the CLI's flags and usage shapes) and which modules are
   accepted against the last release, and refuses a bump below what the diff requires. A version tag

@@ -24,7 +24,7 @@ parity testing at every step.
 > consume. Handles are checked, so one from the wrong store is refused rather than followed.
 >
 > It also runs **real WASI programs** — `wasmrt wasi prog.wasm`, or just `wasmrt prog.wasm` — with
-> stdio, args, environ, clocks, `random_get` and a **sandboxed filesystem**. A guest reaches only what
+> stdio, args, environ (only what `--env` passes), clocks, `random_get` and a **sandboxed filesystem**. A guest reaches only what
 > you preopen: `--dir <host>[:<guest>]`, or `--ro-dir` for read-only (which propagates to the whole
 > subtree). With no `--dir`, every path call returns `BADF` — there is no implicit working directory.
 > `--max-memory`, `--max-table-elems` and `--max-iterations` cap what it may consume, and
@@ -137,6 +137,7 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 | Version | What changed | How to migrate |
 | --- | --- | --- |
 | _next release_ | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
+| _next release_ | **WASI:** a guest sees ONLY the `--env` variables; it no longer inherits the host's environment. `--env =x` (an empty name) is an error | pass each variable the guest needs: `--env HOME=/home/me --env LANG=C.UTF-8` |
 | _next release_ | **CLI:** a host flag after the guest's first argument is an error (`prog.wasm install --yes`) | `prog.wasm install -- --yes` gives the guest its own flag |
 | _next release_ | **Validation:** with a proposal disabled, a table with an initializer needs function-references, and `nullexternref` / `nullfuncref` need GC (as in wasm-tools). With every proposal on, the default, nothing changes | enable the proposal: `--features …,function-references` or `…,gc` |
 | _next release_ | **Pins:** `wasmrt wat` now writes `wasm-tools parse`'s bytes, so a `.wat` file's pin digest changes (`.wasm` digests do not) | re-run `wasmrt pin` over pinned `.wat` files |
