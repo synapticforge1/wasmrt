@@ -168,14 +168,18 @@ typedef enum {
     WASMRT_FEATURE_THREADS                   = 8,
     WASMRT_FEATURE_MULTI_MEMORY              = 9,
     WASMRT_FEATURE_MEMORY64                  = 10,
-    WASMRT_FEATURE_FUNCTION_REFERENCES       = 11,  /* requires REFERENCE_TYPES         */
-    WASMRT_FEATURE_GC                        = 12,  /* requires FUNCTION_REFERENCES     */
-    WASMRT_FEATURE_EXCEPTIONS                = 13,  /* requires REFERENCE_TYPES         */
+    WASMRT_FEATURE_FUNCTION_REFERENCES       = 11,
+    WASMRT_FEATURE_GC                        = 12,
+    WASMRT_FEATURE_EXCEPTIONS                = 13,
     WASMRT_FEATURE_TAIL_CALL                 = 14,  /* return_call/_indirect            */
     WASMRT_FEATURE_WIDE_ARITHMETIC           = 15,  /* i64.add128/sub128/mul_wide_s/_u  */
     WASMRT_FEATURE_CUSTOM_PAGE_SIZES         = 16,  /* (pagesize 1): 1-byte pages       */
-    WASMRT_FEATURE_CUSTOM_DESCRIPTORS        = 17   /* exact refs, descriptors; needs GC */
+    WASMRT_FEATURE_CUSTOM_DESCRIPTORS        = 17,  /* exact refs, descriptors           */
+    WASMRT_FEATURE_MUTABLE_GLOBALS           = 18   /* import/export a (mut) global      */
 } wasmrt_feature_t;
+/* No feature set is refused (since 2026-10-24): a proposal's prerequisites are recorded, not
+   enforced, and each instruction and type is gated by what it needs. With GC on and
+   FUNCTION_REFERENCES off, a GC struct validates and call_ref does not. */
 
 wasmrt_config_t *wasmrt_config_new(void);
 void wasmrt_config_delete(wasmrt_config_t *);

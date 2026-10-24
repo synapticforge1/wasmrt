@@ -28,9 +28,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::features::{
-    op_feature, simd_sub_feature, table_element_feature, val_type_feature, Feature, Features,
-};
+use crate::features::{op_feature, simd_sub_feature, Feature, Features};
 use crate::module::{Code, CompType, FuncType, Module, StorageType};
 use crate::opcode::{self, HeapType, Imm, Instr, Op, RefType};
 use crate::reader::Reader;
@@ -492,7 +490,10 @@ pub fn last_failure_func_index() -> Option<u32> {
 
 /// Reject a value type whose proposal is disabled.
 fn gate_val_type(v: V, features: &Features) -> ValidateResult<()> {
-    gate(val_type_feature(v), features)
+    match crate::features::val_type_unmet(v, features) {
+        Some(f) => Err(ValidateError::FeatureDisabled(f)),
+        None => Ok(()),
+    }
 }
 
 /// Reject `f` if it is `Some` and disabled. The single spelling of the gate, so every call
@@ -819,7 +820,7 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
         gate(Some(Feature::ReferenceTypes), features)?;
     }
     for tt in &module.tables {
-        gate(table_element_feature(tt.element), features)?;
+        if tt.element != V::FUNCREF { gate_val_type(tt.element, features)?; }
         // 🔒 A 64-bit TABLE is memory64's table64 half — wasm-tools: "memory64 must be enabled
         // for 64-bit tables".
         //
@@ -851,6 +852,14 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
         }
     }
 
+    // --- mutable globals: importing or exporting a `(mut …)` global is the mutable-globals proposal
+    // (D2 `mutableGlobals`, the `wasm1` preset; contract v37). A module-internal mutable global is
+    // WebAssembly 1.0 and is not gated. ---
+    let crosses = |ty: &crate::module::Extern| matches!(ty, crate::module::Extern::Global(g) if g.mutable);
+    if module.imports.iter().any(|i| crosses(&i.ty)) || module.exports.iter().any(|e| crosses(&e.ty)) {
+        gate(Some(Feature::MutableGlobals), features)?;
+    }
+
     // --- segments: a passive or declarative segment exists only to be named by a
     // bulk-memory instruction, so the mode itself is the proposal. ---
     for seg in &module.data {
@@ -872,8 +881,8 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
         // segment with function-references off, so `--features mvp` refused ordinary compiled
         // programs (fib-rs, the Go fixtures …) that wasm-tools and wasmrt 0.9.0 accept. Found
         // 2026-10-23 by the H23 carry-forward over wasmtk's corpus, not by any spec file.
-        if elem.explicit_type {
-            gate(table_element_feature(elem.elem_type), features)?;
+        if elem.explicit_type && elem.elem_type != V::FUNCREF {
+            gate_val_type(elem.elem_type, features)?;
         }
     }
 
@@ -1562,6 +1571,15 @@ impl<'a> FuncValidator<'a> {
             gate(op_feature(instr.op), self.features)?;
             if let Imm::Simd(s) = &instr.imm {
                 gate(Some(simd_sub_feature(s.sub)), self.features)?;
+            }
+            // WebAssembly 1.0 writes `call_indirect`'s table operand as ONE zero byte; reference-types
+            // made it a LEB table index, so an overlong encoding (`80 00`) is that proposal (wasm-tools'
+            // `call-indirect-overlong`, a reference-types name; contract v37's matrix). wasmrt accepted
+            // it under every feature set until 2026-10-24.
+            if let Imm::CallIndirect(ci) = &instr.imm {
+                if ci.overlong {
+                    gate(Some(Feature::ReferenceTypes), self.features)?;
+                }
             }
             // A typed `select` names its result type outright, so `(select (result v128) …)` must
             // answer to SIMD as well as to reference-types. That gate is applied where the type is

@@ -1120,6 +1120,22 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 Contract v37 — the feature matrix against the sibling (2026-10-24)
+
+The proof of the migration is wazmrt's `cmem/probes/feature-matrix.ts`, RUN (from its directory, with
+the output in a scratch folder: it writes nothing into wazmrt's tree) once per runtime, and diffed:
+
+    bun feature-matrix.ts <scratch>/wz <wazmrt.exe>  > wazmrt.txt
+    bun feature-matrix.ts <scratch>/rt <wasmrt.exe>  > wasmrt.txt
+    diff <(tail -n +2 wazmrt.txt) <(tail -n +2 wasmrt.txt)
+
+**116 differing lines before, 0 after** (86 lines each: presets × 24 modules, membership, the
+reference-type table, overlaps, per-instruction checks, group names, single-name sufficiency).
+Plus a 31-spelling exit-code probe: 0 differ. wazmrt was its 2026-10-24 v37 build, confirmed by a
+v37 fact (`call_ref` refused and a GC struct accepted under `all,-function-references`). The typed-
+reference rule was checked against wasm-tools separately (6 of 6 agree). S1 moved by design
+(`known-issues.md`, top); S2 64,603 / 0 / 0, 0 regressed.
+
 ### 🆕 `wat-corpus.ts` classifies corpus defects by the SOURCE (2026-10-24)
 
 wasmtk's tree now holds **613** `.wat` files (it was 603 a day earlier, and the count moved between

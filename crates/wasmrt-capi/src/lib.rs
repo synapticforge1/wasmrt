@@ -386,6 +386,7 @@ fn feature_of(i: u32) -> Option<Feature> {
         15 => Feature::WideArithmetic,
         16 => Feature::CustomPageSizes,
         17 => Feature::CustomDescriptors,
+        18 => Feature::MutableGlobals,
         _ => return None,
     })
 }
@@ -661,13 +662,10 @@ capi! {
             unsafe { ffi::out(error, err("wasmrt_engine_new_with_config: config is NULL")) };
             return core::ptr::null_mut();
         };
-        // Incoherent sets are reported, never repaired: silently enabling a dependency
-        // would accept modules the embedder meant to refuse.
-        if let Err(e) = cfg.features.check_coherent() {
-            #[allow(unsafe_code, reason = "writing a caller out-parameter")]
-            unsafe { ffi::out(error, err(format!("invalid configuration: {e}"))) };
-            return core::ptr::null_mut();
-        }
+        // 🔒 No feature set is refused, and none is repaired (contract v37; binaryang D2 2.1.0's
+        // `requires` is recorded, not enforced): each instruction and type is gated by what IT
+        // needs. Until 2026-10-24 a set such as "gc on, function-references off" was refused here,
+        // which the CLI no longer does either — one rule at both entry points.
         ffi::into_raw(wasmrt_engine {
             features: cfg.features,
             limits: cfg.limits,

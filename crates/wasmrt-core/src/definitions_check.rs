@@ -52,8 +52,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("name", "fb 17", "as fb 15, for `ref.cast null`."),
     ("name", "fb 24", "as fb 15, for `ref.cast_desc_eq null`."),
     // ---- D2 vocabulary: what wasmrt's --features accepts (a CONTRACT surface, interop.md §2.2) ----
-    ("d2-spelling", "mutableGlobals",
-     "no wasmrt flag: importing/exporting mutable globals is always on (WebAssembly 2.0)."),
     ("d2-spelling", "annotations",
      "no wasmrt flag: custom annotations are always parsed (T13 track A shipped without a flag)."),
     ("d2-spelling", "codeMetadata", "no wasmrt flag: wasmrt does not implement code metadata."),

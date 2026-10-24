@@ -26,6 +26,20 @@ each version subject to the bump gate._
 
 ### Changed (2026-10-24)
 
+- ⚠️ **Breaking (`--features`): binaryang D2's names and meanings** (the swappability contract's
+  v37, which wazmrt also implements):
+  - **presets** `wasm1`, `wasm2`, `wasm3`, `all`, plus `mvp` and `-all` (nothing on) and `lime1`;
+  - a bare list now starts from NOTHING, `mutable-globals` included, and the new
+    **`mutable-globals`** feature gates importing or exporting a mutable global;
+  - **no feature set is refused** any more (`--features gc` used to fail);
+  - a typed reference needs reference-types and (function-references or GC); an overlong
+    `call_indirect` table index needs reference-types (WebAssembly 1.0 writes one zero byte);
+  - `floats`, `bulk-memory-opt`, `legacy-exceptions`, `call-indirect-overlong`, `gc-types` and
+    `mutable-global` (wasm-tools spellings) still work, with a deprecation warning;
+    `annotations`, `code-metadata` and `compact-imports` are accepted and switch nothing.
+- **C ABI:** `WASMRT_FEATURE_MUTABLE_GLOBALS` (18) is appended; no other value moves. An engine is
+  created for any feature set (it used to refuse, for example, GC without function-references).
+
 - **Two traps now say what the spec says.** `call_indirect` / `return_call_indirect` with an index
   past the end of the table traps as **"undefined element"** (it said "out of bounds table access"),
   and a float→int truncation of an out-of-range or infinite value traps as **"integer overflow"** (it

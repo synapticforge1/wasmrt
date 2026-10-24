@@ -375,6 +375,9 @@ pub struct BrTable {
 pub struct CallIndirect {
     pub type_index: u32,
     pub table: u32,
+    /// The table index was encoded in more than one byte. WebAssembly 1.0's form is a single
+    /// zero byte, so an overlong one needs reference-types (gated by the validator).
+    pub overlong: bool,
 }
 
 /// The four `try_table` catch-clause kinds.
@@ -1254,8 +1257,9 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
             ImmKind::Func => Imm::Func(r.read_var_u32()?),
             ImmKind::CallIndirect => {
                 let type_index = r.read_var_u32()?;
+                let at = r.pos();
                 let table = r.read_var_u32()?;
-                Imm::CallIndirect(CallIndirect { type_index, table })
+                Imm::CallIndirect(CallIndirect { type_index, table, overlong: r.pos() - at > 1 })
             }
             ImmKind::Local => Imm::Local(r.read_var_u32()?),
             ImmKind::Global => Imm::Global(r.read_var_u32()?),

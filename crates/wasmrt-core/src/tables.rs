@@ -10,9 +10,76 @@
 //! `b7fdb9de5785`), keyed on wasmrt's own [`Op`] variants as `define_ops!` declares
 //! them. `bun scripts/definitions.ts --check` regenerates this file and fails on any difference.
 
-use crate::features::Feature;
+use crate::features::{Feature, Features};
 use crate::opcode::Op;
 use crate::wat::SimdImm;
+
+/// A D2 preset by name — exactly the features it lists, every other one off — or `None`. The
+/// CLI's `--features` takes these; `mvp`, `lime1` and `-all` are the contract's own (v37).
+#[must_use]
+pub(crate) fn preset(name: &str) -> Option<Features> {
+    match name {
+        "wasm1" => {
+            let mut f = Features::mvp();
+            f.set(Feature::MutableGlobals, true);
+            Some(f)
+        }
+        "wasm2" => {
+            let mut f = Features::mvp();
+            f.set(Feature::MutableGlobals, true);
+            f.set(Feature::SaturatingFloatToInt, true);
+            f.set(Feature::SignExtension, true);
+            f.set(Feature::Simd, true);
+            f.set(Feature::MultiValue, true);
+            f.set(Feature::BulkMemory, true);
+            f.set(Feature::ReferenceTypes, true);
+            Some(f)
+        }
+        "wasm3" => {
+            let mut f = Features::mvp();
+            f.set(Feature::Exceptions, true);
+            f.set(Feature::MutableGlobals, true);
+            f.set(Feature::SaturatingFloatToInt, true);
+            f.set(Feature::SignExtension, true);
+            f.set(Feature::Simd, true);
+            f.set(Feature::FunctionReferences, true);
+            f.set(Feature::MultiValue, true);
+            f.set(Feature::TailCall, true);
+            f.set(Feature::BulkMemory, true);
+            f.set(Feature::ReferenceTypes, true);
+            f.set(Feature::Gc, true);
+            f.set(Feature::Memory64, true);
+            f.set(Feature::MultiMemory, true);
+            f.set(Feature::ExtendedConst, true);
+            f.set(Feature::RelaxedSimd, true);
+            Some(f) // also lists annotations, which switch nothing here
+        }
+        "all" => {
+            let mut f = Features::mvp();
+            f.set(Feature::Exceptions, true);
+            f.set(Feature::MutableGlobals, true);
+            f.set(Feature::SaturatingFloatToInt, true);
+            f.set(Feature::SignExtension, true);
+            f.set(Feature::Simd, true);
+            f.set(Feature::Threads, true);
+            f.set(Feature::FunctionReferences, true);
+            f.set(Feature::MultiValue, true);
+            f.set(Feature::TailCall, true);
+            f.set(Feature::BulkMemory, true);
+            f.set(Feature::ReferenceTypes, true);
+            f.set(Feature::Gc, true);
+            f.set(Feature::Memory64, true);
+            f.set(Feature::MultiMemory, true);
+            f.set(Feature::ExtendedConst, true);
+            f.set(Feature::RelaxedSimd, true);
+            f.set(Feature::CustomPageSizes, true);
+            f.set(Feature::WideArithmetic, true);
+            f.set(Feature::CustomDescriptors, true);
+            Some(f) // also lists annotations, codeMetadata, compactImports, which switch nothing here
+        }
+        _ => None,
+    }
+}
 
 /// The proposal an opcode belongs to, or `None` for WebAssembly 1.0 core. **EXHAUSTIVE over
 /// [`Op`]**: there is no catch-all, so an op added to `define_ops!` without a D1 entry fails the

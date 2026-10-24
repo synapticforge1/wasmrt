@@ -88,17 +88,20 @@ fn features_must_precede_the_module_and_says_so_when_it_does_not() {
 }
 
 #[test]
-fn features_refuses_an_unknown_proposal_and_an_incoherent_set() {
+fn features_refuses_an_unknown_proposal_but_never_a_feature_set() {
     let m = write("feat2.wat", ADD);
     let unknown = wasmrt(&["--features", "bogus", &m, "add", "1", "1"]);
     assert_eq!(unknown.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown proposal 'bogus'"));
 
-    // Layering is the proposals' own: gc is defined on top of function-references.
+    // 🔒 Contract v37 / binaryang D2 2.1.0: `requires` is recorded, NOT enforced, so a set the
+    // proposals would call incoherent runs. *(Until 2026-10-24 this asserted rc 1: "gc requires
+    // function-references". Inverted, not deleted.)*
     let incoherent = wasmrt(&["--features", "gc", &m, "add", "1", "1"]);
-    assert_eq!(incoherent.status.code(), Some(1));
-    let err = String::from_utf8_lossy(&incoherent.stderr);
-    assert!(err.contains("gc") && err.contains("function-references"), "{err}");
+    assert_eq!(incoherent.status.code(), Some(0), "{}", String::from_utf8_lossy(&incoherent.stderr));
+    assert_eq!(String::from_utf8_lossy(&incoherent.stdout).trim(), "2");
+    // A preset cannot be subtracted (only `-all` is signed), as the sibling refuses it.
+    assert_eq!(wasmrt(&["--features", "all,-wasm2", &m, "add", "1", "1"]).status.code(), Some(1));
 
     // The sibling runtime's vocabulary resolves too, or its command lines would not run here.
     assert_eq!(

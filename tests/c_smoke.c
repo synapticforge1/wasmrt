@@ -139,15 +139,18 @@ int main(void)
     CHECK(engine != NULL, "engine is NULL");
     wasmrt_config_delete(cfg);
 
-    /* An incoherent config must be refused, not quietly repaired. */
-    wasmrt_config_t *bad = wasmrt_config_new();
-    wasmrt_config_set_feature(bad, WASMRT_FEATURE_FUNCTION_REFERENCES, false);
+    /* No feature set is refused (since 2026-10-24: a proposal's prerequisites are recorded, not
+       enforced). GC on with function-references off still produces an engine; each instruction
+       and type is then gated by what it needs. Until then this asserted the opposite. */
+    wasmrt_config_t *partial = wasmrt_config_new();
+    wasmrt_config_set_feature(partial, WASMRT_FEATURE_FUNCTION_REFERENCES, false);
     e = NULL;
-    wasmrt_engine_t *no_engine = wasmrt_engine_new_with_config(bad, &e);
-    CHECK(no_engine == NULL, "GC without function-references must not produce an engine");
-    CHECK(e != NULL, "an incoherent config must report why");
+    wasmrt_engine_t *partial_engine = wasmrt_engine_new_with_config(partial, &e);
+    CHECK(partial_engine != NULL, "GC without function-references must still produce an engine");
+    CHECK(e == NULL, "and report no error");
     if (e) { wasmrt_error_delete(e); }
-    wasmrt_config_delete(bad);
+    if (partial_engine) { wasmrt_engine_delete(partial_engine); }
+    wasmrt_config_delete(partial);
 
     /* ---- module --------------------------------------------------------------------- */
     CHECK(wasmrt_module_validate(engine, MODULE, sizeof MODULE), "the test module must validate");

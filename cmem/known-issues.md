@@ -1,5 +1,19 @@
 # Known Issues
 
+## 🤝 2026-10-24 — contract v37: `--features` takes binaryang D2's names and meanings
+
+Measured by wazmrt's `cmem/probes/feature-matrix.ts` on both runtimes (86 lines each): **116 lines
+differed before, 0 after**; and 31 of 31 spellings give the same exit status on both.
+
+| | what | state |
+| --- | --- | --- |
+| 🔒 | **Incoherent feature SETS were refused** (CLI and C ABI): `--features gc` (function-references off), even `--features exception-handling` alone (reference-types off) | ✅ **never refused now** (D2 `requires` recorded, not enforced). Each instruction is gated by its D1 feature and each type by what it needs. CLI test, C-ABI unit test and `tests/c_smoke.c` all inverted, not deleted |
+| 🔒 | **A typed reference needed only function-references**, so `(param (ref func))` passed under `all,-reference-types`, and a GC struct was impossible under `all,-function-references` | ✅ **reference types AND (function-references OR gc)** (`features::val_type_unmet`): wasm-tools 1.262 refuses all six S1 modules under `all,-reference-types`, as wasmrt now does; a GC struct is accepted with gc on and function-references off, `call_ref` refused |
+| 🔴 | **An overlong `call_indirect` table index (`80 00`) was accepted under every feature set**; WebAssembly 1.0's form is one zero byte | ✅ needs reference-types (`CallIndirect::overlong`, set by the decoder) |
+| 🆕 | **No `mutable-globals` flag**: importing/exporting a mutable global was always allowed, so `mvp` and `wasm1` could not differ | ✅ `Feature::MutableGlobals` (C value 18, appended), gated at both entry points; `mvp` now means NOTHING on, `wasm1` = mutable-globals |
+| 🆕 | **Vocabulary**: no D2 presets; wasm-tools-only names unknown; `-all` treated as `all` | ✅ presets `wasm1`/`wasm2`/`wasm3`/`all` GENERATED from D2 (`Features::from_preset`), plus `mvp`, `lime1`, `-all` (nothing on); a signed preset other than `-all` refused, as the sibling does; `annotations`/`code-metadata`/`compact-imports` accepted, switching nothing; six wasm-tools names are deprecated aliases with a warning |
+| ⚠️ | **S1 floor MAJOR**: 48 accepted → refused (15 mutable-global under `mvp`-based sets, 15 overlong `call_indirect`, 18 typed references without reference-types), 84 refused → accepted (mostly the new `all,-mutable-globals` configuration) — all intended | re-baselined in its own commit; README Breaking Changes and CHANGELOG |
+
 ## 🎯 2026-10-24 — H10's D3 check: the `.wast` runner accepted ANY trap, and hid 54 wrong ones
 
 | | what | state |

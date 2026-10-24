@@ -97,6 +97,10 @@ pub enum Feature {
     /// Custom descriptors: exact reference types `(ref null? (exact $t))`, descriptor/describes
     /// clauses, and the `*_desc` instructions. Defined on top of GC — requires [`Feature::Gc`].
     CustomDescriptors,
+    /// Mutable globals: importing or exporting a `(mut …)` global (WebAssembly 1.0's first
+    /// post-MVP proposal, in the `wasm1` preset). binaryang's D2 `mutableGlobals`; contract v37.
+    /// Before 2026-10-24 wasmrt had no flag for it and always allowed it.
+    MutableGlobals,
 }
 
 impl Feature {
@@ -107,7 +111,7 @@ impl Feature {
     /// core test counts `Features`' FIELDS against it, and the C-ABI test parses `wasmrt.h` against
     /// it. (The first version of this check compared a hand-written list with itself, so a new
     /// proposal missing from it — `CustomPageSizes`, 2026-09-19 — passed. See that test.)
-    pub const ALL: [Feature; 18] = [
+    pub const ALL: [Feature; 19] = [
         Feature::SignExtension,
         Feature::SaturatingFloatToInt,
         Feature::MultiValue,
@@ -126,6 +130,7 @@ impl Feature {
         Feature::WideArithmetic,
         Feature::CustomPageSizes,
         Feature::CustomDescriptors,
+        Feature::MutableGlobals,
     ];
 
     /// The stable lower-case name, matching the proposal's repository name. Used by the C
@@ -151,6 +156,7 @@ impl Feature {
             Feature::WideArithmetic => "wide-arithmetic",
             Feature::CustomPageSizes => "custom-page-sizes",
             Feature::CustomDescriptors => "custom-descriptors",
+            Feature::MutableGlobals => "mutable-globals",
         }
     }
 
@@ -188,6 +194,7 @@ impl Feature {
             "wide_arithmetic" => Feature::WideArithmetic,
             "custom_page_sizes" => Feature::CustomPageSizes,
             "custom_descriptors" => Feature::CustomDescriptors,
+            "mutable_globals" => Feature::MutableGlobals,
             _ => return None,
         })
     }
@@ -222,6 +229,8 @@ pub struct Features {
     pub wide_arithmetic: bool,
     pub custom_page_sizes: bool,
     pub custom_descriptors: bool,
+    /// Import or export of a mutable global. On in every preset but `mvp` / `-all` (contract v37).
+    pub mutable_globals: bool,
 }
 
 impl Default for Features {
@@ -273,6 +282,7 @@ impl Features {
             wide_arithmetic: true,
             custom_page_sizes: true,
             custom_descriptors: true,
+            mutable_globals: true,
         }
     }
 
@@ -312,7 +322,16 @@ impl Features {
             wide_arithmetic: false,
             custom_page_sizes: false,
             custom_descriptors: false,
+            mutable_globals: false,
         }
+    }
+
+    /// One of binaryang D2's presets — `wasm1`, `wasm2`, `wasm3`, `all` — as exactly the features it
+    /// lists (every other one off), or `None` for any other name. GENERATED from D2 2.1.0
+    /// (`tables.rs`); `mvp`, `lime1` and `-all` are the CLI's own spellings (contract v37).
+    #[must_use]
+    pub fn from_preset(name: &str) -> Option<Features> {
+        crate::tables::preset(name)
     }
 
     /// Is `f` enabled?
@@ -337,6 +356,7 @@ impl Features {
             Feature::WideArithmetic => self.wide_arithmetic,
             Feature::CustomPageSizes => self.custom_page_sizes,
             Feature::CustomDescriptors => self.custom_descriptors,
+            Feature::MutableGlobals => self.mutable_globals,
         }
     }
 
@@ -361,12 +381,17 @@ impl Features {
             Feature::WideArithmetic => self.wide_arithmetic = on,
             Feature::CustomPageSizes => self.custom_page_sizes = on,
             Feature::CustomDescriptors => self.custom_descriptors = on,
+            Feature::MutableGlobals => self.mutable_globals = on,
         }
     }
 
-    /// Reject a set that enables a proposal without one it is layered on. Checked once,
-    /// when the set is handed to the engine, so validation itself never has to reason
-    /// about dependencies.
+    /// The first proposal enabled without one it is layered on, as the proposals state it.
+    ///
+    /// 🔒 **Recorded, NOT enforced, since 2026-10-24** (contract v37; binaryang D2 2.1.0 `requires`;
+    /// owner): neither the CLI nor the C ABI refuses a feature set for this any more, and each
+    /// instruction is gated by its own D1 feature. It remains for an embedder that wants to warn.
+    /// *(Until then it was checked once, when the set reached the engine, and an incoherent set was
+    /// refused — so `--features exception-handling` alone failed, because it left reference-types off.)*
     ///
     /// The layering is the proposals' own: GC is specified on top of function-references,
     /// which is specified on top of reference-types; relaxed SIMD extends SIMD; and the
@@ -487,6 +512,33 @@ pub fn val_type_feature(v: ValType) -> Option<Feature> {
             }
         }
     }
+}
+
+/// The first feature a **value type** needs and `features` lacks, or `None` if it is allowed —
+/// what the validator enforces (contract v37, binaryang D2 2.1.0's rule).
+///
+/// No feature implies another (D2 `requires` is recorded, NOT enforced), so a typed reference is
+/// judged by what it needs from each proposal that can supply it: **reference types** (a reference
+/// VALUE type), and **function-references OR gc** (a concrete `(ref $t)` or a non-null `(ref func)` /
+/// `(ref extern)`; GC defines typed references too). So with gc on and function-references off, a
+/// GC struct's typed fields are accepted while `call_ref` is refused by its own D1 gate — as wasmtime
+/// 50, wasm-tools 1.262, binaryang and wazmrt do (measured 2026-10-24). Every other type keeps
+/// [`val_type_feature`]'s single answer.
+#[must_use]
+pub(crate) fn val_type_unmet(v: ValType, features: &Features) -> Option<Feature> {
+    let typed = v.is_ref()
+        && !v.is_exact()
+        && (v.is_concrete() || (v.is_non_null_ref() && matches!(v.ref_heap(), RefHeap::Func | RefHeap::Extern)));
+    if typed {
+        if !features.reference_types {
+            return Some(Feature::ReferenceTypes);
+        }
+        if !features.function_references && !features.gc {
+            return Some(Feature::FunctionReferences);
+        }
+        return None;
+    }
+    val_type_feature(v).filter(|&f| !features.has(f))
 }
 
 /// The proposal a **table element type** belongs to. `funcref` is WebAssembly 1.0 (the

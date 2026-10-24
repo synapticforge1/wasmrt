@@ -284,10 +284,21 @@ fn check_host_path(host: &str) -> Result<(), String> {
 
 /// Parse a `--features` list: items separated by commas, `name` to enable and `-name` to disable.
 ///
-/// The seed follows the sibling runtime so one list means one thing under both: a list containing
-/// any **signed** item starts from `all`, a list of bare names starts from `mvp`, and an explicit
-/// `all` / `mvp` item sets it outright. Layering is then checked once
-/// (`Features::check_coherent`) — the proposals' own dependencies, not a house rule.
+/// 🔒 **Contract v37 (2026-10-24): binaryang D2's names AND meanings**, as the sibling runtime takes
+/// them, so one list means one thing under both:
+/// * **Seed**: a list containing any SIGNED item starts from `all`; a list of bare names starts from
+///   NOTHING (every feature off, `mutable-globals` included).
+/// * **Presets** set the whole set outright: D2's `wasm1`, `wasm2`, `wasm3`, `all` (generated,
+///   [`Features::from_preset`]), plus `mvp` (nothing on), `lime1`, and `-all` (nothing on). A signed
+///   preset other than `-all` is refused, as the sibling refuses it.
+/// * **Names** are D2's `cli` spellings (and wasmrt's older ones, which the sibling also takes).
+///   `annotations`, `code-metadata` and `compact-imports` are accepted and switch nothing.
+/// * **wasm-tools-only names are deprecated aliases**, with a warning: `floats` (nothing: floats are
+///   WebAssembly 1.0), `bulk-memory-opt` → bulk-memory, `legacy-exceptions` → exceptions,
+///   `call-indirect-overlong` → reference-types, `gc-types` → gc, `mutable-global` → mutable-globals.
+/// * **No feature set is refused**: D2's `requires` is recorded, not enforced, and each instruction
+///   and type is gated by what it needs. *(Until 2026-10-24 an "incoherent" set was refused here, so
+///   `--features exception-handling` alone failed, because it left reference-types off.)*
 fn parse_features(list: &str) -> Result<Features, String> {
     let items: Vec<&str> = list.split(',').map(str::trim).collect();
     if items.iter().any(|i| i.is_empty()) {
@@ -303,9 +314,46 @@ fn parse_features(list: &str) -> Result<Features, String> {
             Some(rest) => (false, rest),
             None => (true, item),
         };
-        match name.to_ascii_lowercase().replace('-', "_").as_str() {
-            "all" => f = Features::all(),
-            "mvp" => f = Features::mvp(),
+        let key = name.to_ascii_lowercase().replace('-', "_");
+        // Presets: the whole set, outright. `-all` is the one signed spelling.
+        let preset = match key.as_str() {
+            "all" if !on => Some(Features::mvp()),
+            "mvp" | "lime1" | "wasm1" | "wasm2" | "wasm3" | "all" if !on => {
+                return Err(format!("--features: unknown proposal '{item}' (a preset cannot be subtracted; only `-all` is signed)"));
+            }
+            "mvp" => Some(Features::mvp()),
+            "lime1" => Some(lime1()),
+            other => Features::from_preset(other),
+        };
+        if let Some(p) = preset {
+            f = p;
+            continue;
+        }
+        // Deprecated wasm-tools-only names (contract v37): an alias, or nothing, with a warning.
+        let deprecated = match key.as_str() {
+            "floats" => Some(None),
+            "bulk_memory_opt" => Some(Some(Feature::BulkMemory)),
+            "legacy_exceptions" => Some(Some(Feature::Exceptions)),
+            "call_indirect_overlong" => Some(Some(Feature::ReferenceTypes)),
+            "gc_types" => Some(Some(Feature::Gc)),
+            "mutable_global" => Some(Some(Feature::MutableGlobals)),
+            _ => None,
+        };
+        if let Some(target) = deprecated {
+            match target {
+                Some(t) => {
+                    eprintln!("wasmrt: warning: --features: '{name}' is a deprecated wasm-tools name; it means '{t}'");
+                    f.set(t, on);
+                }
+                None => eprintln!(
+                    "wasmrt: warning: --features: '{name}' is a deprecated wasm-tools name; floats are WebAssembly 1.0, so it switches nothing"
+                ),
+            }
+            continue;
+        }
+        match key.as_str() {
+            // D2 features that switch nothing in a runtime: accepted by name (contract v37).
+            "annotations" | "code_metadata" | "compact_imports" => {}
             // ⚠️ The sibling gates multiple TABLES separately; wasmrt does not model it as its own
             // proposal (reference-types brings it). Recognised so a wazmrt command line still runs,
             // and said out loud rather than silently ignored — `interop.md` records the divergence.
@@ -318,18 +366,32 @@ fn parse_features(list: &str) -> Result<Features, String> {
                 None => {
                     let known: Vec<&str> = Feature::ALL.iter().map(|x| x.name()).collect();
                     return Err(format!(
-                        "--features: unknown proposal '{name}'\n  known: all, mvp, {}",
+                        "--features: unknown proposal '{name}'\n  presets: all, wasm1, wasm2, wasm3, mvp, lime1, -all\n  known: {}",
                         known.join(", ")
                     ));
                 }
             },
         }
     }
-    // The layering is the proposals' own: enabling `gc` without `function-references` is refused
-    // here rather than producing a set the validator would have to reason about.
-    f.check_coherent()
-        .map_err(|e| format!("--features: {e} — it is layered on it and cannot be enabled alone"))?;
     Ok(f)
+}
+
+/// The `lime1` preset (contract v37, as the sibling defines it): WebAssembly 1.0 plus mutable
+/// globals, sign extension, non-trapping float→int, multi-value, bulk memory and extended constant
+/// expressions.
+fn lime1() -> Features {
+    let mut f = Features::mvp();
+    for feat in [
+        Feature::MutableGlobals,
+        Feature::SignExtension,
+        Feature::SaturatingFloatToInt,
+        Feature::MultiValue,
+        Feature::BulkMemory,
+        Feature::ExtendedConst,
+    ] {
+        f.set(feat, true);
+    }
+    f
 }
 
 /// Where a pin DB lives. 🔒 **One SHARED path, named for the deployment both runtimes ship inside**
@@ -1513,8 +1575,10 @@ fn print_help() {
          wasmrt -v | --version                   show the version\n\n\
          LANGUAGE (must come BEFORE the module path — it selects what is accepted, and\n\
          after the path it would already be too late, so it is an error there):\n    \
-           --features <list>           e.g. `mvp`, `all,-simd`, `gc` — bare names imply\n                                \
-           `mvp`, a signed item implies `all`; comma-separated\n\n\
+           --features <list>           e.g. `wasm2`, `all,-simd`, `gc` — comma-separated; bare\n                                \
+           names start from nothing, a signed item from `all`.\n                                \
+           Presets: wasm1 wasm2 wasm3 all, and mvp lime1 -all.\n                                \
+           Names are binaryang's (D2); wasm-tools-only names warn\n\n\
          WASI — a guest reaches ONLY what you preopen:\n    \
            --dir <host>[:<guest>]      grant read-write access to a directory (`::` also\n                                \
            accepted). <host> is `./rel`, `../rel`, `.` or an\n                                \

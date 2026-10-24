@@ -273,6 +273,22 @@ for (const e of d1.filter((x) => x.prefix === null || x.prefix === "0xfb" || x.p
   if (!hit) fail(`D1 \`${e.name}\` maps to no wasmrt Op`);
 }
 
+// D2's presets (`wasm1`, `wasm2`, `wasm3`, `all`; D2 2.1.0), each the exact set of features on.
+// A member with no wasmrt `Feature` must be one D2 marks as switching nothing in a runtime: they
+// are accepted by name at the CLI and change no validation (contract v37).
+const SWITCH_NOTHING = new Set(["annotations", "codeMetadata", "compactImports"]);
+const presets = (src.features.presets ?? []) as { name: string; features: string[] }[];
+if (!presets.length) fail("D2 has no presets (binaryang D2 2.1.0 or later is required)");
+const presetArms = presets.map((p) => {
+  const sets: string[] = [], skipped: string[] = [];
+  for (const m of p.features) {
+    if (SWITCH_NOTHING.has(m)) { skipped.push(m); continue; }
+    sets.push(`            f.set(Feature::${featureVariant(m)}, true);`);
+  }
+  return `        ${rs(p.name)} => {\n            let mut f = Features::mvp();\n${sets.join("\n")}\n` +
+    `            Some(f)${skipped.length ? ` // also lists ${skipped.join(", ")}, which switch nothing here` : ""}\n        }`;
+});
+
 const simdImm = (imm: string[]) => {
   const k = JSON.stringify(imm);
   const m: Record<string, string> = { "[]": "N", '["memarg"]': "Mem", '["v128"]': "Const", '["lane16"]': "Shuffle", '["laneidx"]': "Lane", '["memarg","laneidx"]': "MemLane" };
@@ -296,9 +312,19 @@ const tables = `// SPDX-License-Identifier: Apache-2.0
 //! \`${pin.commit.slice(0, 12)}\`), keyed on wasmrt's own [\`Op\`] variants as \`define_ops!\` declares
 //! them. \`bun scripts/definitions.ts --check\` regenerates this file and fails on any difference.
 
-use crate::features::Feature;
+use crate::features::{Feature, Features};
 use crate::opcode::Op;
 use crate::wat::SimdImm;
+
+/// A D2 preset by name — exactly the features it lists, every other one off — or \`None\`. The
+/// CLI's \`--features\` takes these; \`mvp\`, \`lime1\` and \`-all\` are the contract's own (v37).
+#[must_use]
+pub(crate) fn preset(name: &str) -> Option<Features> {
+    match name {
+${presetArms.join("\n")}
+        _ => None,
+    }
+}
 
 /// The proposal an opcode belongs to, or \`None\` for WebAssembly 1.0 core. **EXHAUSTIVE over
 /// [\`Op\`]**: there is no catch-all, so an op added to \`define_ops!\` without a D1 entry fails the

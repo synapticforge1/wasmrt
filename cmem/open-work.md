@@ -27,7 +27,9 @@ stays in the topic file named.
 2. **1.0.0 release prep** — the README's status and intro, the CHANGELOG `[1.0.0]` section, the
    checklist; then the owner's tag, a green gate job (its first run on a runner), and the publish.
    Record: `releasing.md`.
-3. **The D2 `--features` migration — UNBLOCKED, and now directed (contract v37, 2026-10-24).**
+3. ✅ **DONE 2026-10-24 — the v37 migration** (matrix identical to wazmrt, 0 of 86 lines differ;
+   `known-issues.md`, top). Kept for the record of what it was:
+   **The D2 `--features` migration — UNBLOCKED, and now directed (contract v37, 2026-10-24).**
    wazmrt implemented it; "wasmrt migrates once, to this". binaryang **v2.1.0** (`b7fdb9de`) carries
    D1 1.0.1 (`return_call_ref` → function-references, so wasmrt's one override goes stale and the
    generator will say so) and D2 2.1.0 (`requires`, recorded NOT enforced; `presets` wasm1/wasm2/
@@ -45,7 +47,18 @@ stays in the topic file named.
 
 ## To relay — wasmrt cannot write there
 
-* **binaryang:** D1's `return_call_ref` feature, and D2's missing dependency rules (item 3).
+* **binaryang** (its letter of 2026-10-24 asked two things): ✅ D1's `return_call_ref` and D2's rules
+  are fixed upstream and adopted. **(a) The two fuzz inputs** are in the gitignored
+  `cmem/local/handoffs/binaryang-fuzz-2026-10-23/` (with a README): both STILL reproduce on binaryang
+  `v2.1.0-6-g521c5db02` (binaryang "OK"; wasm-tools and wasmrt refuse). **(b) The matrix against
+  D1/D2 2.1.0**: wasmrt = wazmrt on all 86 lines; D1 per-instruction gating has 0 unexplained
+  differences. Two rules wasmrt and wazmrt apply that D1/D2 do not STATE, for binaryang to record if
+  it wants them in the data: a typed reference needs reference-types AND (function-references OR
+  gc); an overlong `call_indirect` table index needs reference-types (an encoding, not an
+  instruction). Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of `ref.test` /
+  `ref.cast` / `ref.cast_desc_eq`.
+* **wazmrt (pen holder):** wasmrt implemented v37 (the commit after the re-pin); the §2.2
+  `--features` wasmrt cell can be re-run and marked agreed.
 * **wasmtk:** its generated (gitignored) `tests/wasi/wasm_wasi_bundle/**/*.wat` include about ten
   modules that `throw 0` with no tag declared (`dynrt_eval_bundle/main_*.wat`,
   `sharedheap_bundle/main_wasic.wat`): wasm-tools refuses the source, and so does wasmrt. A

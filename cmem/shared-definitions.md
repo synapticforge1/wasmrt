@@ -19,8 +19,10 @@ regenerates it and diffs.
 | the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test` |
 | 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables. Compiled into every binary |
 
-**Pinned 2026-10-23: binaryang `v1.14.0`, commit `7ebcee3ad055`** — 582 instructions, 22 features,
-20 verdicts. The copy and the cross-check are `#[cfg(test)]`; 🔁 since 2026-10-24 `tables.rs` ships
+**Pinned 2026-10-24: binaryang `v2.1.0`, commit `b7fdb9de5785`** (D1 1.0.1, D2 2.1.0 with `requires`
+and `presets`, D3 1.0.0) — 582 instructions, 22 features, 20 verdicts. *(Was `v1.14.0` /
+`7ebcee3ad055` from 2026-10-23; re-pinned for the contract v37 migration, where the one generator
+override and three KNOWN entries became stale because binaryang adopted wasmrt's answers.)* The copy and the cross-check are `#[cfg(test)]`; 🔁 since 2026-10-24 `tables.rs` ships
 (owner-cleared, with the wabt attribution in NOTICE).
 
 ### 🆕 H10 step 2, stage 1 — the generated tables (2026-10-24)

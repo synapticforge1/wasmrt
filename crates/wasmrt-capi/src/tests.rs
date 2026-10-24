@@ -675,17 +675,46 @@ fn a_disabled_proposal_makes_the_module_invalid() {
     wasmrt_engine_delete(engine);
 }
 
+/// 🔒 Contract v37 / binaryang D2 2.1.0: no feature set is refused or repaired; each instruction and
+/// type is gated by what IT needs. *(Until 2026-10-24 this test asserted the opposite: "gc on,
+/// function-references off" produced no engine. Inverted, not deleted.)*
 #[test]
-fn an_incoherent_config_is_reported_not_repaired() {
+fn a_set_the_proposals_call_incoherent_is_accepted_and_gated_per_instruction() {
     let cfg = wasmrt_config_new();
     assert!(wasmrt_config_set_feature(cfg, 11 /* function-references */, false));
-    // GC still on -> incoherent.
+    // GC still on: the proposals call this incoherent, and it is accepted anyway.
     let mut e: *mut wasmrt_error = core::ptr::null_mut();
     let engine = wasmrt_engine_new_with_config(cfg, &raw mut e);
-    assert!(engine.is_null(), "an incoherent config must not produce an engine");
-    assert!(!e.is_null());
-    assert!(msg_of_err(e).contains("requires"), "{}", msg_of_err(e));
-    wasmrt_error_delete(e);
+    assert!(!engine.is_null() && e.is_null(), "a feature set is never refused");
+    // A GC struct with a typed field: gc supplies typed references, so it is ACCEPTED.
+    let gc = wasm("(module (type $s (struct (field i32))) (func (result (ref null $s)) (ref.null $s)))");
+    assert!(wasmrt_module_validate(engine, gc.as_ptr(), gc.len()), "a GC struct needs only gc");
+    // `call_ref` is gated by its own D1 feature, function-references: REFUSED.
+    let cr = wasm(
+        r#"(module (type $t (func (result i32))) (func $f (type $t) (i32.const 7)) (elem declare func $f)
+              (func (result i32) (call_ref $t (ref.func $f))))"#,
+    );
+    assert!(!wasmrt_module_validate(engine, cr.as_ptr(), cr.len()), "call_ref needs function-references");
+    wasmrt_engine_delete(engine);
+    wasmrt_config_delete(cfg);
+}
+
+/// `WASMRT_FEATURE_MUTABLE_GLOBALS` (18, appended 2026-10-24) gates exporting a mutable global at the
+/// C ABI as it does at the CLI — the X3 rule: a gate exists at both entry points or at neither.
+#[test]
+fn mutable_globals_is_gated_at_the_c_abi() {
+    let m = wasm(r#"(module (global (export "g") (mut i32) (i32.const 0)))"#);
+    let cfg = wasmrt_config_new();
+    let mut e: *mut wasmrt_error = core::ptr::null_mut();
+    let on = wasmrt_engine_new_with_config(cfg, &raw mut e);
+    assert!(wasmrt_module_validate(on, m.as_ptr(), m.len()), "on by default");
+    assert!(wasmrt_config_set_feature(cfg, 18 /* mutable-globals */, false));
+    let off = wasmrt_engine_new_with_config(cfg, &raw mut e);
+    assert!(!wasmrt_module_validate(off, m.as_ptr(), m.len()), "refused with mutable-globals off");
+    let immutable = wasm(r#"(module (global (export "g") i32 (i32.const 0)))"#);
+    assert!(wasmrt_module_validate(off, immutable.as_ptr(), immutable.len()), "an immutable export is 1.0");
+    wasmrt_engine_delete(on);
+    wasmrt_engine_delete(off);
     wasmrt_config_delete(cfg);
 }
 
