@@ -138,14 +138,34 @@ current source. ⚠️ **But the workspace harness (`tools/assembler-parity/meas
 this host is elsewhere. Whether that build includes 2026-09-20's assembler fix is unverified, so the
 harness should run the current build.
 
+## 🆕 2026-10-24 — contract v33 makes D1/D2 the MEANING of `--features`
+
+v32 aligned `--features` with D2's names; **v33 adds the meanings** (owner: *"aligning with binaryang
+means its meanings also"*): which feature gates an instruction follows D1's `feature` column, and the
+preset and dependency rules follow D2. Two findings follow from reading the definitions against that
+(measured 2026-10-24):
+
+* **D2 has no dependency or preset rules** — not in the vendored D2 `1.0.0` (binaryang v1.14.0), and
+  not in binaryang's current tree (D2 `1.1.0`, v1.17.0). So there is nothing yet to follow for the one
+  live disagreement, `call_ref` under `all,-function-references`, where the three tools give three
+  answers (`known-issues.md`, top).
+* **D1's single `feature` column cannot say "needs function-references, not tail-call"** for
+  `return_call_ref`, and says `tailCall`. All three tools accept it with tail-call off. This is the
+  KNOWN entry in `definitions_check.rs`; it now matters more, because v33 makes D1 binding.
+* The pin is behind: wasmrt vendors **v1.14.0**; binaryang is at **v1.17.0**. Re-pin with the D2
+  migration, not before, so the vocabulary moves once.
+
 ## What the workspace is asked to take (draft — nothing is written there from here)
 
 1. **To binaryang (via a letter):** D1 `return_call_ref` is gated under tail-call, where wasm-tools
-   needs function-references only. Also its validator's three accepted gate rows and two fuzz
-   accept-invalid cases, as observations to triage.
-2. **To wazmrt:** the table64 gate, the table-initializer gate, const-expr depth > 8, the element
-   flags; and GC-implies-function-references, which its own **v30** appears to forbid. Each was
-   measured on its 2026-09-21 build; re-measure on a current build before calling any of them a
-   defect.
+   needs function-references only — 🆕 binding since v33, so it would turn a correct acceptance into
+   a refusal in both runtimes. 🆕 **D2 needs dependency and preset rules** before the v33 migration
+   can settle `call_ref`. Also its validator's three accepted gate rows and two fuzz accept-invalid
+   cases, as observations to triage.
+2. **To wazmrt:** ~~the table64 gate~~ ✅ fixed in wazmrt 2.0.0 (v33 re-measured, and wasmrt
+   confirmed: all three refuse); ~~the table-initializer gate~~ ✅ fixed (v33); `call_ref` with GC on
+   and function-references off is still admitted (measured on 2.0.0; v33 calls it a D2 question);
+   const-expr depth > 8 and the element flags are NOT re-measured since the 2026-09-21 build.
 3. **To the workspace:** I8 measured (the runtimes lose); the harness binary path; I5/I6 for wasmrt as
-   above.
+   above. 🆕 **Canonical rule 5.2 in `best-practices.md` names the development drive by its letter**;
+   wasmrt's public copy had to generalize it.

@@ -1120,6 +1120,24 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 The compatibility gate, letter H6 (2026-10-24) — **602 workspace tests**
+
+Measured 2026-10-24 from Git Bash: **602 passed, 0 failed, 1 ignored**; spec suite **64,603 / 0 / 0**
+over 288 files (S2, 0 regressed). The one new test is
+`cli_validates_before_executing.rs::a_feature_refusal_says_invalid_module_once` (the doubled
+"invalid module: invalid module:" prefix; inverted).
+
+Two new gates, both Bun scripts, neither inside `cargo test` (they shell out to cargo and nightly):
+
+| gate | command | fails when |
+| --- | --- | --- |
+| surface freshness | `bun scripts/surface.ts --check` | `surface/current.txt` differs from the sources (Rust `pub` API, `wasmrt.h`, `--help`) |
+| the bump floor | `bun scripts/bump.ts patch\|minor\|major [--dry-run]`, `--verify-tag vX.Y.Z` | the bump is below the highest of the surface, `cargo semver-checks` and carry-forward floors (`releasing.md`, "THE NUMBER") |
+
+Both were inverted (`releasing.md` lists the 17 reader mutations and the end-to-end refusals).
+⚠️ `--verify-tag` also runs as the first job of `release.yml`; that job has **not run on a runner
+yet**. Its first run is the next tag.
+
 ### 🆕 Behaviour carry-forward, letter H23 (2026-10-23, late night) — **601 workspace tests**
 
 What a consumer can RELY ON, in three stages run in order, stopping at the first that finds an issue

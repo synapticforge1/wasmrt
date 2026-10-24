@@ -1,5 +1,16 @@
 # Known Issues
 
+## 🤝 2026-10-24 — the contract v33 review: one CLI message fixed, one three-way divergence open
+
+Measured on wasmrt HEAD, wazmrt 2.0.0 and wasm-tools 1.262. Detail: `roadmap.md`, the v33 review.
+
+| | what | state |
+| --- | --- | --- |
+| 🟡 | **A feature refusal printed "invalid module" twice** (`invalid module: invalid module: uses the disabled proposal …`): the CLI prefixed a `ValidateError` whose Display already starts with the phrase. Wording only; the verdict and rc 1 were right | ✅ **FIXED** in the CLI (`invalidity_report`); the core's Display is public surface and unchanged. Pinned and inverted (`a_feature_refusal_says_invalid_module_once`) |
+| 🟡 | **`--help` printed the wrapped lines of a flag description at column 0**: a `\` line continuation strips the next line's leading spaces | ✅ **FIXED**: the spaces sit before the backslash. Descriptions are not part of the surface, so `surface/` did not move |
+| 🟠 | **`call_ref` under `--features all,-function-references` gets THREE answers**: wasmrt refuses the CONFIGURATION ("gc requires function-references", rc 1), wazmrt accepts the MODULE (rc 0), wasm-tools refuses the MODULE (rc 1). `(table i64 …)` under `all,-memory64` (all three refuse) and `return_call_ref` under `all,-tail-call` (all three accept) agree | OPEN — v33 says the D2 migration settles the semantics, but **D2 has no dependency or preset rules** (not at the v1.14.0 pin, not at binaryang v1.17.0). Reported to the workspace. wasmrt keeps its refusal until the row is rewritten |
+| 🟠 | **D1 gates `return_call_ref` under `tailCall`**; wasm-tools and both runtimes need function-references only. v33 makes D1's `feature` column the meaning, so read literally it would make both runtimes refuse what wasm-tools accepts | OPEN upstream — wasmrt keeps its gating (`definitions_check.rs` KNOWN, with the measurement) until D1 changes |
+
 ## 🔁 2026-10-23, late night — letter H23 (behaviour carry-forward) found a regression since 0.9.0
 
 | | what | state |
@@ -22,7 +33,7 @@ Detail and method: [shared-definitions.md](shared-definitions.md).
 | --- | --- | --- |
 | 🔴 | **Six GC bulk array ops gated by no flag** (`array.new_data/new_elem/fill/copy/init_data/init_elem`), from 2026-08-19. Latent: an array TYPE is refused with GC off first (measured on wasmrt and wasm-tools 1.262) | ✅ **FIXED** — `op_feature`'s GC arm; `UNGATED_CORE_OPS` 178 → 172 (= D1's core count); pinned by name. Conformance 64,603 / 0 / 0 before and after, no file lost a pass; the three sweeps pass |
 | 🟠 | **I8: `(@custom "name" …)` plus identifiers gives TWO `name` sections** (the annotation, then a generated one). wasm-tools and binaryang emit one. wazmrt has the same behaviour, byte-identical | ✅ **FIXED 2026-10-23 with the H13 batch**: the annotation is the only `name` section, byte-identical to wasm-tools (unit test). No corpus file has the shape, so pin parity with wazmrt is unaffected |
-| 🟡 | **`--features` does not accept binaryang's `sat-float-to-int`** (it accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`) | OPEN — a contract surface. wazmrt's **v30** (not yet mirrored here; wasmrt's copy is v10) makes `--features` take **wasm-tools'** whole vocabulary. `sat-float-to-int` is wabt's and binaryang's spelling, not wasm-tools', so v30 does not require it; but v30 likely requires spellings wasmrt lacks. Settle it in the v11–v31 mirror |
+| 🟡 | **`--features` does not accept binaryang's `sat-float-to-int`** (it accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`) | OPEN — a contract surface. ~~v30: wasm-tools' vocabulary~~ was REVERSED by **v32/v33** (mirrored, wasmrt's copy is now v34): `--features` takes **binaryang's D2** names AND meanings, so `sat-float-to-int` becomes canonical. wasmrt migrates once, when binaryang's FL1 settles D2's spellings (2026-10-24) |
 | 🟡 | **`cli_review_regressions::env_flags_add_to_the_inherited_environment_rather_than_replacing_it` depends on the SHELL.** It overrides `PATH` and expects the count not to grow. Under PowerShell the inherited key is `Path` (Windows names are case-insensitive, wasmrt's comparison is not), so it fails: 126 vs 125. Under Git Bash (`PATH`) it passes. Measured 2026-10-23 | OPEN — two questions: should the test pick a key it creates itself, and should `--env PATH=x` replace a host `Path` on Windows? A POSIX guest would see the two as distinct keys, so the second is not obviously a defect. Run `cargo test` from Git Bash until it is decided |
 
 ## 🗂 BACKLOG AUDIT 2026-09-20 — **eight headings said OPEN; the code said otherwise**

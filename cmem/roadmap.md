@@ -440,6 +440,41 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 A fresh clone **on this host** needs a local git setting to stop `.git` growing. That is a fact about
 this machine, so it lives in machine-local notes, not here (workspace rule).
 
+##### 🚦 HANDOFF — where to pick up (updated 2026-10-24)
+
+**State, measured 2026-10-24:** spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`:
+0 regressed); **602 workspace tests**, 0 failed, 1 ignored (from Git Bash); the surface gate, eol and
+definitions gates green. `main` = `origin/main`. Contract mirror at **v34**, byte-identical to wazmrt.
+History rewritten twice (2026-10-23 paths, 2026-10-24 drive letters): look old ids up in
+`history-map-2026-10-23.md`, then `history-map-2026-10-24.md`. Nothing is half-finished in this tree.
+
+**Done this week, wasmrt's side of the workspace letters:** H1 (mirror, now v34), H6 (gated bump),
+H8 (measurements), H10 step 1, H13, H15, H16, H18, H19 (both rewrites), H20, H21, H23.
+
+**Open, in the order they unblock each other:**
+1. **H2 — memory layout** (track C): `CLAUDE.md` to a pointer of ≤ 5 KB, INDEX one line per file with
+   the narrative moved to an `open-work.md`, renumber the duplicated `best-practices.md` sections,
+   refresh the stale README intro (it still calls wazmrt the oracle and quotes 99.4% / 284 files).
+   This is also H6's memory-layout part.
+2. **1.0.0 release prep** (`releasing.md`): the floor since 0.9.0 is MAJOR, which 1.0.0 meets. The
+   CI gate job has never run on a runner; its first run is the 1.0.0 tag.
+3. **H10 step 2** (track D): derive the hand tables from `definitions.rs` (hot path: A/B/A benchmark),
+   and check D3.
+4. **The D2 `--features` migration**, names and meanings (v32/v33), once binaryang's FL1 settles;
+   re-pin binaryang (v1.14.0 → v1.17.0 or later) with it. Blocked upstream: D2 has no dependency or
+   preset rules, and D1 gates `return_call_ref` under `tailCall`.
+5. **The `1.0.x` ladder** behind 1.0.0: T9 hardening, T10 bug hunt, T11 optimization (the contest:
+   CLI 3.4 ms on the 48 KB module, in-process cold start, the ~5% loop regression, the interpreter
+   ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap), T12 security. Lockstep ended at v33.
+
+**Owner decisions waiting:** the `--env PATH` test (fails under PowerShell, whose variable is `Path`;
+passes from Git Bash); whether to add the maintainer email to `Cargo.toml` `authors` (allowed, optional).
+
+**To relay (wasmrt cannot write there):** workspace — generalize the drive letter in canonical rule
+5.2; binaryang — D1's `return_call_ref` feature and D2's missing dependency rules; wasmtk — the
+uncommitted `proposals/threads/` patch is theirs to commit; GitHub — old ids stay retrievable until
+its garbage collection (a full purge is a Support request).
+
 ##### 🚦 HANDOFF — where to pick up (updated 2026-09-20, day 6)
 
 **State: 🎯 64,603 / 0 / 0 over 288 files, unchanged by the day's eight fixes.** **588 workspace tests**,

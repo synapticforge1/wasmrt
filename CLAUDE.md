@@ -89,7 +89,7 @@ sweeps and one from a fuzz, not from reading the arm that was wrong** — the su
 64,603 / 0 / 0 the whole time, because it cannot spell `(table 1 i64)` and cannot test a gate while
 every proposal is on (§1.11, §1.12). The three sweeps are committed as gates:
 `scripts/feature-gate-sweep.ts`, `scripts/index-type-sweep.ts`, `scripts/differential-fuzz.ts`.
-🚦 **PICKING UP TOMORROW? The handoff list is in `cmem/roadmap.md`, "HANDOFF — where to pick up".**
+🚦 **PICKING UP TOMORROW? The handoff list is in `cmem/roadmap.md`, "HANDOFF — where to pick up" — the newest (2026-10-24: 64,603 / 0 / 0, 602 tests, contract v34, H6 done) comes first.**
 Nothing is half-finished. The only work-in-progress anywhere is the threads patch sitting uncommitted
 in the **wasmtk** tree, on purpose, for wasmtk's own session to commit — now three passes on 2026-09-17 and 2026-09-19, both owner-directed: 8 era-pinned `assert_invalid` cases (multi-memory/multi-table) and 3 `assert_malformed` cases (`(memory 0x1_0000_0000)` — Wasm 3.0 makes it INVALID, as core `memory.wast` asserts).
 🔴 **A RECORDED DECISION TURNED OUT TO BE A NO-OP, and was then done properly.** The era-pinned
