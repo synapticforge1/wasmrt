@@ -515,28 +515,26 @@ pub fn val_type_feature(v: ValType) -> Option<Feature> {
 }
 
 /// The first feature a **value type** needs and `features` lacks, or `None` if it is allowed —
-/// what the validator enforces (contract v37, binaryang D2 2.1.0's rule).
+/// what the validator enforces: binaryang D2's `typeRules`, which are wasm-tools 1.262's rule
+/// (binaryang letter § 44; owner: "wasm-tools' rule", 2026-10-24).
 ///
-/// No feature implies another (D2 `requires` is recorded, NOT enforced), so a typed reference is
-/// judged by what it needs from each proposal that can supply it: **reference types** (a reference
-/// VALUE type), and **function-references OR gc** (a concrete `(ref $t)` or a non-null `(ref func)` /
-/// `(ref extern)`; GC defines typed references too). So with gc on and function-references off, a
-/// GC struct's typed fields are accepted while `call_ref` is refused by its own D1 gate — as wasmtime
-/// 50, wasm-tools 1.262, binaryang and wazmrt do (measured 2026-10-24). Every other type keeps
-/// [`val_type_feature`]'s single answer.
+/// No feature implies another (D2 `requires` is recorded, NOT enforced), so every proposal a type
+/// needs is checked. **Every reference VALUE type needs reference types** — including the GC and
+/// exception ones, which also need their own proposal. Then: a concrete `(ref null? $t)` needs
+/// **function-references OR gc** (GC defines typed references too); every other type keeps
+/// [`val_type_feature`]'s single answer, so a non-null `(ref func)` / `(ref extern)` needs
+/// function-references and gc does NOT admit it. Measured against `wasm-tools validate` over every
+/// value type and all 16 subsets of reference-types / function-references / gc / exceptions: 0
+/// differ, apart from wasm-tools' `gc-types` sub-feature, which D2 does not have (2026-10-24).
 #[must_use]
 pub(crate) fn val_type_unmet(v: ValType, features: &Features) -> Option<Feature> {
-    let typed = v.is_ref()
-        && !v.is_exact()
-        && (v.is_concrete() || (v.is_non_null_ref() && matches!(v.ref_heap(), RefHeap::Func | RefHeap::Extern)));
-    if typed {
+    if v.is_ref() && !v.is_exact() {
         if !features.reference_types {
             return Some(Feature::ReferenceTypes);
         }
-        if !features.function_references && !features.gc {
-            return Some(Feature::FunctionReferences);
+        if v.is_concrete() {
+            return (!features.function_references && !features.gc).then_some(Feature::FunctionReferences);
         }
-        return None;
     }
     val_type_feature(v).filter(|&f| !features.has(f))
 }
@@ -707,6 +705,35 @@ mod tests {
             val_type_feature(ValType::concrete_ref(true, RefHeap::Struct, 3)),
             Some(Feature::FunctionReferences)
         );
+    }
+
+    /// D2's `typeRules` (wasm-tools 1.262's rule, binaryang § 44), at the three places the
+    /// 2026-10-24 measurement found wasmrt accepting what wasm-tools refuses.
+    #[test]
+    fn every_reference_needs_reference_types_and_gc_does_not_admit_ref_func() {
+        let only = |on: &[Feature]| {
+            let mut f = Features::mvp();
+            for &x in on {
+                f.set(x, true);
+            }
+            f
+        };
+        let (rt, fr, gc, exn) =
+            (Feature::ReferenceTypes, Feature::FunctionReferences, Feature::Gc, Feature::Exceptions);
+        // The GC and exception types need reference types as well as their own proposal.
+        assert_eq!(val_type_unmet(ValType::ANYREF, &only(&[gc])), Some(rt));
+        assert_eq!(val_type_unmet(ValType::ANYREF, &only(&[rt, gc])), None);
+        assert_eq!(val_type_unmet(ValType::EXNREF, &only(&[exn])), Some(rt));
+        assert_eq!(val_type_unmet(ValType::EXNREF, &only(&[rt, exn])), None);
+        // A non-null `(ref func)` is function-references' alone: gc does not admit it…
+        assert_eq!(val_type_unmet(ValType::FUNCREF_NN, &only(&[rt, gc])), Some(fr));
+        assert_eq!(val_type_unmet(ValType::FUNCREF_NN, &only(&[rt, fr])), None);
+        // …while a concrete `(ref $t)` takes either.
+        let concrete = ValType::concrete_ref(false, RefHeap::Func, 0);
+        assert_eq!(val_type_unmet(concrete, &only(&[rt, gc])), None);
+        assert_eq!(val_type_unmet(concrete, &only(&[rt, fr])), None);
+        assert_eq!(val_type_unmet(concrete, &only(&[rt])), Some(fr));
+        assert_eq!(val_type_unmet(concrete, &only(&[fr, gc])), Some(rt));
     }
 
     #[test]
