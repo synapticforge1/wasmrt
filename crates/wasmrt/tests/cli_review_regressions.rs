@@ -59,18 +59,36 @@ const BOTH_NO_IMPORTS: &[u8] = br#"(module (memory (export "memory") 1)
 
 /// ⚠️⚠️ `WasiCtx::with_env` ASSIGNS. Calling it twice — inherited environment, then `--env` —
 /// read as layering and was replacement: the guest saw **zero** variables.
+///
+/// The overridden key is one this test puts into wasmrt's OWN environment, so its spelling is
+/// known. It used to override `PATH`, which Windows hands a child as `Path` when the parent is
+/// PowerShell, so the override ADDED a key there (126 vs 125) and the test failed by shell, not by
+/// code. Whether `--env PATH=x` should replace a host `Path` is a separate question: a POSIX guest
+/// sees two distinct keys, so it is not obviously a defect.
 #[test]
 fn env_flags_add_to_the_inherited_environment_rather_than_replacing_it() {
+    const KEY: &str = "WASMRT_TEST_INHERITED";
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_wasmrt"))
+            .args(args)
+            .env(KEY, "host")
+            .output()
+            .expect("spawn wasmrt")
+            .status
+            .code()
+            .expect("exit code")
+    };
     let m = write("env_probe.wat", ENV_PROBE);
-    let inherited = wasmrt(&["wasi", &m]).status.code().expect("exit code");
+    let inherited = run(&["wasi", &m]);
     assert!(inherited > 0, "the guest must inherit the host environment, saw {inherited}");
 
-    let with_new = wasmrt(&["wasi", "--env", "WASMRT_TEST_ONLY=1", &m]).status.code().unwrap();
+    let with_new = run(&["wasi", "--env", "WASMRT_TEST_ONLY=1", &m]);
     assert_eq!(with_new, inherited + 1, "a new variable is added");
 
     // An override replaces in place: the count does not grow, and nothing is duplicated (two
     // entries for one key is a shape no libc expects).
-    let overridden = wasmrt(&["wasi", "--env", "PATH=x", &m]).status.code().unwrap();
+    let override_arg = format!("{KEY}=guest");
+    let overridden = run(&["wasi", "--env", &override_arg, &m]);
     assert_eq!(overridden, inherited, "an existing variable is replaced, not duplicated");
 }
 

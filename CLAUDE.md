@@ -411,6 +411,15 @@ the wrong thing (Bun's language — `process.versions` names the TOOLCHAIN), a g
 straight into a test, and a wall-clock proxy that measured the machine rather than the code. Detail
 and the three shapes to watch: `cmem/design-decisions.md`, "PROVE, DO NOT ASSUME".
 
+## 🔒 PRIVACY — this repo is PUBLIC (owner, 2026-10-22 / 23 / 24)
+
+Nothing machine-specific, secret or personal in a committed file, a commit message, a crate or an
+issue. **The path test is "is it machine-specific?"**: no user profiles, no project-tree or other
+drive locations, **not even a bare drive letter saying where something lives**; convention paths and
+grammar examples are fine. One maintainer email, in `Cargo.toml` `authors` only. Machine facts go in
+the gitignored `cmem/local/`. **Scan the staged diff and the message before every commit.** Full
+rule: `cmem/design-decisions.md`, "PRIVACY".
+
 ## 🔒 Tooling rules (owner, 2026-09-19)
 
 **Scripts are TypeScript, run by BUN — NO bash, NO PYTHON, and 🆕 NO LONGER DENO** (owner,

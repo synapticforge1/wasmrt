@@ -186,6 +186,43 @@ stands; the first half is now unnecessary, which removes the branch people forge
 ✅ **Normalizing cost nothing**: `git diff --numstat` was empty for all twelve rewritten files,
 because the index had been LF all along.
 
+## 🔒 PRIVACY — nothing machine-specific, secret or personal is public (owner, 2026-10-22 / 23 / 24)
+
+*Recorded 2026-10-24 for workspace letter H22; the canonical text is the workspace's
+`working-rules.md` § Records. This repo is PUBLIC (GitHub `"visibility": "public"`, checked
+2026-10-24), so every committed file, every commit message, every published crate and every issue
+is public. Only the gitignored `cmem/local/` is private.*
+
+**The path test is "is it MACHINE-SPECIFIC?", not "is it absolute?"** (owner, 2026-10-23):
+
+* **Not public:** anything that records the owner's own machine layout — a user profile
+  (`C:\Users\<name>\…`), the drive and folder the project tree sits in, other drives, scoop or
+  AppData installs, scratchpad or session ids. 🆕 **A bare drive LETTER counts** when it says where
+  something lives on this machine ("the build drive is `X:`"), and so do the volume's health query
+  and the names of tools installed on it (owner, 2026-10-24: the second history rewrite removed
+  exactly these).
+* **Fine:** repo- or sibling-relative paths (`../wasmtk/…`), environment variables, placeholders, and
+  a CONVENTION path that names nothing about one machine and works on any comparable host
+  (`/etc/wasmtk/pins`, `C:\ProgramData\wasmtk\pins`, a fixed cache directory). Grammar examples in
+  code and docs (`C:/p`, `x:/`, `\\srv\share`) are fine too.
+* **A scan hit is a CANDIDATE**, judged by that test: do not scrub convention paths.
+
+**The rest of the same rule:**
+
+* **No secrets** (tokens, keys, passwords). A leaked secret is rotated, not just deleted.
+* **Email:** one maintainer contact email in the manifest field the package registry reads, and
+  nowhere else: `Cargo.toml` `[workspace.package] authors` (owner, 2026-10-24: "allowed"). The
+  commit author/committer email is the owner's own address, by owner exception (2026-10-23,
+  re-confirmed 2026-10-24); the workspace default is the noreply address.
+* **Machine facts** (drives, filesystems, paths, installed tools) go in `cmem/local/environment.md`.
+* **Scan before every commit, and before every push of memory**: the staged diff AND the message,
+  for drive letters used as locations, user names, tool or agent names, emails and paths. ⚠️ When
+  you edit a long existing line, re-read all of it: re-committing old text is adding it (how the
+  2026-10-24 finding happened).
+* **History counts.** A detail already pushed is removed from history too, by an owner-approved
+  rewrite (`history-map-2026-10-23.md`, `history-map-2026-10-24.md`). GitHub can still serve old
+  commits by id until its garbage collection; a full purge is a GitHub Support request.
+
 ## 🔒 The oracle is RETIRED — wasmrt stands alone (owner, 2026-08-11)
 
 **wasmrt no longer refers back to the `wazmrt` repo.** Through T9 wazmrt was a frozen oracle and

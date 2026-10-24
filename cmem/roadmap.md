@@ -246,9 +246,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   per-clone, per-machine fact.
 * ✅ **H20.** Recorded in `releasing.md` § Tooling: token publishing, no OIDC policy, so the move
   does not affect publishing.
-* **Maintainer-email exception (2026-10-23).** `Cargo.toml` `authors = ["Jon Marcum"]` carries no
-  email. One is now allowed there, and only there. Whether to add it is the owner's choice; nothing
-  requires it.
+* ✅ **Maintainer-email exception (2026-10-23) — ADDED 2026-10-24** (owner: "allowed"): the
+  maintainer contact email is in `Cargo.toml` `[workspace.package] authors`, inherited by all three
+  crates (checked with `cargo metadata`). It is in no other tracked file.
 
 **B. Commit metadata — ✅ CLOSED BY OWNER DECISION 2026-10-23**
 * 🔒 **The owner's personal address stays as this repo's commit author/committer email** (owner,
@@ -285,9 +285,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
     is green, then `surface.ts --release-from` in its own commit.
   * The README has a `### ⚠️ Breaking Changes` table (5 `_next release_` rows) and a SemVer
     Versioning section; the "patch stays single-digit" cadence rule is retired.
-  * The workspace ★ rules (28) are in `best-practices.md` under a dated stamp, verbatim but for ONE
-    phrase: 5.2's canonical text names the development drive, and this repo is public. 📬 **For the
-    workspace: generalize that phrase in the canonical text**, so the next re-copy is verbatim.
+  * The workspace ★ rules (28) are in `best-practices.md` under a dated stamp. The first copy had to
+    generalize one phrase in 5.2, which named the development drive; the workspace changed the
+    canonical text the same day (its letter H23, 2026-10-24), and the re-copy is EXACT.
   * NOT done under H6: the **memory layout** part (pointer file ≤ 5 KB, INDEX one line per file),
     which is H2's work and stays open there; and rule 3's previous-tag test run (`releasing.md`
     says why).
@@ -449,7 +449,8 @@ History rewritten twice (2026-10-23 paths, 2026-10-24 drive letters): look old i
 `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`. Nothing is half-finished in this tree.
 
 **Done this week, wasmrt's side of the workspace letters:** H1 (mirror, now v34), H6 (gated bump),
-H8 (measurements), H10 step 1, H13, H15, H16, H18, H19 (both rewrites), H20, H21, H23.
+H8 (measurements), H10 step 1, H13, H15, H16, H18, H19 (both rewrites), H20, H21, H22, H23 (both
+letters of that number: the carry-forward, and the 5.2 re-copy).
 
 **Open, in the order they unblock each other:**
 1. **H2 — memory layout** (track C): `CLAUDE.md` to a pointer of ≤ 5 KB, INDEX one line per file with
@@ -467,13 +468,17 @@ H8 (measurements), H10 step 1, H13, H15, H16, H18, H19 (both rewrites), H20, H21
    CLI 3.4 ms on the 48 KB module, in-process cold start, the ~5% loop regression, the interpreter
    ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap), T12 security. Lockstep ended at v33.
 
-**Owner decisions waiting:** the `--env PATH` test (fails under PowerShell, whose variable is `Path`;
-passes from Git Bash); whether to add the maintainer email to `Cargo.toml` `authors` (allowed, optional).
+**Decided and done 2026-10-24:** the `--env PATH` test is fixed (owner: "fix it"; it now overrides a
+key it creates, so it passes from any shell); the maintainer email is in `Cargo.toml` `authors`
+(owner: "allowed"); workspace letters **H22** (the privacy rule's path test, now in
+`design-decisions.md`, "PRIVACY") and the second **H23** (re-copy ★ rule 5.2: the copy is now
+EXACT, 28/28, diffed against the canonical text) are done on wasmrt's side.
 
-**To relay (wasmrt cannot write there):** workspace — generalize the drive letter in canonical rule
-5.2; binaryang — D1's `return_call_ref` feature and D2's missing dependency rules; wasmtk — the
+**To relay (wasmrt cannot write there):** binaryang — D1's `return_call_ref` feature and D2's
+missing dependency rules; wazmrt — `call_ref` with GC on and function-references off; wasmtk — the
 uncommitted `proposals/threads/` patch is theirs to commit; GitHub — old ids stay retrievable until
-its garbage collection (a full purge is a Support request).
+its garbage collection (a full purge is a Support request). *(The workspace generalized rule 5.2 on
+2026-10-24, as asked.)*
 
 ##### 🚦 HANDOFF — where to pick up (updated 2026-09-20, day 6)
 

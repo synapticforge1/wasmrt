@@ -1856,15 +1856,14 @@ the same drift §1.9 names for grammars.
 release binary dated the previous month. Look at the input's date before believing the verdict.
 Deleting a stale cache can turn a quiet pass into a loud failure. Do it on purpose.
 
-## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letter H6)
+## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letters H6, H23)
 
 *Copied from `../cmem/best-practices.md`, the canonical text: its 28 convergent (★) rules, under their
 section headings, verbatim, so a script can diff this block against the workspace. A change is
-RE-COPIED from the workspace, never edited here. **One deviation, by the privacy rule:** in 5.2 the
-canonical text names the development drive by its letter; it is copied as "the development-volume
-build symptom", because this repo is public and a drive letter records the owner's machine. The
-workspace has been asked to generalize its canonical text. wasmrt's own numbered sections above keep
-their numbers; these keep the workspace's.*
+RE-COPIED from the workspace, never edited here. **Re-copied the same day (workspace letter H23,
+2026-10-24):** the first copy had to generalize one phrase in 5.2, which named the development drive
+by its letter; the workspace changed the canonical text to name the FILESYSTEM instead, so this copy
+is now exact. wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
 
 <!-- BEGIN workspace-star-block 2026-10-24 -->
 #### §1 Evidence and measurement
@@ -1949,8 +1948,8 @@ their numbers; these keep the workspace's.*
   right by luck. [wazmrt + wasmrt]
 - **5.2 ★ Identify the LAYER before naming a cause; the stage that REPORTS a failure is usually
   not the stage that caused it; finding a real defect at a layer is not evidence it causes your
-  symptom — vary one thing.** "Memory-grow ordering" was decoder reordering; the development-volume build symptom
-  was diagnosed wrong three times. [wazmrt + binaryen-ts + wasmtk + wasmrt]
+  symptom — vary one thing.** "Memory-grow ordering" was decoder reordering; a symptom caused by the
+  development drive's FILESYSTEM (exFAT) was diagnosed wrong three times. [wazmrt + binaryen-ts + wasmtk + wasmrt]
 
 #### §6 Recording and claims
 
