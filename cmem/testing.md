@@ -1120,6 +1120,19 @@ Two of them earn their keep beyond coverage:
   searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
   would have passed by accident — the same failure mode as a gate that cannot fail.
 
+### 🆕 Contract mirror (2026-10-23, evening) — **597 workspace tests**
+
+`crates/wasmrt/tests/cli_contract_dir_and_guest_position.rs` (7 tests) pins the three rows wasmrt was
+found breaching when `interop.md` was mirrored to v31:
+* v27, the `--dir` host grammar (Windows drive cases are `#[cfg(windows)]`);
+* v26/v28, the eleven exact host-flag names that are an error in a guest position, plus every
+  exemption;
+* `--features=<list>`.
+
+Each case was first measured on wazmrt, and each fix was inverted (disabled, so its tests failed
+for the right reason, then restored). `cli_flag_position.rs`'s "stranded host flag WARNS" test now
+asserts the refusal. Spec suite 64,603 / 0 / 0 unchanged; the feature-gate sweep passes; clippy clean.
+
 ### 🆕 Shared definitions gate (2026-10-23, letters H8 / H10) — **590 workspace tests**
 
     bun scripts/definitions.ts --check              # the copy equals what the pinned source generates

@@ -232,6 +232,53 @@ fn split_preopen(spec: &str) -> (String, String) {
     (spec.to_string(), spec.to_string())
 }
 
+/// The GRAMMAR of a `--dir` / `--ro-dir` host half (`interop.md` §2.2, owner v27, 2026-09-21).
+///
+/// 🔒 **A relative host path must say so**: `.`, `..`, or a path starting `./` or `../` (and
+/// `.\` / `..\` on Windows). A rooted `/p` is absolute everywhere. On **Windows only**, a drive
+/// followed by a separator (`C:/p`, `C:\p`, bare `x:/`) and a UNC path (`\\srv\share`) are
+/// absolute too. Everything else is a SYNTAX error, rc 1, **before the filesystem is touched**:
+/// a bare `data` (write `./data`), and a drive-relative `C:` or `C:Users` (write `C:/Users`).
+///
+/// Why a grammar rather than a resemblance rule: once a bare `data` is not a legal spelling, a
+/// leading `<letter>:` is a drive *by grammar*, so the old "is it a drive letter?" guess (§5 #10,
+/// which v14's "no looks like" put in doubt) is no longer needed to read `--dir x:/` — and the
+/// drive forms stop applying on Linux and macOS, where they never meant anything.
+///
+/// Measured against wazmrt before it was written (2026-10-23), case by case: `data`, `data:/m`,
+/// `data::/m`, `data/../data`, `~/x`, `C:` and `C:Users` refused; `./data`, `.\data`, `.`, `..`,
+/// `..\sib`, `/`, absolute `C:\…` and `C:/…` forms, `x:/`, `X:\` and `\\localhost\c$` accepted.
+fn check_host_path(host: &str) -> Result<(), String> {
+    let b = host.as_bytes();
+    let relative = host == "."
+        || host == ".."
+        || host.starts_with("./")
+        || host.starts_with("../")
+        || (cfg!(windows) && (host.starts_with(".\\") || host.starts_with("..\\")));
+    if relative || host.starts_with('/') {
+        return Ok(());
+    }
+    if cfg!(windows) {
+        if host.starts_with("\\\\") {
+            return Ok(());
+        }
+        if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+            if matches!(b.get(2), Some(b'/' | b'\\')) {
+                return Ok(());
+            }
+            return Err(format!(
+                "--dir '{host}': drive-relative — a drive needs a separator after the colon, \
+                 as in '{}:/{}'",
+                &host[..1],
+                &host[2..]
+            ));
+        }
+    }
+    Err(format!(
+        "--dir '{host}': a relative host path must start with './' or '../' — write './{host}'"
+    ))
+}
+
 /// Parse a `--features` list: items separated by commas, `name` to enable and `-name` to disable.
 ///
 /// The seed follows the sibling runtime so one list means one thing under both: a list containing
@@ -597,47 +644,65 @@ struct Preopen {
     read_only: bool,
 }
 
-/// Every flag this CLI recognises that takes a following value. Used to tell a **misplaced**
-/// host flag from a guest argument that merely looks like one.
-const HOST_FLAGS_WITH_VALUE: &[&str] = &["--dir", "--ro-dir"];
-/// Every valueless flag this CLI recognises.
-const HOST_FLAGS_BARE: &[&str] = &["--allow-symlink"];
+/// The host-flag names that are an ERROR when they appear in a GUEST position.
+///
+/// 🔒 `interop.md` §2.4a as amended by the owner (v26, v28; mirrored 2026-10-23). The list is
+/// EXACT and measured, not derived: these are the eleven names wazmrt refuses after the first
+/// guest word, rc 1. It passes `--features` (its position rule is §2.4b's, and a guest's own
+/// `--features mvp` must never narrow the language the HOST accepts), `--help`/`--version`/`-h`/
+/// `-v` (first-argument-only, §2.4), and every `--name=value` spelling.
+const GUEST_POSITION_REFUSED: &[&str] = &[
+    "--dir",
+    "--ro-dir",
+    "--env",
+    "--max-memory",
+    "--max-table-elems",
+    "--max-iterations",
+    "--pins",
+    "--verify",
+    "--no-verify",
+    "--yes",
+    "--allow-symlink",
+];
 
-/// Warn when a host flag appears where only the **guest** will ever see it.
+/// Refuse a host flag written where only the **guest** would ever see it.
 ///
 /// ⚠️⚠️ **This is the fail-open half, and it is why the function exists.** Host flags are
-/// recognised positionally; anything outside those positions is the guest's argv. For a
-/// *preopen* a misplacement fails **closed** — the grant is simply never made, so the guest
-/// gets less access than intended. **For a restriction flag it fails OPEN**: `--verify`,
-/// `--pins` (T9e) and `--max-iterations` / `--max-*` (T9i) would be silently dropped, and the
-/// user who asked for a bound would run without one and see no error.
+/// recognised positionally; anything outside those positions is the guest's argv. For a preopen a
+/// misplacement fails closed (the grant is never made), but **for a restriction flag it fails
+/// OPEN**: `--verify`, `--pins`, `--max-*` would be silently dropped, and the user who asked for a
+/// bound would run without one. So `prog.wasm install --yes` is an error, and
+/// `prog.wasm install -- --yes` is how a guest receives its own `--yes`.
 ///
-/// **Warn, never refuse:** a guest may legitimately take `--dir` as its own argument, so
-/// rejecting would break valid command lines. And **nothing after an explicit `--` is
-/// examined** — that marker is the user saying "the rest is the guest's", and second-guessing
-/// it would make `--` useless.
+/// 🔒 **EXACT names, never resemblance** (v14's "no looks like"): `--yess`, `--Yes` and `--dirs`
+/// are the guest's, untouched. **Nothing after an explicit `--` is examined**: that marker is the
+/// one unconditional hand-off.
 ///
-/// Matches wazmrt's behaviour (their H7); see `cmem/interop.md` §2.2.
-fn warn_misplaced_host_flags(guest_argv: &[String]) {
+/// ⚠️ This function WARNED and never refused until 2026-10-23, and it covered only `--dir`,
+/// `--ro-dir` and `--allow-symlink`. The owner's v26/v28 made the refusal the rule; wasmrt
+/// learned it in the v11–v31 contract mirror, by running both runtimes on the same command lines.
+fn refuse_misplaced_host_flags(guest_argv: &[String]) -> Result<(), String> {
     for a in guest_argv {
         if a == "--" {
-            return; // everything past here is deliberately the guest's
+            return Ok(()); // everything past here is deliberately the guest's
         }
-        if HOST_FLAGS_WITH_VALUE.contains(&a.as_str()) || HOST_FLAGS_BARE.contains(&a.as_str()) {
-            eprintln!(
-                "wasmrt: warning: `{a}` here is passed to the GUEST, not applied by wasmrt — \
-                 host flags go before the module path or immediately after it \
-                 (use `--` to pass it to the guest deliberately)"
-            );
+        if GUEST_POSITION_REFUSED.contains(&a.as_str()) {
+            return Err(format!(
+                "`{a}` came after a non-flag argument, so it would be passed to the GUEST and \
+                 would NOT apply — host flags go before the module path or immediately after it \
+                 (write `-- {a}` to give it to the guest)"
+            ));
         }
     }
+    Ok(())
 }
 
 /// Pull the `--dir` / `--ro-dir` / `--allow-symlink` flags off one run of arguments,
 /// returning the preopens plus whatever is left.
 ///
 /// `--dir <host>` maps the directory under its own name; `--dir <host>::<guest>` renames it
-/// for the guest. `::` rather than `:` because a Windows host path starts `C:`.
+/// for the guest; `:` works too (`split_preopen`). The host half must satisfy
+/// [`check_host_path`] (contract v27), checked here, before anything touches the filesystem.
 ///
 /// Parsing stops at the first non-flag. ⚠️ An **unrecognised** `--flag` in a leading position
 /// is an **error**, not a module path: treating it as the path is how a typo becomes
@@ -668,17 +733,25 @@ fn take_dir_flags(
         // the module is DECODED and VALIDATED against, so by the time the path has been read the
         // decision has been made — accepting it afterwards would silently ignore it, which is the
         // failure mode this rule exists to prevent. Stated in the usage line and in `--help`.
-        if args[i] == "--features" {
+        //
+        // 🆕 `--features=<list>` is the same flag (2026-10-23). It is the ONE `=` spelling the
+        // sibling accepts — measured: every other `--flag=value` is refused by both runtimes — and
+        // wasmrt refused it as an unknown flag, so `wazmrt --features=mvp m.wasm` ran there and
+        // failed here. Found while mirroring the contract (§2.4b's own table spells it).
+        let eq_list = args[i].strip_prefix("--features=");
+        if args[i] == "--features" || eq_list.is_some() {
             if guest_follows {
-                return Err(String::from(
-                    "`--features` must come BEFORE the module path",
-                ));
+                return Err(format!("`{}` must come BEFORE the module path", args[i]));
             }
-            let Some(v) = args.get(i + 1) else {
-                return Err(String::from("--features needs a list"));
+            let (v, used) = match eq_list {
+                Some(v) => (v, 1),
+                None => match args.get(i + 1) {
+                    Some(v) => (v.as_str(), 2),
+                    None => return Err(String::from("--features needs a list")),
+                },
             };
             hf.features = Some(parse_features(v)?);
-            i += 2;
+            i += used;
             continue;
         }
         if args[i] == "--env" {
@@ -775,6 +848,7 @@ fn take_dir_flags(
             return Err(format!("{} needs a directory", args[i]));
         };
         let (host, guest) = split_preopen(spec);
+        check_host_path(&host)?;
         hf.preopens.push(Preopen { host, guest, read_only: ro });
         i += 2;
     }
@@ -815,11 +889,14 @@ fn run_wasi_argv(rest: &[String]) -> ExitCode {
     let guest_argv: Vec<String> = match take_dir_flags(&rest[1..], true) {
         Ok((more, tail)) => {
             flags = flags.merge(more);
-            // ⚠️ Warn on the tail *including* any `--`, so the marker can stop the scan —
-            // stripping it first made `wasmrt wasi m.wasm -- --dir X` warn about a flag the
+            // ⚠️ Scan the tail *including* any `--`, so the marker can stop the scan —
+            // stripping it first made `wasmrt wasi m.wasm -- --dir X` complain about a flag the
             // user had explicitly handed to the guest, which is the one case that must stay
             // quiet. Caught by the case-5 probe, not by reading this.
-            warn_misplaced_host_flags(tail);
+            if let Err(e) = refuse_misplaced_host_flags(tail) {
+                eprintln!("wasmrt: {e}");
+                return ExitCode::FAILURE;
+            }
             // Then drop the marker itself: the guest sees its arguments, not our separator.
             let tail = if tail.first().is_some_and(|a| a == "--") { &tail[1..] } else { tail };
             tail.to_vec()
@@ -995,7 +1072,10 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
         }
     };
     let flags = lead.merge(trailing);
-    warn_misplaced_host_flags(tail);
+    if let Err(e) = refuse_misplaced_host_flags(tail) {
+        eprintln!("wasmrt: {e}");
+        return ExitCode::FAILURE;
+    }
     // 🔒 An explicit `--` means "everything after this is the GUEST's", and that has to be
     // remembered: without this flag the first word was still matched against the export names, so
     // `wasmrt prog.wasm -- status` CALLED the export `status` instead of running `_start` with
@@ -1430,7 +1510,9 @@ fn print_help() {
                                        `mvp`, a signed item implies `all`; comma-separated\n\n\
          WASI — a guest reaches ONLY what you preopen:\n    \
            --dir <host>[:<guest>]      grant read-write access to a directory (`::` also\n    \
-                                       accepted, and required when <host> is a drive letter)\n    \
+                                       accepted). <host> is `./rel`, `../rel`, `.` or an\n    \
+                                       absolute path (`C:/p` on Windows): a bare `data` is\n    \
+                                       an error — write `./data`\n    \
            --ro-dir <host>[:<guest>]   grant read-only access (propagates to the subtree)\n    \
            --allow-symlink             let the guest CREATE symlinks (off by default)\n    \
            --env KEY=VALUE             set one variable for the guest (repeatable)\n    \
@@ -1447,7 +1529,10 @@ fn print_help() {
          and run exactly like a binary.\n\n\
          An unrecognised flag is an error (`unknown flag`, exit 1). After the module path a\n\
          single-dash argument is the GUEST's (wasmrt prog.wasm -la); use `--` to hand it\n\
-         a `--flag` of its own: wasmrt prog.wasm -- --help",
+         a `--flag` of its own: wasmrt prog.wasm -- --help\n\n\
+         A host flag written AFTER the guest's first argument would never apply, so it is an\n\
+         error (`prog.wasm install --yes`, exit 1); write `prog.wasm install -- --yes` to give\n\
+         the guest its own --yes.",
         wasmrt_core::VERSION
     );
 }

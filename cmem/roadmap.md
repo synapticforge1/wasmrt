@@ -271,6 +271,23 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   release checklist.
 
 **D. Engine and contract work (technical; some cross the `interop.md` contract)**
+* 🟡 **H1 / the v11–v31 MIRROR — text DONE and three rows FIXED 2026-10-23** (owner: "yes … ok").
+  `cmem/interop.md` is now wazmrt's v31 verbatim, plus wasmrt's unfolded §2.2f and a new §2.2m
+  annex recording the verification. Rows were verified by running both binaries:
+  * **v27** `--dir` grammar: fixed, 26/26 cases identical.
+  * **v26/v28** exact names in a guest position: fixed, 30/30.
+  * **`--features=<list>`**: a break §2.4b implies; fixed.
+  * v11/v15/v16: already identical.
+
+  All are pinned by `cli_contract_dir_and_guest_position.rs`, each inverted; 597 tests. The help
+  states both new rules.
+
+  ⏳ **OPEN: v30.** The matrix differs from wazmrt's on 54/85 lines. Needed: wasm-tools 1.259's
+  vocabulary and presets, a `floats` gate, module-level dependencies with no configuration
+  refused, and `check_coherent`'s configuration refusals removed. Acceptance: `feature-matrix.ts`
+  on wasmrt = wazmrt's output, 0 lines. ⚠️ It touches the validator and `Feature` (whose C values
+  are append-only), so scope it before building. ⏳ v29 waits on H13.
+  📬 **Tell the owner: wazmrt's copy lacks wasmrt's §2.2f and §2.2m**, both to fold.
 * **H1 — mirror the contract, now v11–v31** (owner, 2026-10-23; verified the same day: wasmrt's
   `interop.md` header says **v10**, wazmrt's **v31**, so this is 21 versions). It includes:
   * the owner decisions (any CLI syntax error throws; lockstep);
@@ -305,8 +322,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   That touches `define_ops!`, the `0xFB`/`0xFC` dispatch, the SIMD/atomic tables and `op_feature`, all
   on the hot path. It needs an A/B/A benchmark, and the variant names D1 does not carry (`RefCastOp`,
   `TryLegacy`, `SelectT` …). D3 is vendored but not yet checked.
-* **H21 (new, 2026-10-23)**: `interop.md` quotes 3 old wasmrt commit ids. wazmrt already fixed
-  its copy as contract **v31**, so this closes with the H1 mirror (v11–v31) rather than on its own.
+* ✅ **H21 CLOSED 2026-10-23 by the mirror**: wasmrt's copy now carries v31's post-rewrite ids.
+  Each of the four old ids appears only in H21's bracketed form, "`c9c447f3` (was `7ce0dcd2`)":
+  11 occurrences, all checked.
 
 **E. Owner-gated and destructive — ✅ DONE 2026-10-23 (owner: "fix the old drive paths in the git history")**
 * ✅ **History rewritten and force-pushed with a lease on all 18 refs.** 217 commits, tip tree

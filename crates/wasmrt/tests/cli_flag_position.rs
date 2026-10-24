@@ -83,19 +83,19 @@ fn an_unknown_leading_option_is_refused_not_treated_as_a_path() {
     );
 }
 
-/// A host flag stranded in the guest's argv **warns** — and does **not** refuse, because a guest
-/// may legitimately take `--dir` as its own argument. Matches wazmrt's H7.
+/// A host flag stranded in the guest's argv is an **ERROR**, rc 1 (`interop.md` §2.4a, owner v26 +
+/// v28). ⚠️ This test asserted a mere WARNING, and "does not refuse", until 2026-10-23. That matched
+/// wazmrt's H7 when it was written; the owner then made the refusal the rule, and wasmrt was found
+/// still warning when the contract was mirrored.
 #[test]
-fn a_host_flag_stranded_in_guest_argv_warns() {
+fn a_host_flag_stranded_in_guest_argv_is_refused() {
     let m = fixture();
-    let (_, text) = run(&["wasi", &m.to_string_lossy(), "somearg", "--dir", &missing_dir()]);
-    assert!(
-        text.contains("passed to the GUEST"),
-        "a stranded host flag must warn; got: {text}"
-    );
+    let (ok, text) = run(&["wasi", &m.to_string_lossy(), "somearg", "--dir", &missing_dir()]);
+    assert!(!ok, "a stranded host flag must FAIL the run; got: {text}");
+    assert!(text.contains("passed to the GUEST"), "and say why; got: {text}");
 }
 
-/// 🔒 …but an **explicit `--`** silences it. That marker is the user saying "the rest is the
+/// 🔒 …but an **explicit `--`** hands it over. That marker is the user saying "the rest is the
 /// guest's", and second-guessing it would make `--` useless.
 ///
 /// ⚠️ This case failed on the first implementation: the `--` was stripped *before* the warning
