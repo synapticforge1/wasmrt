@@ -11,7 +11,7 @@ stays in the topic file named.
   `surface.ts --check`, eol, definitions and the C-ABI gate green.
 * Version **0.9.0** (last release). The bump floor since then is **MAJOR** (`releasing.md`, "THE
   NUMBER"), which `1.0.0` meets.
-* Contract mirror **v37**, byte-identical to wazmrt's (`interop.md`); release lockstep ended at v33.
+* Contract mirror **v38**, byte-identical to wazmrt's (`interop.md`); `--features` AGREED (v38); release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 step 1, H13, H15, H16, H18, H19,
@@ -57,17 +57,13 @@ stays in the topic file named.
   gc); an overlong `call_indirect` table index needs reference-types (an encoding, not an
   instruction). Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of `ref.test` /
   `ref.cast` / `ref.cast_desc_eq`.
-* **wazmrt (pen holder):** wasmrt implemented v37 (the commit after the re-pin); the §2.2
-  `--features` wasmrt cell can be re-run and marked agreed.
 * **wasmtk:** its generated (gitignored) `tests/wasi/wasm_wasi_bundle/**/*.wat` include about ten
   modules that `throw 0` with no tag declared (`dynrt_eval_bundle/main_*.wat`,
   `sharedheap_bundle/main_wasic.wat`): wasm-tools refuses the source, and so does wasmrt. A
   generator defect, found by `scripts/wat-corpus.ts` on 2026-10-24 (the files appear and disappear
   between runs, so their builds are live).
-* **wazmrt:** `call_ref` with GC on and function-references off is admitted (measured on 2.0.0);
-  const-expr depth > 8 and the element flags are not re-measured since its 2026-09-21 build.
-  wasmrt implemented v35's §5 #13 in `cfeee31`, so the contract's wasmrt cell can read agreed.
-  `interop.md:83` still says wasmrt's "`1.0.0` (the conformance clear-out, T13) is not started";
-  the source has met it since 2026-09-19 (64,603 / 0 / 0).
+* **wazmrt:** const-expr depth > 8 and the element flags are not re-measured since its 2026-09-21
+  build. *(Closed 2026-10-24: `call_ref` with GC on and function-references off is now refused
+  (v37, measured); §5 #13 AGREED (v36); `--features` AGREED and the ladder line corrected (v38).)*
 * **GitHub:** old commit ids from both rewrites stay retrievable until its garbage collection; a full
   purge is a Support request (owner).
