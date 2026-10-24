@@ -4204,154 +4204,23 @@ fn emit_op_with_immediates(
     use crate::opcode::Op as O;
     let imm = |k: usize| -> Result<&Sexpr> { items.get(start + k).ok_or(Error::BadImmediate) };
 
-    // The prefixed families need their prefix byte plus a sub-opcode.
-    match op {
-        O::MemoryInit | O::DataDrop | O::MemoryCopy | O::MemoryFill => {
-            ctx.out.push(0xfc);
-            let sub: u64 = match op {
-                O::MemoryInit => 8,
-                O::DataDrop => 9,
-                O::MemoryCopy => 10,
-                _ => 11,
-            };
-            uleb(&mut ctx.out, sub);
-        }
-        // 🔴 **These had NO emitter arm until 2026-09-17, and fell through to the single-byte
-        // catch-all — so the assembler wrote the raw tag byte `0xc5`–`0xcc`.** Those bytes are
-        // unassigned in the single-byte space, so **every module wasmrt assembled containing a
-        // saturating truncation was not WebAssembly**: wasmtime answers *"illegal opcode: 0xc5"*.
-        // Our own decoder read them back (it accepted the raw bytes too), so the round trip was
-        // green — `best-practices.md` §3.8b, the third wire divergence found this way.
-        O::I32TruncSatF32S
-        | O::I32TruncSatF32U
-        | O::I32TruncSatF64S
-        | O::I32TruncSatF64U
-        | O::I64TruncSatF32S
-        | O::I64TruncSatF32U
-        | O::I64TruncSatF64S
-        | O::I64TruncSatF64U => {
-            ctx.out.push(0xfc);
-            let sub: u64 = match op {
-                O::I32TruncSatF32S => 0,
-                O::I32TruncSatF32U => 1,
-                O::I32TruncSatF64S => 2,
-                O::I32TruncSatF64U => 3,
-                O::I64TruncSatF32S => 4,
-                O::I64TruncSatF32U => 5,
-                O::I64TruncSatF64S => 6,
-                _ => 7,
-            };
-            uleb(&mut ctx.out, sub);
-        }
-        O::I64Add128 | O::I64Sub128 | O::I64MulWideS | O::I64MulWideU => {
-            ctx.out.push(0xfc);
-            let sub: u64 = match op {
-                O::I64Add128 => 19,
-                O::I64Sub128 => 20,
-                O::I64MulWideS => 21,
-                _ => 22,
-            };
-            uleb(&mut ctx.out, sub);
-        }
-        O::TableInit | O::ElemDrop | O::TableCopy | O::TableGrow | O::TableSize | O::TableFill => {
-            ctx.out.push(0xfc);
-            let sub: u64 = match op {
-                O::TableInit => 12,
-                O::ElemDrop => 13,
-                O::TableCopy => 14,
-                O::TableGrow => 15,
-                O::TableSize => 16,
-                _ => 17,
-            };
-            uleb(&mut ctx.out, sub);
-        }
-        // The `0xFB` GC family. `ref.test`/`ref.cast` have separate non-null and nullable
-        // sub-opcodes; the decoder folds each pair into one `Op` and keeps nullability in
-        // the immediate, so the arm below re-selects the nullable sub-opcode.
-        O::StructNew
-        | O::StructNewDefault
-        | O::StructGet
-        | O::StructGetS
-        | O::StructGetU
-        | O::StructSet
-        | O::ArrayNew
-        | O::ArrayNewDefault
-        | O::ArrayNewFixed
-        | O::ArrayGet
-        | O::ArrayGetS
-        | O::ArrayGetU
-        | O::ArraySet
-        | O::ArrayLen
-        | O::ArrayNewData
-        | O::ArrayNewElem
-        | O::ArrayFill
-        | O::ArrayCopy
-        | O::ArrayInitData
-        | O::ArrayInitElem
-        | O::RefTest
-        | O::RefCastOp
-        | O::BrOnCast
-        | O::BrOnCastFail
-        | O::StructNewDesc
-        | O::StructNewDefaultDesc
-        | O::RefGetDesc
-        | O::RefCastDescEq
-        | O::BrOnCastDescEq
-        | O::BrOnCastDescEqFail
-        | O::RefI31
-        | O::I31GetS
-        | O::I31GetU
-        | O::AnyConvertExtern
-        | O::ExternConvertAny => {
-            ctx.out.push(0xfb);
-            let sub: u64 = match op {
-                O::StructNew => 0x00,
-                O::StructNewDefault => 0x01,
-                O::StructGet => 0x02,
-                O::StructGetS => 0x03,
-                O::StructGetU => 0x04,
-                O::StructSet => 0x05,
-                O::ArrayNew => 0x06,
-                O::ArrayNewDefault => 0x07,
-                O::ArrayNewFixed => 0x08,
-                O::ArrayGet => 0x0b,
-                O::ArrayGetS => 0x0c,
-                O::ArrayGetU => 0x0d,
-                O::ArraySet => 0x0e,
-                O::ArrayLen => 0x0f,
-                O::ArrayNewData => 0x09,
-                O::ArrayNewElem => 0x0a,
-                O::ArrayFill => 0x10,
-                O::ArrayCopy => 0x11,
-                O::ArrayInitData => 0x12,
-                O::ArrayInitElem => 0x13,
-                O::RefTest => 0x14,
-                O::RefCastOp => 0x16,
-                O::BrOnCast => 0x18,
-                O::BrOnCastFail => 0x19,
-                O::StructNewDesc => 0x20,
-                O::StructNewDefaultDesc => 0x21,
-                O::RefGetDesc => 0x22,
-                // non-null; the cast arm below re-selects 0x24 for a nullable target.
-                O::RefCastDescEq => 0x23,
-                O::BrOnCastDescEq => 0x25,
-                O::BrOnCastDescEqFail => 0x26,
-                O::AnyConvertExtern => 0x1a,
-                O::ExternConvertAny => 0x1b,
-                O::RefI31 => 0x1c,
-                O::I31GetS => 0x1d,
-                _ => 0x1e,
-            };
-            uleb(&mut ctx.out, sub);
-        }
+    // A prefixed op (`0xFB` / `0xFC`) is its prefix byte plus a LEB sub-opcode, from the GENERATED
+    // table (`tables::prefixed`, D1; letter H10 step 2). The non-null form is written here; a
+    // nullable cast or test re-selects its sub-opcode where the target type is parsed, below.
+    // *(Until 2026-10-24 this was a hand-written match per family — a second copy of the numbering
+    // the decoder also kept by hand.)*
+    if let Some((prefix, sub)) = crate::tables::prefixed(op, false) {
+        ctx.out.push(prefix);
+        uleb(&mut ctx.out, u64::from(sub));
+    } else {
         // Every remaining op is a real single-byte opcode. 🔒 **Converted FALLIBLY, because `Op`
-        // is `#[repr(u16)]`**: an internal tag reaching here would mean the prefixed-family arms
-        // above are missing a case, and `op as u8` would silently emit a TRUNCATED byte — a
-        // different instruction. Refusing by name says which op has no emitter instead.
-        _ => match u8::try_from(op as u16) {
+        // is `#[repr(u16)]`**: an internal tag reaching here would mean the generated table has
+        // no row for it, and `op as u8` would silently emit a TRUNCATED byte — a different
+        // instruction. Refusing by name says which op has no emitter instead.
+        match u8::try_from(op as u16) {
             Ok(b) => ctx.out.push(b),
             Err(_) => return Err(Error::Unsupported(op.text_name())),
-        },
+        }
     }
 
     match op {
@@ -4539,14 +4408,13 @@ fn emit_op_with_immediates(
         O::RefTest | O::RefCastOp | O::RefCastDescEq => {
             let (nullable, heap) = parse_ref_type_target(ctx, imm(0)?)?;
             if nullable {
-                // Re-select the nullable sub-opcode (0x14→0x15 test, 0x16→0x17 cast, 0x23→0x24
-                // desc-eq cast); the prefix arm above wrote the non-null one.
-                let last = ctx.out.len() - 1;
-                ctx.out[last] = match op {
-                    O::RefTest => 0x15,
-                    O::RefCastDescEq => 0x24,
-                    _ => 0x17,
+                // Re-select the nullable form's sub-opcode (generated, `tables::prefixed`); the
+                // prefix arm above wrote the non-null one. Both are single-byte LEBs (< 0x80).
+                let Some((_, sub)) = crate::tables::prefixed(op, true) else {
+                    return Err(Error::Unsupported(op.text_name()));
                 };
+                let last = ctx.out.len() - 1;
+                ctx.out[last] = u8::try_from(sub).ok().filter(|b| *b < 0x80).ok_or(Error::Unsupported(op.text_name()))?;
             }
             emit_heap(&mut ctx.out, heap);
         }

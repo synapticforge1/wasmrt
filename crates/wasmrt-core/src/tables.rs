@@ -348,6 +348,152 @@ pub(crate) const fn op_feature(op: Op) -> Option<Feature> {
     }
 }
 
+/// The `0xFB` (GC) op a sub-opcode names, and whether it is the `null` form of a cast or test
+/// (`ref.test null` = 0x15: wasmrt keeps ONE op and carries nullability in the immediate).
+#[must_use]
+pub(crate) const fn fb_op(sub: u32) -> Option<(Op, bool)> {
+    match sub {
+        0x00 => Some((Op::StructNew, false)), // struct.new
+        0x01 => Some((Op::StructNewDefault, false)), // struct.new_default
+        0x02 => Some((Op::StructGet, false)), // struct.get
+        0x03 => Some((Op::StructGetS, false)), // struct.get_s
+        0x04 => Some((Op::StructGetU, false)), // struct.get_u
+        0x05 => Some((Op::StructSet, false)), // struct.set
+        0x06 => Some((Op::ArrayNew, false)), // array.new
+        0x07 => Some((Op::ArrayNewDefault, false)), // array.new_default
+        0x08 => Some((Op::ArrayNewFixed, false)), // array.new_fixed
+        0x09 => Some((Op::ArrayNewData, false)), // array.new_data
+        0x0a => Some((Op::ArrayNewElem, false)), // array.new_elem
+        0x0b => Some((Op::ArrayGet, false)), // array.get
+        0x0c => Some((Op::ArrayGetS, false)), // array.get_s
+        0x0d => Some((Op::ArrayGetU, false)), // array.get_u
+        0x0e => Some((Op::ArraySet, false)), // array.set
+        0x0f => Some((Op::ArrayLen, false)), // array.len
+        0x10 => Some((Op::ArrayFill, false)), // array.fill
+        0x11 => Some((Op::ArrayCopy, false)), // array.copy
+        0x12 => Some((Op::ArrayInitData, false)), // array.init_data
+        0x13 => Some((Op::ArrayInitElem, false)), // array.init_elem
+        0x14 => Some((Op::RefTest, false)), // ref.test
+        0x15 => Some((Op::RefTest, true)), // ref.test null
+        0x16 => Some((Op::RefCastOp, false)), // ref.cast
+        0x17 => Some((Op::RefCastOp, true)), // ref.cast null
+        0x18 => Some((Op::BrOnCast, false)), // br_on_cast
+        0x19 => Some((Op::BrOnCastFail, false)), // br_on_cast_fail
+        0x1a => Some((Op::AnyConvertExtern, false)), // any.convert_extern
+        0x1b => Some((Op::ExternConvertAny, false)), // extern.convert_any
+        0x1c => Some((Op::RefI31, false)), // ref.i31
+        0x1d => Some((Op::I31GetS, false)), // i31.get_s
+        0x1e => Some((Op::I31GetU, false)), // i31.get_u
+        0x20 => Some((Op::StructNewDesc, false)), // struct.new_desc
+        0x21 => Some((Op::StructNewDefaultDesc, false)), // struct.new_default_desc
+        0x22 => Some((Op::RefGetDesc, false)), // ref.get_desc
+        0x23 => Some((Op::RefCastDescEq, false)), // ref.cast_desc_eq
+        0x24 => Some((Op::RefCastDescEq, true)), // ref.cast_desc_eq null
+        0x25 => Some((Op::BrOnCastDescEq, false)), // br_on_cast_desc_eq
+        0x26 => Some((Op::BrOnCastDescEqFail, false)), // br_on_cast_desc_eq_fail
+        _ => None,
+    }
+}
+
+/// The `0xFC` op a sub-opcode names.
+#[must_use]
+pub(crate) const fn fc_op(sub: u32) -> Option<Op> {
+    match sub {
+        0x00 => Some(Op::I32TruncSatF32S), // i32.trunc_sat_f32_s
+        0x01 => Some(Op::I32TruncSatF32U), // i32.trunc_sat_f32_u
+        0x02 => Some(Op::I32TruncSatF64S), // i32.trunc_sat_f64_s
+        0x03 => Some(Op::I32TruncSatF64U), // i32.trunc_sat_f64_u
+        0x04 => Some(Op::I64TruncSatF32S), // i64.trunc_sat_f32_s
+        0x05 => Some(Op::I64TruncSatF32U), // i64.trunc_sat_f32_u
+        0x06 => Some(Op::I64TruncSatF64S), // i64.trunc_sat_f64_s
+        0x07 => Some(Op::I64TruncSatF64U), // i64.trunc_sat_f64_u
+        0x08 => Some(Op::MemoryInit), // memory.init
+        0x09 => Some(Op::DataDrop), // data.drop
+        0x0a => Some(Op::MemoryCopy), // memory.copy
+        0x0b => Some(Op::MemoryFill), // memory.fill
+        0x0c => Some(Op::TableInit), // table.init
+        0x0d => Some(Op::ElemDrop), // elem.drop
+        0x0e => Some(Op::TableCopy), // table.copy
+        0x0f => Some(Op::TableGrow), // table.grow
+        0x10 => Some(Op::TableSize), // table.size
+        0x11 => Some(Op::TableFill), // table.fill
+        0x13 => Some(Op::I64Add128), // i64.add128
+        0x14 => Some(Op::I64Sub128), // i64.sub128
+        0x15 => Some(Op::I64MulWideS), // i64.mul_wide_s
+        0x16 => Some(Op::I64MulWideU), // i64.mul_wide_u
+        _ => None,
+    }
+}
+
+/// The `(prefix, sub-opcode)` an `0xFB` / `0xFC` op is written as, choosing the `null` form when
+/// `nullable` (for the three ops that have one); `None` for every other op.
+#[must_use]
+pub(crate) const fn prefixed(op: Op, nullable: bool) -> Option<(u8, u32)> {
+    match (op, nullable) {
+        (Op::StructNew, _) => Some((0xfb, 0x00)),
+        (Op::StructNewDefault, _) => Some((0xfb, 0x01)),
+        (Op::StructGet, _) => Some((0xfb, 0x02)),
+        (Op::StructGetS, _) => Some((0xfb, 0x03)),
+        (Op::StructGetU, _) => Some((0xfb, 0x04)),
+        (Op::StructSet, _) => Some((0xfb, 0x05)),
+        (Op::ArrayNew, _) => Some((0xfb, 0x06)),
+        (Op::ArrayNewDefault, _) => Some((0xfb, 0x07)),
+        (Op::ArrayNewFixed, _) => Some((0xfb, 0x08)),
+        (Op::ArrayNewData, _) => Some((0xfb, 0x09)),
+        (Op::ArrayNewElem, _) => Some((0xfb, 0x0a)),
+        (Op::ArrayGet, _) => Some((0xfb, 0x0b)),
+        (Op::ArrayGetS, _) => Some((0xfb, 0x0c)),
+        (Op::ArrayGetU, _) => Some((0xfb, 0x0d)),
+        (Op::ArraySet, _) => Some((0xfb, 0x0e)),
+        (Op::ArrayLen, _) => Some((0xfb, 0x0f)),
+        (Op::ArrayFill, _) => Some((0xfb, 0x10)),
+        (Op::ArrayCopy, _) => Some((0xfb, 0x11)),
+        (Op::ArrayInitData, _) => Some((0xfb, 0x12)),
+        (Op::ArrayInitElem, _) => Some((0xfb, 0x13)),
+        (Op::RefTest, false) => Some((0xfb, 0x14)),
+        (Op::RefTest, true) => Some((0xfb, 0x15)),
+        (Op::RefCastOp, false) => Some((0xfb, 0x16)),
+        (Op::RefCastOp, true) => Some((0xfb, 0x17)),
+        (Op::BrOnCast, _) => Some((0xfb, 0x18)),
+        (Op::BrOnCastFail, _) => Some((0xfb, 0x19)),
+        (Op::AnyConvertExtern, _) => Some((0xfb, 0x1a)),
+        (Op::ExternConvertAny, _) => Some((0xfb, 0x1b)),
+        (Op::RefI31, _) => Some((0xfb, 0x1c)),
+        (Op::I31GetS, _) => Some((0xfb, 0x1d)),
+        (Op::I31GetU, _) => Some((0xfb, 0x1e)),
+        (Op::StructNewDesc, _) => Some((0xfb, 0x20)),
+        (Op::StructNewDefaultDesc, _) => Some((0xfb, 0x21)),
+        (Op::RefGetDesc, _) => Some((0xfb, 0x22)),
+        (Op::RefCastDescEq, false) => Some((0xfb, 0x23)),
+        (Op::RefCastDescEq, true) => Some((0xfb, 0x24)),
+        (Op::BrOnCastDescEq, _) => Some((0xfb, 0x25)),
+        (Op::BrOnCastDescEqFail, _) => Some((0xfb, 0x26)),
+        (Op::I32TruncSatF32S, _) => Some((0xfc, 0x00)),
+        (Op::I32TruncSatF32U, _) => Some((0xfc, 0x01)),
+        (Op::I32TruncSatF64S, _) => Some((0xfc, 0x02)),
+        (Op::I32TruncSatF64U, _) => Some((0xfc, 0x03)),
+        (Op::I64TruncSatF32S, _) => Some((0xfc, 0x04)),
+        (Op::I64TruncSatF32U, _) => Some((0xfc, 0x05)),
+        (Op::I64TruncSatF64S, _) => Some((0xfc, 0x06)),
+        (Op::I64TruncSatF64U, _) => Some((0xfc, 0x07)),
+        (Op::MemoryInit, _) => Some((0xfc, 0x08)),
+        (Op::DataDrop, _) => Some((0xfc, 0x09)),
+        (Op::MemoryCopy, _) => Some((0xfc, 0x0a)),
+        (Op::MemoryFill, _) => Some((0xfc, 0x0b)),
+        (Op::TableInit, _) => Some((0xfc, 0x0c)),
+        (Op::ElemDrop, _) => Some((0xfc, 0x0d)),
+        (Op::TableCopy, _) => Some((0xfc, 0x0e)),
+        (Op::TableGrow, _) => Some((0xfc, 0x0f)),
+        (Op::TableSize, _) => Some((0xfc, 0x10)),
+        (Op::TableFill, _) => Some((0xfc, 0x11)),
+        (Op::I64Add128, _) => Some((0xfc, 0x13)),
+        (Op::I64Sub128, _) => Some((0xfc, 0x14)),
+        (Op::I64MulWideS, _) => Some((0xfc, 0x15)),
+        (Op::I64MulWideU, _) => Some((0xfc, 0x16)),
+        _ => None,
+    }
+}
+
 /// The `0xFD` sub-opcodes that are relaxed SIMD (D1 `relaxedSimd`); every other one is SIMD.
 #[must_use]
 pub(crate) const fn is_relaxed_simd(sub: u32) -> bool {

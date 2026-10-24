@@ -838,6 +838,81 @@ fn abstract_heap_type(v: i64) -> Option<HeapType> {
     })
 }
 
+/// The immediates of an `0xFB` / `0xFC` op, read in wasmrt's own representation. `nullable` is the
+/// encoding's: `ref.test` / `ref.cast` / `ref.cast_desc_eq` have a `null` form, and wasmrt keeps one
+/// op per pair with the nullability in the [`RefType`] immediate.
+fn read_prefixed_immediate(r: &mut Reader, op: Op, nullable: bool) -> DecodeResult<Imm> {
+    Ok(match op {
+        // GC: a type index.
+        Op::StructNew
+        | Op::StructNewDefault
+        | Op::ArrayNew
+        | Op::ArrayNewDefault
+        | Op::ArrayGet
+        | Op::ArrayGetS
+        | Op::ArrayGetU
+        | Op::ArraySet
+        | Op::ArrayFill
+        | Op::StructNewDesc
+        | Op::StructNewDefaultDesc
+        | Op::RefGetDesc => Imm::GcType(r.read_var_u32()?),
+        Op::StructGet | Op::StructGetS | Op::StructGetU | Op::StructSet => read_gc_field(r)?,
+        Op::ArrayNewFixed => Imm::GcTypeN { type_index: r.read_var_u32()?, n: r.read_var_u32()? },
+        Op::ArrayNewData | Op::ArrayNewElem | Op::ArrayInitData | Op::ArrayInitElem => {
+            Imm::GcTypeSeg { type_index: r.read_var_u32()?, seg: r.read_var_u32()? }
+        }
+        Op::ArrayCopy => Imm::GcArrayCopy { dst: r.read_var_u32()?, src: r.read_var_u32()? },
+        // The externref bridge. An `externref` is a WRAPPER: `extern.convert_any` boxes an internal
+        // reference, `any.convert_extern` unboxes one, and null maps to null both ways (§4.4.7.3).
+        // The wrapper bit lives in `Value`'s high half — see `interp::EXTERN_TAG` / `HOST_TAG`.
+        Op::ArrayLen
+        | Op::AnyConvertExtern
+        | Op::ExternConvertAny
+        | Op::RefI31
+        | Op::I31GetS
+        | Op::I31GetU => Imm::None,
+        Op::RefTest | Op::RefCastOp | Op::RefCastDescEq => {
+            Imm::RefCast(RefType { nullable, heap: read_heap_type(r)? })
+        }
+        Op::BrOnCast | Op::BrOnCastFail | Op::BrOnCastDescEq | Op::BrOnCastDescEqFail => read_br_cast(r)?,
+        // 0xFC: saturating truncation and wide arithmetic take no immediate.
+        Op::I32TruncSatF32S
+        | Op::I32TruncSatF32U
+        | Op::I32TruncSatF64S
+        | Op::I32TruncSatF64U
+        | Op::I64TruncSatF32S
+        | Op::I64TruncSatF32U
+        | Op::I64TruncSatF64S
+        | Op::I64TruncSatF64U
+        | Op::I64Add128
+        | Op::I64Sub128
+        | Op::I64MulWideS
+        | Op::I64MulWideU => Imm::None,
+        Op::MemoryInit => {
+            let data = r.read_var_u32()?;
+            Imm::MemInit { data, mem: r.read_var_u32()? }
+        }
+        Op::DataDrop => Imm::Data(r.read_var_u32()?),
+        Op::MemoryCopy => {
+            let dst = r.read_var_u32()?;
+            Imm::MemCopy { dst, src: r.read_var_u32()? }
+        }
+        Op::MemoryFill => Imm::MemIndex(r.read_var_u32()?),
+        Op::TableInit => {
+            let elem = r.read_var_u32()?;
+            Imm::TableInit { elem, table: r.read_var_u32()? }
+        }
+        Op::ElemDrop => Imm::Elem(r.read_var_u32()?),
+        Op::TableCopy => {
+            let dst = r.read_var_u32()?;
+            Imm::TableCopy { dst, src: r.read_var_u32()? }
+        }
+        Op::TableGrow | Op::TableSize | Op::TableFill => Imm::Table(r.read_var_u32()?),
+        // `fb_op` / `fc_op` name no other op; reaching here is a generator/decoder mismatch.
+        _ => return Err(DecodeError::UnsupportedOpcode),
+    })
+}
+
 /// Read a GC struct-op immediate: a struct type index followed by a field index.
 fn read_gc_field(r: &mut Reader) -> DecodeResult<Imm> {
     let type_index = r.read_var_u32()?;
@@ -1065,159 +1140,21 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
         let at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
         let b0 = r.read_byte()?;
 
-        if b0 == 0xfb {
-            // 0xFB-prefixed GC op: a LEB sub-opcode picks the internal Op tag.
-            let instr = match r.read_var_u32()? {
-                0x00 => Instr { offset: 0, op: Op::StructNew, imm: Imm::GcType(r.read_var_u32()?) },
-                0x01 => Instr { offset: 0, op: Op::StructNewDefault, imm: Imm::GcType(r.read_var_u32()?) },
-                0x02 => Instr { offset: 0, op: Op::StructGet, imm: read_gc_field(&mut *r)? },
-                0x03 => Instr { offset: 0, op: Op::StructGetS, imm: read_gc_field(&mut *r)? },
-                0x04 => Instr { offset: 0, op: Op::StructGetU, imm: read_gc_field(&mut *r)? },
-                0x05 => Instr { offset: 0, op: Op::StructSet, imm: read_gc_field(&mut *r)? },
-                0x06 => Instr { offset: 0, op: Op::ArrayNew, imm: Imm::GcType(r.read_var_u32()?) },
-                0x07 => Instr { offset: 0, op: Op::ArrayNewDefault, imm: Imm::GcType(r.read_var_u32()?) },
-                0x08 => Instr {
-                    offset: 0,
-                    op: Op::ArrayNewFixed,
-                    imm: Imm::GcTypeN { type_index: r.read_var_u32()?, n: r.read_var_u32()? },
-                },
-                0x09 => Instr {
-                    offset: 0,
-                    op: Op::ArrayNewData,
-                    imm: Imm::GcTypeSeg { type_index: r.read_var_u32()?, seg: r.read_var_u32()? },
-                },
-                0x0a => Instr {
-                    offset: 0,
-                    op: Op::ArrayNewElem,
-                    imm: Imm::GcTypeSeg { type_index: r.read_var_u32()?, seg: r.read_var_u32()? },
-                },
-                0x0b => Instr { offset: 0, op: Op::ArrayGet, imm: Imm::GcType(r.read_var_u32()?) },
-                0x0c => Instr { offset: 0, op: Op::ArrayGetS, imm: Imm::GcType(r.read_var_u32()?) },
-                0x0d => Instr { offset: 0, op: Op::ArrayGetU, imm: Imm::GcType(r.read_var_u32()?) },
-                0x0e => Instr { offset: 0, op: Op::ArraySet, imm: Imm::GcType(r.read_var_u32()?) },
-                0x0f => Instr { offset: 0, op: Op::ArrayLen, imm: Imm::None },
-                0x10 => Instr { offset: 0, op: Op::ArrayFill, imm: Imm::GcType(r.read_var_u32()?) },
-                0x11 => Instr {
-                    offset: 0,
-                    op: Op::ArrayCopy,
-                    imm: Imm::GcArrayCopy { dst: r.read_var_u32()?, src: r.read_var_u32()? },
-                },
-                0x12 => Instr {
-                    offset: 0,
-                    op: Op::ArrayInitData,
-                    imm: Imm::GcTypeSeg { type_index: r.read_var_u32()?, seg: r.read_var_u32()? },
-                },
-                0x13 => Instr {
-                    offset: 0,
-                    op: Op::ArrayInitElem,
-                    imm: Imm::GcTypeSeg { type_index: r.read_var_u32()?, seg: r.read_var_u32()? },
-                },
-                0x14 => Instr {
-                    offset: 0,
-                    op: Op::RefTest,
-                    imm: Imm::RefCast(RefType { nullable: false, heap: read_heap_type(&mut *r)? }),
-                },
-                0x15 => Instr {
-                    offset: 0,
-                    op: Op::RefTest,
-                    imm: Imm::RefCast(RefType { nullable: true, heap: read_heap_type(&mut *r)? }),
-                },
-                0x16 => Instr {
-                    offset: 0,
-                    op: Op::RefCastOp,
-                    imm: Imm::RefCast(RefType { nullable: false, heap: read_heap_type(&mut *r)? }),
-                },
-                0x17 => Instr {
-                    offset: 0,
-                    op: Op::RefCastOp,
-                    imm: Imm::RefCast(RefType { nullable: true, heap: read_heap_type(&mut *r)? }),
-                },
-                0x18 => Instr { offset: 0, op: Op::BrOnCast, imm: read_br_cast(&mut *r)? },
-                0x19 => Instr { offset: 0, op: Op::BrOnCastFail, imm: read_br_cast(&mut *r)? },
-                // custom-descriptors (`0x20..0x26`).
-                0x20 => Instr { offset: 0, op: Op::StructNewDesc, imm: Imm::GcType(r.read_var_u32()?) },
-                0x21 => Instr { offset: 0, op: Op::StructNewDefaultDesc, imm: Imm::GcType(r.read_var_u32()?) },
-                0x22 => Instr { offset: 0, op: Op::RefGetDesc, imm: Imm::GcType(r.read_var_u32()?) },
-                0x23 => Instr {
-                    offset: 0,
-                    op: Op::RefCastDescEq,
-                    imm: Imm::RefCast(RefType { nullable: false, heap: read_heap_type(&mut *r)? }),
-                },
-                0x24 => Instr {
-                    offset: 0,
-                    op: Op::RefCastDescEq,
-                    imm: Imm::RefCast(RefType { nullable: true, heap: read_heap_type(&mut *r)? }),
-                },
-                0x25 => Instr { offset: 0, op: Op::BrOnCastDescEq, imm: read_br_cast(&mut *r)? },
-                0x26 => Instr { offset: 0, op: Op::BrOnCastDescEqFail, imm: read_br_cast(&mut *r)? },
-                // The externref bridge. An `externref` is a WRAPPER: `extern.convert_any` boxes
-                // an internal reference, `any.convert_extern` unboxes one, and null maps to null
-                // both ways (§4.4.7.3). The wrapper bit lives in `Value`'s high half, so the two
-                // numeric spaces the earlier note warned about — a host handle and a GC heap index
-                // — are no longer one space. See `interp::EXTERN_TAG` / `interp::HOST_TAG`.
-                0x1a => Instr { offset: 0, op: Op::AnyConvertExtern, imm: Imm::None },
-                0x1b => Instr { offset: 0, op: Op::ExternConvertAny, imm: Imm::None },
-                0x1c => Instr { offset: 0, op: Op::RefI31, imm: Imm::None },
-                0x1d => Instr { offset: 0, op: Op::I31GetS, imm: Imm::None },
-                0x1e => Instr { offset: 0, op: Op::I31GetU, imm: Imm::None },
-                _ => return Err(DecodeError::UnsupportedOpcode),
+        if b0 == 0xfb || b0 == 0xfc {
+            // A prefixed op: a LEB sub-opcode names the internal `Op`. WHICH op is a D1 fact,
+            // GENERATED (`tables::fb_op` / `tables::fc_op`, letter H10 step 2); HOW its immediates
+            // read is wasmrt's own representation, matched on the op below. ⚠️ The sub-opcode is a
+            // var_u32, which is what makes the testsuite's deliberately OVERLONG encodings decode
+            // (`wide-arithmetic.wast` spells `fc 93 80 00` …). *(Until 2026-10-24 the sub-opcode →
+            // op numbering was written here by hand, and again in the assembler.)*
+            let sub = r.read_var_u32()?;
+            let (op, nullable) = if b0 == 0xfb {
+                crate::tables::fb_op(sub).ok_or(DecodeError::UnsupportedOpcode)?
+            } else {
+                (crate::tables::fc_op(sub).ok_or(DecodeError::UnsupportedOpcode)?, false)
             };
-            list.push(Instr { offset: at, ..instr });
-            continue;
-        }
-
-        if b0 == 0xfc {
-            // 0xFC-prefixed op: a LEB sub-opcode picks the internal Op tag.
-            let instr = match r.read_var_u32()? {
-                0x00 => Instr { offset: 0, op: Op::I32TruncSatF32S, imm: Imm::None },
-                0x01 => Instr { offset: 0, op: Op::I32TruncSatF32U, imm: Imm::None },
-                0x02 => Instr { offset: 0, op: Op::I32TruncSatF64S, imm: Imm::None },
-                0x03 => Instr { offset: 0, op: Op::I32TruncSatF64U, imm: Imm::None },
-                0x04 => Instr { offset: 0, op: Op::I64TruncSatF32S, imm: Imm::None },
-                0x05 => Instr { offset: 0, op: Op::I64TruncSatF32U, imm: Imm::None },
-                0x06 => Instr { offset: 0, op: Op::I64TruncSatF64S, imm: Imm::None },
-                0x07 => Instr { offset: 0, op: Op::I64TruncSatF64U, imm: Imm::None },
-                0x08 => {
-                    let data = r.read_var_u32()?;
-                    let mem = r.read_var_u32()?;
-                    Instr { offset: 0, op: Op::MemoryInit, imm: Imm::MemInit { data, mem } }
-                }
-                0x09 => Instr { offset: 0, op: Op::DataDrop, imm: Imm::Data(r.read_var_u32()?) },
-                0x0a => {
-                    let dst = r.read_var_u32()?;
-                    let src = r.read_var_u32()?;
-                    Instr { offset: 0, op: Op::MemoryCopy, imm: Imm::MemCopy { dst, src } }
-                }
-                0x0b => Instr { offset: 0, op: Op::MemoryFill, imm: Imm::MemIndex(r.read_var_u32()?) },
-                0x0c => {
-                    let elem = r.read_var_u32()?;
-                    let table = r.read_var_u32()?;
-                    Instr { offset: 0, op: Op::TableInit, imm: Imm::TableInit { elem, table } }
-                }
-                0x0d => Instr { offset: 0, op: Op::ElemDrop, imm: Imm::Elem(r.read_var_u32()?) },
-                0x0e => {
-                    let dst = r.read_var_u32()?;
-                    let src = r.read_var_u32()?;
-                    Instr { offset: 0, op: Op::TableCopy, imm: Imm::TableCopy { dst, src } }
-                }
-                0x0f => Instr { offset: 0, op: Op::TableGrow, imm: Imm::Table(r.read_var_u32()?) },
-                0x10 => Instr { offset: 0, op: Op::TableSize, imm: Imm::Table(r.read_var_u32()?) },
-                0x11 => Instr { offset: 0, op: Op::TableFill, imm: Imm::Table(r.read_var_u32()?) },
-                // Wide arithmetic. ⚠️ The sub-opcode is read as a **var_u32** (as every `0xFC`
-                // sub-opcode is), which is what makes the testsuite's deliberately OVERLONG
-                // LEBs decode: `wide-arithmetic.wast`'s `(module binary …)` spells these as
-                // `fc 93 80 00`, `fc 94 00`, `fc 95 80 80 80 00` and `fc 96 80 80 00`. Those
-                // encodings exist in the file precisely to pin that, and the wire format was
-                // taken from them rather than guessed — had it been guessed wrong, every TEXT
-                // assertion would still have passed, because our assembler and decoder would
-                // have agreed with each other (§3.8b).
-                0x13 => Instr { offset: 0, op: Op::I64Add128, imm: Imm::None },
-                0x14 => Instr { offset: 0, op: Op::I64Sub128, imm: Imm::None },
-                0x15 => Instr { offset: 0, op: Op::I64MulWideS, imm: Imm::None },
-                0x16 => Instr { offset: 0, op: Op::I64MulWideU, imm: Imm::None },
-                _ => return Err(DecodeError::UnsupportedOpcode),
-            };
-            list.push(Instr { offset: at, ..instr });
+            let imm = read_prefixed_immediate(&mut *r, op, nullable)?;
+            list.push(Instr { offset: at, op, imm });
             continue;
         }
 

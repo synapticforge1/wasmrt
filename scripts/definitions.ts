@@ -289,6 +289,24 @@ const presetArms = presets.map((p) => {
     `            Some(f)${skipped.length ? ` // also lists ${skipped.join(", ")}, which switch nothing here` : ""}\n        }`;
 });
 
+// The 0xFB / 0xFC families, both directions (H10 step 2, stage 2). The sub-opcode numbering is a D1
+// fact; it was written by hand in TWO places (the decoder and the assembler) until 2026-10-24.
+const prefixedOf = (prefix: string) => d1.filter((x) => x.prefix === prefix).map((e) => {
+  const v = internalOps.find((i) => i.name === strip(e.name));
+  if (!v) fail(`D1 \`${e.name}\` (${prefix} ${e.opcode}) maps to no internal Op`);
+  return { sub: e.opcode as number, variant: v.variant, nullable: / null$/.test(e.name), name: e.name as string };
+});
+const fb = prefixedOf("0xfb"), fc = prefixedOf("0xfc");
+const hx = (n: number) => `0x${n.toString(16).padStart(2, "0")}`;
+const decodeArms = (xs: typeof fb, withNullable: boolean) => xs.map((x) =>
+  `        ${hx(x.sub)} => Some(${withNullable ? `(Op::${x.variant}, ${x.nullable})` : `Op::${x.variant}`}), // ${x.name}`).join("\n");
+// Reverse: an op and its nullability → (prefix, sub). A variant with a `null` form has two rows.
+const encodeArms = [...fb.map((x) => ({ ...x, prefix: 0xfb })), ...fc.map((x) => ({ ...x, prefix: 0xfc }))].map((x) => {
+  const twin = [...fb, ...fc].some((y) => y.variant === x.variant && y.nullable !== x.nullable);
+  const pat = twin ? `(Op::${x.variant}, ${x.nullable})` : `(Op::${x.variant}, _)`;
+  return `        ${pat} => Some((${hx(x.prefix)}, ${hx(x.sub)})),`;
+});
+
 const simdImm = (imm: string[]) => {
   const k = JSON.stringify(imm);
   const m: Record<string, string> = { "[]": "N", '["memarg"]': "Mem", '["v128"]': "Const", '["lane16"]': "Shuffle", '["laneidx"]': "Lane", '["memarg","laneidx"]': "MemLane" };
@@ -333,6 +351,35 @@ ${presetArms.join("\n")}
 pub(crate) const fn op_feature(op: Op) -> Option<Feature> {
     match op {
 ${arms.join("\n")}
+    }
+}
+
+/// The \`0xFB\` (GC) op a sub-opcode names, and whether it is the \`null\` form of a cast or test
+/// (\`ref.test null\` = 0x15: wasmrt keeps ONE op and carries nullability in the immediate).
+#[must_use]
+pub(crate) const fn fb_op(sub: u32) -> Option<(Op, bool)> {
+    match sub {
+${decodeArms(fb, true)}
+        _ => None,
+    }
+}
+
+/// The \`0xFC\` op a sub-opcode names.
+#[must_use]
+pub(crate) const fn fc_op(sub: u32) -> Option<Op> {
+    match sub {
+${decodeArms(fc, false)}
+        _ => None,
+    }
+}
+
+/// The \`(prefix, sub-opcode)\` an \`0xFB\` / \`0xFC\` op is written as, choosing the \`null\` form when
+/// \`nullable\` (for the three ops that have one); \`None\` for every other op.
+#[must_use]
+pub(crate) const fn prefixed(op: Op, nullable: bool) -> Option<(u8, u32)> {
+    match (op, nullable) {
+${encodeArms.join("\n")}
+        _ => None,
     }
 }
 
