@@ -13,14 +13,16 @@ stays in the topic file named.
   `wasmrt-capi` and `wasmrt` at 1.0.0 on crates.io (verified through its API);
   `surface/released.txt` records it. The bump floor since then is **MAJOR** (one module accepted →
   refused: the `exact`-type fix), so 🔒 **the next release is `2.0.0` (owner, 2026-10-24: "2.0.0 is
-  fine")**, and ⏳ **it WAITS for the next contract version** (owner, 2026-10-24: "we will wait on
-  the latest contract version before the release") — expected to carry wazmrt's table-initializer
-  fix; mirror it, re-run the matrix over both corpora, then prep 2.0.0.
+  fine")**. It waited for the next contract version (owner: "we will wait on the latest contract
+  version before the release"); ✅ **v40 is mirrored and verified** (below), so 2.0.0 is UNBLOCKED.
 * **binaryang pinned at v2.2.0** (`6e1923397def`; D2 2.2.0 with `typeRules` / `encodingRules`).
   **wasmrt = binaryang 2.2.0 on all 6,860 judgements** (wazmrt's `d2-matrix.ts`: wasmrt's S1 corpus
   × D2's 49 configurations), and `definitions_check` holds both rule lists in `cargo test`.
-* Contract mirror **v39**, byte-identical to wazmrt's committed copy (`interop.md`); the type rule
-  AGREED (v39); release lockstep ended at v33.
+* Contract mirror **v40**, byte-identical to wazmrt's committed copy (`bd97ae2`); the type rule
+  AGREED (v39), the table-initializer correction (v40). **Verified by running both** (wazmrt built
+  from a `git archive` of `bd97ae2`, since its working tree was mid-edit): wazmrt ⇄ wasmrt **0 of
+  2,401** over wazmrt's corpus and **0 of 6,860** over wasmrt's; wazmrt ⇄ binaryang 2.2.0 0 of 6,860
+  over wasmrt's. Release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 (steps 1 and 2), H13, H15, H16, H18, H19,
@@ -39,23 +41,15 @@ stays in the topic file named.
 
 ## To relay — wasmrt cannot write there
 
-* **wazmrt:** 🔴 **a D2 `encodingRules` gap the v39 row says it met.** `(table 1 funcref (ref.null
-  func))` (wasmrt's `tests/behaviour/gate-function-references__table-init.wat`) is ACCEPTED by
-  wazmrt 4.0.1 with function-references off; wasmrt 1.0.0+, wasm-tools 1.262 and binaryang 2.2.0
-  all refuse it (D2: "a table initializer expression" needs functionReferences). Measured
-  2026-10-24 with wazmrt's own `cmem/probes/d2-matrix.ts --runtime` over **wasmrt's** S1 corpus: 54
-  of 6,860 judgements differ, all this one module (27 configurations × its `.wat` and `.wasm`);
-  over wazmrt's own corpus 0 of 2,352, because that corpus has no such module. v39's "AGREED on
-  both" holds for the corpus it was measured on. Suggest: run the row over both corpora. ⏳ **wazmrt is
-  fixing it (owner, 2026-10-24)**; re-run the matrix over wasmrt's corpus when it lands. Also, for
-  the record: wasmrt 1.0.0 accepted an `exact` reference with reference-types off; fixed on `main`
-  (`known-issues.md`, top); wazmrt already refused it. Still open: const-expr depth > 8 and the
-  element flags, not re-measured since its 2026-09-21 build. *(Sent by the owner 2026-10-24: the
-  type-rule relay, which v39 answered.)*
+* **wazmrt: nothing open.** *(Closed 2026-10-24, all measured on wazmrt `bd97ae2`: the
+  table-initializer gap (v40; 0 of 6,860 over wasmrt's corpus); a constant expression with 9
+  operands is accepted and element flags 8 refused (`b919ef2`), as by wasm-tools 1.262 and wasmrt;
+  the type rule (v39); `call_ref` with GC on and function-references off (v37); §5 #13 (v36);
+  `--features` (v38).)* For the record: wasmrt 1.0.0 accepted an `exact` reference with
+  reference-types off, fixed on `main` (`known-issues.md`, top); wazmrt already refused it.
 * **binaryang (its § 44 asks for every difference back):** re-pinned to v2.2.0; **wasmrt vs
   binaryang 2.2.0: 0 of 6,860 differ** after one wasmrt fix (an `exact` reference skipped
-  reference-types; binaryang was right). wazmrt differs from binaryang on the table-initializer
-  module above (wazmrt's to fix). Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of
+  reference-types; binaryang was right); wazmrt at `bd97ae2` 0 of 6,860 too. Remaining naming KNOWNs: `select.t` (0x1c) and the `null` forms of
   `ref.test` / `ref.cast` / `ref.cast_desc_eq`.
 * **wasmtk:** its generated (gitignored) `tests/wasi/wasm_wasi_bundle/**/*.wat` include about ten
   modules that `throw 0` with no tag declared (`dynrt_eval_bundle/main_*.wat`,
