@@ -771,22 +771,26 @@ past the finding: **the cause was not traced, so it is recorded as an observatio
 
 #### For the development machine — a build blocker, misdiagnosed FOUR times
 
+*(Machine specifics — which drive, which volume, which tools — are private, in the gitignored
+`cmem/local/environment.md`.)*
+
 ⚠️⚠️ **FINDING A REAL DEFECT AT A LAYER IS NOT EVIDENCE THAT IT CAUSES YOUR SYMPTOM.** wazmrt's build
-failure on the development volume was blamed on failing hardware (six `disk`/event-51 entries — **all a single burst from
-a week earlier; the timestamps were never read**), then on antivirus (refuted: the agent blamed was not the one running), then on a genuinely damaged exFAT volume
-(a volume health query reported it as needing repair). **The repair worked, and the build failed exactly
-as before.** Each of the three found something real and stopped there, *because a confirmed defect feels
-like an answer*.
+failure on the development volume was blamed on failing hardware (a burst of disk-error log entries —
+**all from a week earlier; the timestamps were never read**), then on antivirus (refuted: the agent
+blamed was not the one running), then on a genuinely damaged volume that a health query reported as
+needing repair. **The repair worked, and the build failed exactly as before.** Each of the three found
+something real and stopped there, *because a confirmed defect feels like an answer*.
 
 **What finally worked was varying ONE THING AT A TIME** rather than reasoning about which layer looked
-guiltiest — and the cause is the **cache LOCATION**: a build cache on that exFAT volume survives exactly
-one build and is then poisoned. ⚠️ **A workaround that works exactly once is a clue about FREQUENCY, not
-a failed fix — ask what makes the second attempt different.** Two further rules from the same incident:
-**identify the LAYER (physical disk → volume → OS → application) before naming a cause**, since each has
-its own cheap health query; and **search `cmem` for the environment before diagnosing the environment**,
-because both repos already recorded the volume's filesystem and two wrong causes shipped in four commit messages
-for want of a five-second grep. → For wasmrt this predicts the same shape for a cargo `target/` on such a volume;
-the fix is `CARGO_TARGET_DIR` on an NTFS path, and it belongs with the recorded hard-link warnings.
+guiltiest — and the cause is the **cache LOCATION**: a build cache on a volume with no hard links or
+reparse points (exFAT) survives exactly one build and is then poisoned. ⚠️ **A workaround that works
+exactly once is a clue about FREQUENCY, not a failed fix — ask what makes the second attempt
+different.** Two further rules from the same incident: **identify the LAYER (physical disk → volume → OS
+→ application) before naming a cause**, since each has its own cheap health query; and **search `cmem`
+for the environment before diagnosing the environment**, because both repos had already recorded the
+volume's filesystem and two wrong causes shipped in four commit messages for want of a five-second grep.
+→ For wasmrt this predicts the same shape for a cargo `target/` on such a volume; the fix is a cargo
+target directory on an NTFS path, and it belongs with the recorded hard-link warnings.
 
 #### Third borrow round (2026-08-19, `coordinate`) — one rule, and both projects had just proved it
 

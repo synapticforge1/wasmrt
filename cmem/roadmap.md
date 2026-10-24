@@ -3224,11 +3224,13 @@ diff the OUTPUT counts, not exit codes (`testing.md`). `[ ]` = not started.
 
   ⚠️⚠️ **CORRECTED — the cause is exFAT, not privilege, and the properties ARE verified.** Developer
   Mode is already enabled here; the Zig error is `INVALID_DEVICE_REQUEST`, not access-denied.
-  `std.testing.tmpDir` puts its scratch under `.zig-cache/tmp` **relative to the CWD**, and the **development volume is exFAT** — no reparse points. **From an NTFS cwd: `zig build test` is 493/493 with ZERO
-  skips and `zig build test-security` is 3/3 green.** So "489/493, 4 skipped", carried in the freeze
-  record since 2026-07-27, is an **environment artifact, not a code property**. Same root cause as
-  `zig build`'s "error: Unexpected" on that volume and cargo's hard-link warnings: exFAT has neither reparse
-  points nor hard links. **One filesystem, three symptoms, none of them code.**
+  `std.testing.tmpDir` puts its scratch under `.zig-cache/tmp` **relative to the CWD**, and the
+  **development volume is exFAT** — no reparse points (machine specifics: `cmem/local/`). **From an
+  NTFS cwd: `zig build test` is 493/493 with ZERO skips and `zig build test-security` is 3/3
+  green.** So "489/493, 4 skipped", carried in the freeze record since 2026-07-27, is an
+  **environment artifact, not a code property**. Same root cause as `zig build`'s "error:
+  Unexpected" on that volume and cargo's hard-link warnings: exFAT has neither reparse points nor
+  hard links. **One filesystem, three symptoms, none of them code.**
 
   **These are the sandbox-escape tests.** The skip is honest — with no link there is nothing to
   traverse — but the effect is that **the escape properties are unverified in this environment**, which
