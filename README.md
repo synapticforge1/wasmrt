@@ -124,10 +124,23 @@ On Windows, use the `x86_64-pc-windows-gnullvm` toolchain host (LLVM-MinGW + UCR
 
 ## Versioning
 
-wasmrt uses a **progress** scheme: `0.x` releases each land a gated stage, and **`1.0.0` means complete
-on wasmrt's own terms** — every in-scope proposal implemented, conformance at its achievable ceiling, the
-C ABI stable, and the size and speed numbers measured and defended. The number reflects what genuinely
-runs today, verified against the official spec testsuite.
+wasmrt follows **[SemVer 2.0.0](https://semver.org/spec/v2.0.0.html)**, and the bump is a gate result,
+not a judgement: `bun scripts/bump.ts patch|minor|major` diffs the public surface (the Rust API of
+`wasmrt-core` and `wasmrt-capi`, `wasmrt.h`, and the CLI's flags and usage shapes) and the behaviour
+(which modules are accepted) against the last release, and refuses a bump below what the diff
+requires. Accepting fewer modules is a breaking change even when the new answer is the correct one.
+Before `1.0.0` a breaking change takes a minor bump, and is listed below either way. `1.0.0` is the
+conformance clear-out: the official spec testsuite with zero failures, zero skips and nothing unrun.
+
+### ⚠️ Breaking Changes
+
+| Version | What changed | How to migrate |
+| --- | --- | --- |
+| _next release_ | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
+| _next release_ | **CLI:** a host flag after the guest's first argument is an error (`prog.wasm install --yes`) | `prog.wasm install -- --yes` gives the guest its own flag |
+| _next release_ | **Validation:** with a proposal disabled, a table with an initializer needs function-references, and `nullexternref` / `nullfuncref` need GC (as in wasm-tools). With every proposal on, the default, nothing changes | enable the proposal: `--features …,function-references` or `…,gc` |
+| _next release_ | **Pins:** `wasmrt wat` now writes `wasm-tools parse`'s bytes, so a `.wat` file's pin digest changes (`.wasm` digests do not) | re-run `wasmrt pin` over pinned `.wat` files |
+| _next release_ | **Rust API (`wasmrt-core`):** `interp::PAGE_SIZE` removed (pages have a per-memory size); `opcode::Op` is `#[repr(u16)]` with renumbered internal tags; `module::Code::body` (the raw bytes) replaced by `Code::ir` (the decoded instructions); `interp::InstanceId` carries its store and is no longer a tuple struct; new enum variants in `opcode::Imm`, `DecodeError` and `wat::Error` | match on the new variants; take a page size from the memory's type. The C ABI (`wasmrt.h`) only added: `abi_version()` is still 1 |
 
 ## License
 

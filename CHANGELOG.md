@@ -18,6 +18,14 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 _Next: **0.10.0 (T9)** — the correctness punch-list, tail calls, licensing and docs, size + performance
 measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt and code-hygiene pass; **0.12.0 (T11)** — an optimization review of the shipped binaries and the C ABI; and **0.13.0 (T12)** — a security review of the penetration surfaces, with recommended mitigations._
 
+### Changed (2026-10-24)
+
+- **Versioning is SemVer 2.0.0, and the bump is a gate result.** `bun scripts/bump.ts` diffs the
+  public surface (the Rust API, `wasmrt.h`, the CLI's flags and usage shapes) and which modules are
+  accepted against the last release, and refuses a bump below what the diff requires. A version tag
+  now runs the same check before the GitHub Release is created. Since 0.9.0 the diff requires a
+  major version: the rows in the README's new Breaking Changes table.
+
 ### Changed (2026-10-23)
 
 - ⚠️ **Breaking (CLI): a `--dir` / `--ro-dir` host path must say whether it is relative.** Write

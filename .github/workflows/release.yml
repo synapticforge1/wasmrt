@@ -1,9 +1,10 @@
 name: release
 
-# Create a GitHub Release from the CHANGELOG whenever a version tag is pushed.
-# Publishing to crates.io stays manual for now (the owner runs `cargo publish`);
-# see cmem/releasing.md. This job only automates the "GitHub release + notes" step,
-# so it needs no secrets — the built-in GITHUB_TOKEN is enough.
+# On a version tag: first the COMPATIBILITY GATE (the tag's version must be the
+# manifest's and must clear the SemVer floor since the last release, letter H6),
+# then a GitHub Release from the CHANGELOG. Publishing to crates.io stays manual
+# (the owner runs `cargo publish`, AFTER this gate is green); see cmem/releasing.md.
+# No secrets: the built-in GITHUB_TOKEN is enough.
 
 on:
   push:
@@ -14,7 +15,34 @@ permissions:
   contents: write
 
 jobs:
+  compatibility-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tagged commit, with history and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install the nightly toolchain (rustdoc JSON for the surface diff)
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: Install the surface and semver tools, at the versions releasing.md names
+        run: cargo install --locked cargo-public-api@0.52.0 cargo-semver-checks@0.51.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: The version clears the floor since the last release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bun scripts/bump.ts --verify-tag "$TAG"
+
   github-release:
+    needs: compatibility-gate
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tagged commit

@@ -267,11 +267,32 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   the INDEX narrative to `open-work.md`. Renumber the duplicated `§3.11 §3.12 §1.7 §4.4 §4.5`.
   README, CHANGELOG and roadmap must "reflect a shipped stage" before `1.0.0` (drift-register
   R1–R9). Policy: `../cmem/memory-conventions.md`.
-* **H6**: SemVer 2.0.0, plus a **gated bump**. wasmrt has **no bump script and no committed surface
-  snapshot**. A gate needs three: the public Rust API of the three crates, `wasmrt.h`, and the CLI
-  flag set (the CLI is a contract surface, `interop.md`). Also copy the ★ rules block into
-  `best-practices.md` under a dated stamp. This is the largest item in C and blocks the `1.0.0`
-  release checklist.
+* ✅ **H6 — the gated bump: DONE 2026-10-24** (owner: "push then H6", then "proceed"). Detail and
+  the inversions: `releasing.md`, "THE NUMBER".
+  * `scripts/surface.ts` generates the surface (Rust `pub` API of `wasmrt-core` and `wasmrt-capi`,
+    `wasmrt.h`, `--help`), committed as `surface/current.txt` (must equal the sources) and
+    `surface/released.txt` (`released-as: 0.9.0`, generated from the tag).
+  * `scripts/bump.ts patch|minor|major` takes the highest of three floors (surface,
+    `cargo semver-checks`, the H23 carry-forward), refuses a bump below it, and applies pre-1.0
+    rule 6 only with a README Breaking Changes row. `--verify-tag` is the CI step: the first job of
+    `release.yml`, and the release job needs it. ⚠️ **The CI job has not run yet**: it first runs on
+    the next tag push, so it is UNVERIFIED on a runner.
+  * **Measured now: the floor since 0.9.0 is MAJOR**, from all three diffs (54 surface lines removed
+    or changed, 8 semver lints in `wasmrt-core`, 6 modules accepted → refused). `1.0.0` satisfies it.
+    🎓 `cargo semver-checks` rated `wasmrt-capi` a PATCH although the crate added a C function: it
+    flags breaks only. Additions come from the surface diff, which is why both run.
+  * The owner's release order changed: the tag goes first, then `cargo publish` once the gate job
+    is green, then `surface.ts --release-from` in its own commit.
+  * The README has a `### ⚠️ Breaking Changes` table (5 `_next release_` rows) and a SemVer
+    Versioning section; the "patch stays single-digit" cadence rule is retired.
+  * The workspace ★ rules (28) are in `best-practices.md` under a dated stamp, verbatim but for ONE
+    phrase: 5.2's canonical text names the development drive, and this repo is public. 📬 **For the
+    workspace: generalize that phrase in the canonical text**, so the next re-copy is verbatim.
+  * NOT done under H6: the **memory layout** part (pointer file ≤ 5 KB, INDEX one line per file),
+    which is H2's work and stays open there; and rule 3's previous-tag test run (`releasing.md`
+    says why).
+  * Found on the way: wrapped `--help` descriptions printed at column 0 (fixed, `dc9b79e` → now
+    `8b259b9`).
 
 **D. Engine and contract work (technical; some cross the `interop.md` contract)**
 * 🟡 **H1 / the v11–v31 MIRROR — text DONE and three rows FIXED 2026-10-23** (owner: "yes … ok").
@@ -1543,7 +1564,7 @@ Baseline measured the same day (`bench/README.md`). In order:
 4. The rsxtk headline experiment below is the consumer-level version of the same comparison.
 
 ⚠️ **Order against the ladder:** T11 is `1.0.3`. `1.0.0` release prep is still NEXT
-(`releasing.md`), and it is blocked on the H6 gated-bump work (track C above).
+(`releasing.md`); the H6 gated bump it was blocked on landed 2026-10-24 (track C above).
 
 ### 🎯 T11's headline experiment — rsxtk on wasmtime vs rsxtk on wasmrt (added 2026-08-11)
 
