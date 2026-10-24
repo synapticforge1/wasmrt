@@ -37,6 +37,14 @@ measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt a
   The modules mean exactly what they did; only the bytes changed, so a `.wat` file's **pin digest
   changes** with this release (and now matches wazmrt's). A `(@custom "name" …)` annotation is now
   the module's only `name` section.
+- ⚠️ **Breaking (validation, measured against 0.9.0 by the behaviour carry-forward): two module shapes
+  that 0.9.0 accepted with a proposal disabled are now refused**, as wasm-tools refuses them:
+  - a table with an initializer, `(table 1 funcref (ref.null func))`, now needs function-references;
+  - a `nullexternref` or `nullfuncref` value type now needs GC.
+
+  With every proposal enabled (the default), nothing changes. Found by
+  `bun scripts/carry-forward.ts v0.9.0 WORKTREE`; the floor this sets is recorded in
+  `cmem/releasing.md`.
 - **C ABI, Windows static library:** with current Rust toolchains, link with
   `-lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp -lsynchronization`; the last two are new. See
   `crates/wasmrt-capi/README.md`. The DLL is unaffected.

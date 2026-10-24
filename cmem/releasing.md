@@ -90,6 +90,25 @@ owner does 7–9.
    should list only `KERNEL32`, `ntdll`, `bcryptprimitives` and `api-ms-win-*`. ⚠️ This is a real step,
    not a formality — the CLI silently needed a **toolchain** DLL (`libunwind.dll`) until 2026-08-10,
    and every dev-box test passed the whole time. See the distribution manifest below.
+1c. 🆕 **Behaviour is carried forward** (workspace letter H23, adopted 2026-10-23): what a consumer
+   can RELY ON, which no surface diff sees. Three stages, **IN ORDER, STOPPING at the first one that
+   finds an issue** until it is resolved (owner). "Resolved" includes INTENDED: a correct new refusal
+   is re-baselined in its OWN commit, with the version and the CHANGELOG Breaking Changes row it
+   demands.
+   - **S1 — accepted modules, every `cargo test`:** `crates/wasmrt-core/tests/behaviour.rs` judges
+     `tests/behaviour/` (71 modules, `bun scripts/behaviour-corpus.ts --check`) under 38
+     configurations, decode + validate, nothing runs, against `tests/behaviour-snapshot.txt`. **At
+     release, also run the floor against the LAST TAG:** `bun scripts/carry-forward.ts <last tag>
+     WORKTREE`.
+   - **S2 — code runs correctly, at release:** `bun scripts/behaviour-s2.ts`. Per-file spec results
+     against `tests/spec-snapshot.txt`, pinned by the suite's CONTENT hash (a wasmtk commit id
+     alone is not fetchable when wasmtk is mid-rewrite).
+   - **S3 — the wide net, local only:** `bun scripts/carry-forward.ts --corpus ../wasmtk/tests
+     <last tag> WORKTREE`, over wasmtk's ~1,190 modules by content hash. Not binding, and not
+     pinnable.
+   - **The floor:** refused → accepted = minor; **accepted → refused = MAJOR** (pre-1.0, rule 6:
+     the minor this ladder allows, plus a Breaking Changes row). A changed run result is
+     classified by hand.
 2. **Update the public trackers:**
    - `ROADMAP.md` — flip the stage row to ✅ and check off every use-case the release makes real.
    - `CHANGELOG.md` — move `Unreleased` items into a new `[x.y.z]` section (Keep a Changelog format).

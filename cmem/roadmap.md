@@ -308,9 +308,20 @@ repo's `cmem/`.** Ordered by size and by who has to act:
      `scripts/body-parity.ts`. On the way: the C-ABI gate was linking a STALE library, and today's
      `std` needs `-lsynchronization -ldbghelp` (`known-issues.md`, top);
   3. the `--dir` help → ✅ done in the mirror commit (v27's grammar is in `--help`);
-  4. letter **H23**, behaviour carry-forward testing (S1 accepted-module corpus per feature and
-     preset; S2 per-file spec results pinned to a wasmtk commit; S3 the wide local net; stop at
-     the first stage that finds something) → ⏳ open, not started;
+  4. letter **H23**, behaviour carry-forward testing → ✅ **DONE 2026-10-23, late night** (owner:
+     "the H23").
+     * Stages adopted: **S1** in `cargo test`; **S1 against a release** by
+       `scripts/carry-forward.ts`; **S2** `scripts/behaviour-s2.ts`, a release step pinned by
+       content hash; **S3** the same carry-forward over wasmtk's corpus, local only. All are wired
+       into `releasing.md` step 1c, and each was inverted.
+     * H23's three questions, answered: (1) the judge is library-level decode + validate, so
+       nothing runs; (2) wasmtk's corpus is content-hashed, because its local HEAD was not on
+       GitHub; (3) the carry-forward builds its own harness in a temp target directory, so no build
+       gate can turn it red.
+     * 🔴 **S3's first run found a regression since 0.9.0**: MVP element segments refused without
+       function-references. Fixed, and S1's corpus widened so S1 catches it too;
+     * the v0.9.0 → HEAD floor is MAJOR (pre-1.0: minor + Breaking Changes rows), for two intended
+       tightenings, both now in the CHANGELOG;
   5. reach `1.0.1`, where lockstep releases engage → ⏳ after `1.0.0`.
 
   Letters H1 and H8 close in the workspace once wasmrt records its side: H8 is in

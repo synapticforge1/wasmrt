@@ -783,6 +783,37 @@ mod tests {
         );
     }
 
+    /// 🔴 **An MVP element segment is WebAssembly 1.0** under every configuration — and an EXPLICIT
+    /// element type is still gated. Found 2026-10-23 by the H23 carry-forward over wasmtk's corpus:
+    /// the function-index forms derive `(ref func)` (non-null), the validator gated that DERIVED
+    /// type, and so every element segment was refused with function-references off. `--features
+    /// mvp` refused ordinary compiled programs that wasm-tools and wasmrt 0.9.0 accept.
+    #[test]
+    fn an_mvp_element_segment_needs_no_proposal_but_a_spelled_type_does() {
+        let v = |wat: &[u8], f: &Features| {
+            let bytes = crate::wat::assemble(wat).expect("assemble");
+            crate::validate::validate_with_features(&crate::module::decode(&bytes).expect("decode"), f)
+        };
+        // The MVP shapes: an active segment of function indices, with and without `func`.
+        for wat in [
+            &br#"(module (table 2 funcref) (func) (elem (i32.const 1) func 0))"#[..],
+            br#"(module (table 2 funcref) (func) (elem (i32.const 1) 0))"#,
+        ] {
+            assert_eq!(v(wat, &Features::mvp()), Ok(()), "{}", core::str::from_utf8(wat).unwrap());
+            let mut no_frefs = Features::all();
+            no_frefs.function_references = false;
+            no_frefs.gc = false;
+            no_frefs.custom_descriptors = false;
+            assert_eq!(v(wat, &no_frefs), Ok(()), "with function-references off");
+        }
+        // The other direction, so the fix cannot over-narrow: a segment that SPELLS `externref`,
+        // even with zero items, still needs reference-types (wasm-tools refuses it too).
+        let spelled = br#"(module (elem externref))"#;
+        let mut no_reftypes = Features::mvp();
+        no_reftypes.bulk_memory = true; // the passive segment's own requirement
+        assert!(v(spelled, &no_reftypes).is_err(), "an explicit externref element type is gated");
+    }
+
     /// Every `Op` is either gated by a proposal or deliberately listed as WebAssembly 1.0.
     ///
     /// ⚠️⚠️ **This exists because the property it checks was ASSERTED IN A DOC COMMENT and was

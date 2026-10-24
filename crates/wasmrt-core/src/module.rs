@@ -259,6 +259,12 @@ pub struct Element {
     pub funcs: Vec<u32>,
     pub exprs: Vec<Vec<u8>>,
     pub elem_type: ValType,
+    /// Did the module SPELL `elem_type` (the expression forms with flags 5–7), rather than the
+    /// decoder deriving it? Only a spelled type is a proposal the module USES. The function-index
+    /// forms derive `(ref func)` (non-null, §5.5.12), and gating that DERIVED type through the
+    /// value-type table refused every MVP element segment with function-references off: an
+    /// ordinary compiled program under `--features mvp` (found by the H23 carry-forward, 2026-10-23).
+    pub explicit_type: bool,
 }
 
 /// A run of consecutive locals of the same type in a code entry (§5.4.5).
@@ -1731,6 +1737,7 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
         let mut funcs: Vec<u32> = Vec::new();
         let mut exprs: Vec<Vec<u8>> = Vec::new();
         let mut elem_type = ValType::FUNCREF;
+        let mut explicit_type = false;
         // bit0: 0 = active; bit1 (when bit0=1): 0 = passive, 1 = declarative.
         let mode = if flags & 0b001 == 0 {
             ElementMode::Active
@@ -1770,6 +1777,7 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
             // Const-expr form. Non-flag-4 variants carry a leading reftype byte.
             if flags != 4 {
                 elem_type = read_val_type(r, &d.type_kinds)?;
+                explicit_type = true;
                 // ⚠️ §5.5.12 spells this field **reftype**, not valtype — so `\7f` (i32) here is
                 // MALFORMED, and the suite says so ("malformed reference type"). Reading it as a
                 // valtype accepted the module and left the complaint to the validator, which
@@ -1790,6 +1798,7 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
             funcs,
             exprs,
             elem_type,
+            explicit_type,
         });
     }
     Ok(list)

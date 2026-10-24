@@ -1816,6 +1816,22 @@ command line. The row was verified on how the flag PARSES, which is the half tha
 output — in every position and on every path the flag claims to govern. §4.10 said *test the
 spellings*; this adds: **and test the PATHS**.
 
+## §4.13 — **A CORPUS OF ONE MODULE PER FEATURE MISSES THE CORE EVERYONE USES** (2026-10-23)
+
+**The defect that bought it.** The S1 behaviour corpus held one minimal module per PROPOSAL, judged
+under 38 configurations. The validator then refused every active function-index ELEMENT SEGMENT with
+function-references off: `--features mvp` refused ordinary compiled programs. S1 passed, because no
+per-proposal module contains an element segment; nothing about function tables is a proposal. S3,
+over wasmtk's real modules, found it at once: 661 accepted → refused, all one cause.
+
+🔒 **A behaviour corpus needs the plain WebAssembly 1.0 shapes real programs are made of** (a function
+table, an element segment, `call_indirect`, a mutable global, data), not only the edges each feature
+adds. And the wide, real-world net (S3) earns its place by finding what the designed corpus could
+not. Run it before trusting the narrow one.
+
+🎓 Proof the fix to the corpus was real: with the defect put back, S1 now reports 57 accepted →
+refused on its own.
+
 ## §4.12 — **A GATE THAT FINDS ITS INPUT BY PATH CAN TEST A STALE ARTIFACT** (2026-10-23)
 
 **The defect that bought it.** Five gate scripts found the binary they test at

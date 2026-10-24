@@ -1,5 +1,12 @@
 # Known Issues
 
+## 🔁 2026-10-23, late night — letter H23 (behaviour carry-forward) found a regression since 0.9.0
+
+| | what | state |
+| --- | --- | --- |
+| 🔴 | **Every active function-index element segment was refused with function-references off.** The decoder rightly derives `(ref func)` (non-null, §5.5.12) for those forms. The validator gated that DERIVED type, and a non-null reference maps to function-references, so `--features mvp` (or any embedder config without function-references) refused ordinary compiled programs: fib-rs, fib-zig, the Go fixtures. wasm-tools and wasmrt 0.9.0 accept them. **661 accepted → refused** in S3 over wasmtk's corpus, all this one cause; unreleased | ✅ **FIXED**: `Element::explicit_type`, and only a SPELLED element type is gated. S3 then shows **0** accepted → refused since 0.9.0. Pinned both ways (`an_mvp_element_segment_needs_no_proposal_but_a_spelled_type_does`; an explicit `externref` with zero items is still refused, as wasm-tools refuses it) and inverted. ⚠️ **S1 could not see it**: its per-proposal corpus had no element segment. Five WebAssembly 1.0 shapes were added, and with the defect restored S1 then reports 57 accepted → refused on its own |
+| ⚠️ | **Two intended tightenings since 0.9.0** (S1 carry-forward, 6 pairs): the table-initializer form needs function-references; `nullexternref` / `nullfuncref` need GC. wasm-tools refuses all six, so 0.9.0 was accepting invalid modules | ✅ correct; recorded as CHANGELOG Breaking Changes (floor MAJOR → pre-1.0 minor + row) |
+
 ## 🔧 2026-10-23, night — letter H13 done, and the C-ABI gate was linking a STALE library
 
 | | what | state |

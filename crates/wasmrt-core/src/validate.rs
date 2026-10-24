@@ -867,7 +867,14 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
         if !elem.exprs.is_empty() {
             gate(Some(Feature::ReferenceTypes), features)?;
         }
-        gate(table_element_feature(elem.elem_type), features)?;
+        // 🔴 Only a type the module SPELLED is a proposal it uses. The function-index forms DERIVE
+        // `(ref func)` (non-null, §5.5.12), and gating that derived type refused EVERY MVP element
+        // segment with function-references off, so `--features mvp` refused ordinary compiled
+        // programs (fib-rs, the Go fixtures …) that wasm-tools and wasmrt 0.9.0 accept. Found
+        // 2026-10-23 by the H23 carry-forward over wasmtk's corpus, not by any spec file.
+        if elem.explicit_type {
+            gate(table_element_feature(elem.elem_type), features)?;
+        }
     }
 
     Ok(())
