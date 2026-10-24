@@ -19,12 +19,24 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-_Next: **2.0.0** — the change below refuses a module 1.0.0 accepted, which the bump gate counts as
-major. Then the review stages, in order: T9 (hardening), T10 (a bug hunt and code-hygiene pass), T11
-(an optimization review of the shipped binaries and the C ABI) and T12 (a security review), each
+_Next: the review stages, in order: T9 (hardening), T10 (a bug hunt and code-hygiene pass), T11 (an
+optimization review of the shipped binaries and the C ABI) and T12 (a security review), each
 numbered by the bump gate._
 
-### Fixed (2026-10-24)
+## [2.0.0] — 2026-10-24 — a validation correction, and binaryang D2 2.2.0
+
+**One correction, and it is why this is a major release:** with reference-types disabled, wasmrt
+now refuses an `exact` reference type it used to accept. The bump gate counts accepting fewer modules
+as a breaking change even when the new answer is the correct one. **With every proposal enabled, the
+default, nothing a module can observe has changed**, and no API changed: the public Rust API,
+`wasmrt.h` and the command line are identical to 1.0.0.
+
+**Size and speed, measured beside a 1.0.0 build on the same machine and toolchain:** the CLI is
+846,848 B and the C ABI DLL 534,528 B, both the same size as 1.0.0. In process, cold start on a
+48 KB module is 3.21–3.27 ms (1.0.0: 3.22–3.30) and the steady loop 235–246 Mops/s (1.0.0:
+234–252), three interleaved rounds each: no change beyond noise.
+
+### Fixed
 
 - ⚠️ **Breaking (validation, `--features`): an `exact` reference type needs reference-types.**
   `(ref null (exact $t))` was judged by custom-descriptors alone, so it validated with

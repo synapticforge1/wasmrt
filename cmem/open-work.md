@@ -9,12 +9,11 @@ stays in the topic file named.
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
 * **606 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the binaryang 2.2.0 re-pin);
   clippy clean; `surface.ts --check`, eol, definitions and the C-ABI gate green.
-* **1.0.0 RELEASED 2026-10-24**: tag `v1.0.0` = release commit `9871fd4`; `wasmrt-core`,
-  `wasmrt-capi` and `wasmrt` at 1.0.0 on crates.io (verified through its API);
-  `surface/released.txt` records it. The bump floor since then is **MAJOR** (one module accepted →
-  refused: the `exact`-type fix), so 🔒 **the next release is `2.0.0` (owner, 2026-10-24: "2.0.0 is
-  fine")**. It waited for the next contract version (owner: "we will wait on the latest contract
-  version before the release"); ✅ **v40 is mirrored and verified** (below), so 2.0.0 is UNBLOCKED.
+* 🚦 **2.0.0: the release commit is made; NOT tagged, NOT published** (the owner's steps;
+  `releasing.md`, checklist 7–9). The floor since 1.0.0 was MAJOR (one module accepted → refused:
+  the `exact`-type fix; owner: "2.0.0 is fine"), and it waited for contract v40 (owner), which is
+  mirrored and verified below. `bump.ts --verify-tag v2.0.0` passes locally. Last published release:
+  **1.0.0** (tag `v1.0.0` = `9871fd4`; on crates.io; `surface/released.txt` records it).
 * **binaryang pinned at v2.2.0** (`6e1923397def`; D2 2.2.0 with `typeRules` / `encodingRules`).
   **wasmrt = binaryang 2.2.0 on all 6,860 judgements** (wazmrt's `d2-matrix.ts`: wasmrt's S1 corpus
   × D2's 49 configurations), and `definitions_check` holds both rule lists in `cargo test`.
@@ -30,10 +29,12 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-1. **The review ladder** — T9 hardening, T10 bug hunt, T11 optimization, T12 security, in that
+1. **Publish 2.0.0 (owner).** `git tag v2.0.0`, `git push origin v2.0.0` (the gate job runs), then
+   `cargo publish` × 3 in order; then the agent records the surface in its own commit (`bun
+   scripts/surface.ts --release-from v2.0.0`). Record: `releasing.md`.
+2. **The review ladder** — T9 hardening, T10 bug hunt, T11 optimization, T12 security, in that
    order. 🔒 **Their version numbers come from the gate, not the plan** (owner, 2026-10-24, accepting
-   `2.0.0` for the `exact`-type correction): the next release is `2.0.0`, and each later one is
-   whatever `bump.ts` says. *(The ladder had pre-assigned `1.0.1`–`1.0.4`.)* T11 decides the contest: the CLI's 3.4 ms on
+   `2.0.0` for the `exact`-type correction): each release after `2.0.0` is whatever `bump.ts` says. *(The ladder had pre-assigned `1.0.1`–`1.0.4`.)* T11 decides the contest: the CLI's 3.4 ms on
    the 48 KB module, in-process cold start, the unattributed ~5% loop regression, **the CLI's +31%
    since 0.9.0 (≈33 KiB of it attributed)**, the interpreter ladder, rsxtk on wasmtime vs wasmrt, the
    cdylib size gap, and the rlib (what rsxtk links) never measured. Record: `roadmap.md` (T9–T12),

@@ -269,6 +269,18 @@ hands over the publish commands. Established rhythm since v0.1.0; the pre-publis
 
 ## Status (2026-10-24)
 
+- 🚦 **2.0.0 — the release commit is made; NOT tagged, NOT published.** One validation correction
+  (an `exact` reference needs reference-types), MAJOR by the gate (owner: "2.0.0 is fine"), and the
+  binaryang 2.2.0 re-pin; it waited for contract v40 (owner), which is mirrored and verified.
+  Checklist: 606 workspace tests, clippy clean, S1 re-baselined for the one intended refusal, S2 0
+  regressed, S3 over wasmtk 0 / 0 against v1.0.0; size identical to a v1.0.0 build on the same
+  toolchain (CLI 846,848 B, DLL 534,528 B) and speed within noise (interleaved A/B, cold 48 KB
+  3.21–3.27 vs 3.22–3.30 ms, steady 235–246 vs 234–252 Mops/s); both binaries import only
+  Windows-provided DLLs and the CLI runs on a system-only `PATH`; `bump.ts major` 1.0.0 → 2.0.0 and
+  `--verify-tag v2.0.0` pass. Public surface unchanged. **Owner next:** steps 7–8; then step 9.
+
+### 1.0.0
+
 - **✅ v1.0.0 PUBLISHED (2026-10-24, release commit `9871fd4`, tag `v1.0.0`)** — all three crates at
   1.0.0 on crates.io (checked through its API), and `surface/released.txt` re-recorded from the tag
   (step 9, its own commit). The floor since then is MAJOR (the `exact`-type correction refuses one

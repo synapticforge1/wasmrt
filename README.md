@@ -7,7 +7,9 @@ Since 2026-08-11 the two are **independent runtimes** that stay command-line com
 replace the other. wasmrt's correctness is anchored on the official WebAssembly spec testsuite, on
 wasmtime's observable behaviour, and on a corpus of real WASI programs.
 
-> **Status: `1.0.0`, the conformance clear-out.** wasmrt can **assemble**, **decode**, **type-check**, and **run**
+> **Status: `2.0.0`.** `1.0.0` was the conformance clear-out; `2.0.0` corrects one validation rule (an
+> `exact` reference type needs reference-types) and holds wasmrt to binaryang's shared feature
+> rules. wasmrt can **assemble**, **decode**, **type-check**, and **run**
 > WebAssembly — `wasmrt run fac.wasm fac 10` → `3628800`, `wasmrt wat mod.wat -o mod.wasm`. Execution
 > covers integer + floating-point compute, linear memory (incl. **multi-memory** and **memory64**),
 > tables / `call_indirect` / reference types, **WasmGC**, **SIMD** (the full `v128` set, incl. relaxed),
@@ -74,7 +76,7 @@ Sustained hot loops go to a JIT — that trade is deliberate. A comparison again
 | Crate | What it is | Install |
 | --- | --- | --- |
 | `wasmrt` | the command-line runtime | `cargo install wasmrt` |
-| `wasmrt-core` | the runtime as a Rust library (`no_std`-friendly) | `wasmrt-core = "1.0"` |
+| `wasmrt-core` | the runtime as a Rust library (`no_std`-friendly) | `wasmrt-core = "2.0"` |
 | `wasmrt-capi` | the C ABI ([`wasmrt.h`](crates/wasmrt-capi/include/wasmrt.h)) as a `cdylib` / `staticlib` | build from source |
 
 ## Embedding from C
@@ -138,7 +140,7 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 
 | Version | What changed | How to migrate |
 | --- | --- | --- |
-| _next release_ | **Validation:** an `exact` reference type, `(ref null (exact $t))`, now needs reference-types (and function-references or gc) as well as custom-descriptors, as D2's type rules and wasm-tools say; 1.0.0 accepted it with reference-types off. With every proposal on, the default, nothing changes | enable reference-types: `--features …,reference-types` |
+| 2.0.0 | **Validation:** an `exact` reference type, `(ref null (exact $t))`, now needs reference-types (and function-references or gc) as well as custom-descriptors, as D2's type rules and wasm-tools say; 1.0.0 accepted it with reference-types off. With every proposal on, the default, nothing changes | enable reference-types: `--features …,reference-types` |
 | 1.0.0 | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
 | 1.0.0 | **`--features`** takes binaryang D2's names and presets (`wasm1` `wasm2` `wasm3` `all`, plus `mvp` `lime1` `-all`); `mvp` and a bare list start from nothing, so exporting a mutable global needs `mutable-globals` (or `wasm1`); every reference type needs reference-types (the GC and exception types their own proposal as well), and a non-null `(ref func)` / `(ref extern)` needs function-references (gc admits only `(ref $t)`), as in wasm-tools; an overlong `call_indirect` index needs reference-types. No feature set is refused | use a preset (`--features wasm2`) or add `mutable-globals`; the wasm-tools spellings still work, with a warning |
 | 1.0.0 | **Rust API / C ABI:** `Feature::MutableGlobals` and `Features::mutable_globals`, `opcode::CallIndirect::overlong`; `WASMRT_FEATURE_MUTABLE_GLOBALS = 18`; `wasmrt_engine_new_with_config` no longer refuses a feature set | add the new arm / field; nothing to change in C |

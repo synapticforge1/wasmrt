@@ -52,7 +52,7 @@ Legend: ✅ done & verified · 🚧 in progress · ⬜ planned
 | **0.8.0** | WASI + CLI | host imports + module linking on a shared store + WASI preview 1 **including the sandboxed filesystem** (`--dir` / `--ro-dir` preopens); plus `#![forbid(unsafe_code)]` in the engine | ✅ |
 | **0.9.0** | C ABI | the `wasmrt.h` embedding surface — checked handles, caller-based host callbacks, configurable proposals + resource ceilings; gated by c-smoke, link-completeness and Miri | ✅ |
 | **1.0.0** | **Conformance clear-out** | the spec testsuite to **zero failures / zero skips / zero unrun**, empty baseline, zero deliberate deviations — which brings the proposals the corpus contains into scope. Met: **64,603 / 0 / 0 over 288 files**. Also ships tail calls, module pinning (`wasmrt pin`), the iteration bound, wazmrt's CLI shape and binaryang D2's `--features` | ✅ |
-| **2.0.0** | Type-rule correction | an `exact` reference type needs reference-types (binaryang D2 2.2.0, wasm-tools); wasmrt held to D2's type and encoding rules in `cargo test` | 🚧 |
+| **2.0.0** | Type-rule correction | an `exact` reference type needs reference-types (binaryang D2 2.2.0, wasm-tools); wasmrt held to D2's type and encoding rules in `cargo test` | ✅ |
 | T9 | Hardening | the correctness punch-list, licensing, docs, size minimization, all gates green (module authenticity, `pin`, landed early, in 1.0.0) | ⬜ |
 | T10 | Bug hunt + code hygiene | a comprehensive audit across tested **and** untested paths — bugs, fall-throughs, stale workarounds, dead code, missing documentation | ⬜ |
 | T11 | Optimization review | measured options for making the shipped artifacts faster and smaller — judged at the binary and C-ABI boundary, not by micro-benchmarks | ⬜ |
