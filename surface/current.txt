@@ -2130,6 +2130,7 @@ rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedExport
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedFunc
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedGlobal
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedLabel
+rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedTableElement
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedTag
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UndefinedType
 rust:wasmrt-core	pub wasmrt_core::interp::Trap::UninitializedElement
