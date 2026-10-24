@@ -13,7 +13,7 @@ a win in one can be invisible in the other (`vision.md`).
 | consumer | links | surface | notes |
 | --- | --- | --- | --- |
 | **`rsxtk`** | `wasmrt-core` **rlib** | **native Rust API** — no C ABI, no cdylib, no FFI | 🆕 **Takes wasmrt BY DEFAULT** (owner). Rust-to-Rust, so calls are direct and the C ABI is not in the path at all. |
-| **`wasmtk`**, **`universalWasmLoader-*`** | `wasmrt_capi` cdylib / staticlib | **`wasmrt.h`** (~38 fns, below) | wasmrt is an **entrant competing for inclusion** here, judged on smallest + fastest binary — not a foregone conclusion. |
+| **`wasmtk`**, **`universalWasmLoader-*`** | `wasmrt_capi` cdylib / staticlib | **`wasmrt.h`** (75 functions, counted 2026-10-24; below) | wasmrt is an **entrant competing for inclusion** here, judged on smallest + fastest binary — not a foregone conclusion. |
 
 ⚠️ **What this changes for optimization work:** for rsxtk the number that matters is *what LTO leaves in
 rsxtk's final binary* — cross-crate dead-code elimination, generic bloat, and whether unused subsystems
@@ -96,7 +96,7 @@ uses any component-model API. **That marshalling is the LOADER's job — NOT the
 loaders. (This is what the original kickoff prompt's `cabi_realloc`/`cabi_post_*`/WIT language was
 about — it belongs here, not in the runtime.)
 
-## `wasmrt.h` = the engine surface the loaders call (~38 fns)
+## `wasmrt.h` = the engine surface the loaders call (the survey asked for ~38 functions; the header has 75, counted 2026-10-24 from `surface/current.txt`)
 
 The C loader (`universalWasmLoader-c/universal_wasm_loader.h`, `uwl_*` public API) uses wasmtime's
 **`wasmtime_*` store/context/linker/typed-val model** (not the standard wasm-c-api instance/func

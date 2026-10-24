@@ -7,6 +7,24 @@ the same few mistakes visible enough to name.
 Read this before starting a task. It is not a style guide — it is a list of the ways this codebase has
 been wrong, which is a much better predictor of how it will be wrong next.
 
+**Numbering (workspace policy, 2026-10-24):** a section number is stable and never reused; a new rule
+takes the next free number in its topic. §1–§8 below are the numbered sections; the rules added
+since 2026-08-20 are appended after them in date order, under their own numbers. Five appended rules
+had collided with earlier numbers and were renumbered on 2026-10-24 (each says so under its heading):
+§1.7 → **§1.13**, §3.11 → **§3.15** (and §3.11a → §3.15a), §3.12 → **§3.16**, §4.4 → **§4.14**,
+§4.5 → **§4.15**. The workspace's ★ rules are copied at the end.
+
+**Index of the appended rules:** §3.8b three components that agree are not three witnesses · §5.6b a
+reason that names the wrong cause · §5.7 a leniency with no wrong-value consequence · §3.15 the same
+word on two surfaces · §5.8 scoping is a measurement · §4.14 a doc comment is not a check · §3.16 an
+unknown spelling can be re-read · §4.15 a clean file has no row · §1.13 the denominator is a
+measurement · §8.4 verifying an option's premise · §3.8c a rationale expires · §5.9 your own gate is a
+gate · §1.9 a second authority on a grammar · §3.13 read-and-discard is not validation · §3.8d the
+outside reader is a gate · §8.1b line endings · §1.10 a grammar production has more than one site ·
+§3.14 a field recorded for one consumer · §1.11 sweep the axis · §1.12 a differential fuzz · §4.11 a
+contract row verified on parsing · §4.13 one module per feature misses the core · §4.12 a gate that
+finds its input by path.
+
 ---
 
 ## 1. Measurement
@@ -1334,7 +1352,9 @@ gratuitous strictness is the same message inverted. Both are deliberate deviatio
 the oracle" was written into three separate comments, and none of them was revisited when the oracle
 was retired nine days later. When a project-level premise changes, grep for the comments that cite it.
 
-## §3.11 — **THE SAME WORD ON TWO SURFACES IS TWO WORDS** (2026-08-20)
+## §3.15 — **THE SAME WORD ON TWO SURFACES IS TWO WORDS** (2026-08-20)
+
+*(Numbered §3.11 until 2026-10-24, when it was renumbered because §3.11 also named an earlier rule; workspace letter H2.)*
 
 *Bought by: the owner's `anyfunc` question, probed and answered in about twenty minutes.*
 
@@ -1382,7 +1402,9 @@ That is almost certainly the memory the question came from.
 ⚠️ The cost of the refusal is unchanged and small: the `.wat` corpus reads 529/532, the three files are
 not gated by any `cargo` step, and wazmrt paid exactly the same price for exactly the same reason.
 
-### §3.11a — the trap inside it: **A REJECTION MUST BE ROUTED TO THE CODE THAT KNOWS WHY**
+### §3.15a — the trap inside it: **A REJECTION MUST BE ROUTED TO THE CODE THAT KNOWS WHY**
+
+*(Numbered §3.11a until 2026-10-24, when it was renumbered because §3.11a also named an earlier rule; workspace letter H2.)*
 
 *Reported by the owner from wazmrt's closure note, and it bit wasmrt too — checked because it was
 reported, not assumed to be absent.*
@@ -1450,7 +1472,9 @@ defect — a bare composite type *is* `sub final ϵ`, so the two are one type an
 correct. Checked before reporting. **A scoping pass that reports its false positives is worth less
 than one that checks them**, and one wrong entry in a work-list costs a day.
 
-## §4.4 — **A PROPERTY ASSERTED IN A DOC COMMENT IS NOT A CHECK** (2026-09-17)
+## §4.14 — **A PROPERTY ASSERTED IN A DOC COMMENT IS NOT A CHECK** (2026-09-17)
+
+*(Numbered §4.4 until 2026-10-24, when it was renumbered because §4.4 also named an earlier rule; workspace letter H2.)*
 
 `features::op_feature` maps an opcode to the proposal that gates it. Its doc comment said:
 
@@ -1489,7 +1513,9 @@ None of them can fail a build. When a note claims a property the code enforces, 
 findable as a test — name it in the note — or the note is a hypothesis, and §1's rule applies to it like
 any other.
 
-## §3.12 — **AN UNKNOWN SPELLING IS NOT AUTOMATICALLY REFUSED — IT CAN BE RE-READ** (2026-09-17)
+## §3.16 — **AN UNKNOWN SPELLING IS NOT AUTOMATICALLY REFUSED — IT CAN BE RE-READ** (2026-09-17)
+
+*(Numbered §3.12 until 2026-10-24, when it was renumbered because §3.12 also named an earlier rule; workspace letter H2.)*
 
 The bare-index segment spellings, `(data 0 (i32.const 0) "x")` and `(elem 0 (i32.const 1) $f)`, are
 valid and both parsers read only the parenthesised `(memory 0)` / `(table 0)` form. The two halves failed
@@ -1506,7 +1532,7 @@ this was a silently wrong module.**
 
 🎓 **The intuition to give up: "we don't parse it, so we reject it."** A parser that does not recognise a
 token at a position does not stop — it keeps going and the token lands wherever the next rule looks. That
-is §3A.2's "a synthetic tag in a real space eventually means something else", and §3.11a's "a rejection
+is §3A.2's "a synthetic tag in a real space eventually means something else", and §3.15a's "a rejection
 routed to code that does not recognise it lands in the wrong bucket", arriving from a third direction.
 
 **So a test for a newly-accepted spelling asserts the MEANING, not acceptance.** `assemble()` returning
@@ -1514,7 +1540,9 @@ routed to code that does not recognise it lands in the wrong bucket", arriving f
 `Active` and that it holds exactly one item. That is the same rule as §3.8b — hand the bytes to a second
 reader — applied to your own decoder.
 
-## §4.5 — **A CLEAN FILE HAS NO ROW, SO IT CANNOT LOSE A PASS** (2026-09-17)
+## §4.15 — **A CLEAN FILE HAS NO ROW, SO IT CANNOT LOSE A PASS** (2026-09-17)
+
+*(Numbered §4.5 until 2026-10-24, when it was renumbered because §4.5 also named an earlier rule; workspace letter H2.)*
 
 `scripts/conformance-diff.ts` enforces this project's central rule, *no file lost a pass*. Its header
 already records two holes closed the hard way (keying on basenames; iterating only baseline rows). **This
@@ -1536,7 +1564,9 @@ segment spellings against wasmtime used `wasmrt <file> && echo OK` as its oracle
 refusing. *A gate you build for yourself, five minutes before trusting it, is still a gate.* Check that
 it can fail before reading its output.
 
-## §1.7 — **WHEN THE CORPUS CAN MOVE, THE DENOMINATOR IS A MEASUREMENT** (2026-09-17)
+## §1.13 — **WHEN THE CORPUS CAN MOVE, THE DENOMINATOR IS A MEASUREMENT** (2026-09-17)
+
+*(Numbered §1.7 until 2026-10-24, when it was renumbered because §1.7 also named an earlier rule; workspace letter H2.)*
 
 Day 3 opened by re-running the suite rather than quoting day 2's **63,807 / 112 / 584 over 284 files**.
 It read **63,963 / 112 / 604 over 288** — wasmtk had synced the vendored testsuite to upstream on
@@ -1608,7 +1638,7 @@ instrument was ours and trusted:
   fails**, so the loop could not observe a validation failure at all. It had been reporting 530/532;
   reading the printed verdict instead gives **528/532**, and the two extra failures had been there all
   along.
-* The per-file conformance gate could not see a clean file lose passes (§4.5).
+* The per-file conformance gate could not see a clean file lose passes (§4.15).
 
 🎓 The pattern is not "our tests are weak" — it is that **a gate is a measuring instrument, and an
 instrument that cannot register the thing you are looking for returns a confident wrong answer.**

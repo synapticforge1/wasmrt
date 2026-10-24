@@ -2,12 +2,12 @@
 
 A fast, small, idiomatic-**Rust** WebAssembly runtime.
 
-wasmrt is a from-scratch Rust port of the Zig runtime [`wazmrt`](https://github.com/synapticforge1/wazmrt) —
-which already runs the full WebAssembly spec testsuite and a large WASI corpus. wazmrt is the
-**reference oracle**; wasmrt is finished when it reproduces the oracle feature-for-feature, verified by
-parity testing at every step.
+wasmrt began as a Rust port of the Zig runtime [`wazmrt`](https://github.com/synapticforge1/wazmrt).
+Since 2026-08-11 the two are **independent runtimes** that stay command-line compatible, so either can
+replace the other. wasmrt's correctness is anchored on the official WebAssembly spec testsuite, on
+wasmtime's observable behaviour, and on a corpus of real WASI programs.
 
-> **Status: early — `0.9.0`.** wasmrt can **assemble**, **decode**, **type-check**, and **run**
+> **Status: `0.9.0` is the latest release; the next is `1.0.0`.** wasmrt can **assemble**, **decode**, **type-check**, and **run**
 > WebAssembly — `wasmrt run fac.wasm fac 10` → `3628800`, `wasmrt wat mod.wat -o mod.wasm`. Execution
 > covers integer + floating-point compute, linear memory (incl. **multi-memory** and **memory64**),
 > tables / `call_indirect` / reference types, **WasmGC**, **SIMD** (the full `v128` set, incl. relaxed),
@@ -15,8 +15,10 @@ parity testing at every step.
 > `wasmrt <file>` gives a real verdict on any module wasmrt can run. Every command that takes a
 > module accepts either form — `wasmrt run fac.wat fac 10` assembles the text first, then runs it.
 >
-> It reads and writes the **text format** and runs the **official spec testsuite**: `wasmrt wast <dir>`
-> scores **99.4% (62,113 assertions passing)**, with every one of the 284 files parsing.
+> It reads and writes the **text format** and runs the **official spec testsuite**: on the current
+> source, `wasmrt wast <dir>` passes **all 64,603 assertions in the suite's 288 files, with none
+> failed, skipped or unrun** (measured 2026-10-24; unreleased: at its release, `0.9.0` passed 98.8%
+> of the assertions it ran, against the smaller suite of the time). That is the `1.0.0` gate.
 >
 > It is **embeddable from C** via [`wasmrt.h`](crates/wasmrt-capi/include/wasmrt.h) — compile,
 > link host functions, instantiate, call exports, and read or write guest memory. You can restrict

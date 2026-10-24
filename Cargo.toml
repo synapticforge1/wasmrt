@@ -1,4 +1,4 @@
-# wasmrt — an idiomatic-Rust WebAssembly runtime (port of the Zig runtime wazmrt).
+# wasmrt — a fast, small, idiomatic-Rust WebAssembly runtime.
 # Workspace of three crates (see cmem/architecture.md):
 #   wasmrt-core  — the runtime library, no_std-friendly + wasm32-freestanding-clean
 #   wasmrt-capi  — the wasmrt.h C ABI (cdylib + staticlib) over core
@@ -14,7 +14,7 @@ rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 authors = ["Jon Marcum <jrmarcum.se@gmail.com>"]
 repository = "https://github.com/synapticforge1/wasmrt"
-description = "An idiomatic-Rust WebAssembly runtime — a port of the Zig runtime wazmrt."
+# Each crate carries its own `description`; a workspace one was inherited by none of them.
 
 [workspace.dependencies]
 wasmrt-core = { path = "crates/wasmrt-core", version = "0.9.0" }

@@ -384,8 +384,9 @@ guarantee. "Zero unsafe everywhere" would be a promise the FFI boundary makes im
   measured ~14% i-cache regression. Trap byte offsets resolved **lazily** by re-decoding one body; never
   stored per-instruction.
 - **Shared `Memory`/`Table`** so `grow` is visible to importers (growth reassigns the backing slice in
-  place). Rust: `Rc<RefCell<…>>` / raw shared ownership; refcount `Cell<u32>`, NOT `Arc` (single-thread
-  ABI assumption).
+  place). 🔁 *As built (T7, 2026-08):* the `Store` owns every memory and table once, and instances
+  hold indices into it, so sharing needs no `Rc`, no `RefCell` and no `unsafe` (the port plan's
+  `Rc<RefCell<…>>` was never used; `interp.rs` says why).
 - **C-ABI (capi):** lightweight `{id}` handles into a store (no wasm-c-api refcount model);
   **caller-based host callbacks** so a host import can read/write guest memory and return a value (the
   one capability wazmrt's wasm-c-api callback lacks); `#[repr(C)]` for boundary structs; real pointers
@@ -408,10 +409,13 @@ Choices made while porting; consistent with "boundary-faithful behavior, idiomat
   (see [architecture.md](architecture.md)).
 - **Owned data model over an arena.** The decoder returns owned `Vec`/`String`; a `Module` frees on drop
   (no `deinit`, no allocator-error threading). Idiomatic-Rust divergence, behavior identical.
-- **`Op` = a macro-defined `#[repr(u8)]` enum** (PascalCase variants) with `from_u8` generated from one
+- **`Op` = a macro-defined enum** (PascalCase variants) with `from_u8` generated from one
   wire/internal list; **immediates that own data hold a `Vec`**, so dropping the IR frees them (replaces
-  wazmrt's manual `freeBody`). The internal-tag-vs-wire-byte invariant is preserved (raw `0xD7`–`0xFA`
-  rejected). Raw `0xC5`–`0xCC` accepted as sat-trunc to mirror the oracle (see [known-issues.md](known-issues.md)).
+  wazmrt's manual `freeBody`). 🔁 *`#[repr(u8)]` until 2026-09-17, now `#[repr(u16)]` with every
+  internal tag above `0xff`* (owner-directed), so no internal tag fits in a byte and `from_u8` cannot
+  decode one. 🔁 *Raw `0xC5`–`0xCC` were accepted as saturating truncations "to mirror the oracle"
+  until T13 day 3*; that was not WebAssembly (they are `0xFC 0x00`–`0x07`), and the decoder now
+  refuses them (re-checked 2026-10-24: "unsupported instruction opcode").
 - **CLI grows with the pipeline** — `wasmrt <file>` summarizes + validates (T3/T4); `wasmrt run <file>
   <fn> [args]` executes (T5), parsing args to the export's param types. Faithful to wazmrt's CLI role.
   🔒 **Every path that loads a module goes through ONE helper** (`read_module_bytes`, T9): it assembles
@@ -501,9 +505,10 @@ Each entry below records the answer and the reasoning, so none of them gets re-d
   1. **Config gates proposals FOR REAL**, not just resource limits. The draft's per-proposal toggles
      would have been silent no-ops (core had no feature gating at all), so the owner chose to build the
      gating rather than drop the toggles — new work threaded through the validator. Limits are
-     configurable too. **Corollary the owner should not be surprised by later: there is no `tail_call`
-     flag**, because `return_call`/`return_call_indirect` are not implemented; a toggle for them would
-     gate nothing while reading as a security control.
+     configurable too. The corollary then was "there is no `tail_call` flag", because tail calls were
+     not implemented and a toggle would gate nothing. 🔁 *Since 2026-08-14 (T9f) they are, and
+     `Feature::TailCall` / `WASMRT_FEATURE_TAIL_CALL` gate them* — the same rule, applied once the
+     feature existed.
   2. **The linker lives in `wasmrt-core`**, not in the C-ABI crate — so the C ABI, the native Rust
      crate, WASI and the `.wast` runner share **one** name-resolution authority. Binding two same-kind
      imports in the wrong order links fine and misroutes every call, so it is written once.

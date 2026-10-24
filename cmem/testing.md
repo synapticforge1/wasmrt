@@ -109,7 +109,7 @@ quoting gave **63,963 / 112 / 604 over 288 files** as day 3's true starting poin
 skips** (the unhandled `assert_malformed_custom` / `assert_invalid_custom` commands those new files use).
 ⚠️⚠️ **The failure count was 112 on both sides BY COINCIDENCE** — custom-descriptors +1,
 custom-page-sizes −2, `custom/` +1. 🎓 *An unchanged total is not evidence that nothing changed*
-(`best-practices.md` §1.7), and it is one more reason the gate reads per file.
+(`best-practices.md` §1.13), and it is one more reason the gate reads per file.
 
 **Day 3's own movement: 63,963 / 112 / 604 → 64,068 / 66 / 549**, and **`proposals/threads/` reached
 497 / 0 / 0** via the owner-directed vendored patch (8 era-pinned `assert_invalid` cases removed;
@@ -161,7 +161,7 @@ not ours, and it is what wasmtk is re-evaluating.
 ✅ **The per-file gate did its job** — it reported `MORE FAILURES … 0 -> 3` and `0 -> 2` rather than
 netting them against the unchanged pass total.
 
-🎓 *When the corpus can move, the denominator is a measurement* (§1.7) — **and so is the numerator.**
+🎓 *When the corpus can move, the denominator is a measurement* (§1.13) — **and so is the numerator.**
 A conformance headline is a joint statement about an engine and a corpus, so it is only quotable
 when BOTH have stopped moving. That is also why `1.0.0` is on hold (HANDOFF item 8).
 

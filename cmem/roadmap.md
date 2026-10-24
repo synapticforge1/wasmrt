@@ -24,10 +24,10 @@ in front of all of it for a reason of its own: **T10's bug hunt and T11's baseli
 against the corpus**, so running them while 2,416 assertions are unadjudicated means hunting bugs in code
 whose conformance is unknown and optimizing an engine that is about to grow several proposals.
 
-⚠️ **Consequence to state plainly, because the reordering causes it:** `pin` moves *behind* 1.0.0, so
-**`1.0.0` ships with no authenticity check of any kind** (`pin.rs` is still a doc-comment stub). That is
-a deliberate consequence of putting conformance first, not an oversight. The **authority** half of the
-security model — the WASI sandbox — is built and unaffected.
+🔁 *Corrected 2026-10-24:* this paragraph said `pin` moved behind 1.0.0, so "1.0.0 ships with no
+authenticity check" and "`pin.rs` is still a doc-comment stub". **`pin` was BUILT on 2026-09-19 (T9e)**
+— the SHA-256 gate before validation on every executing path, `wasmrt pin`, the fail-closed policy
+(`security-model.md`) — so 1.0.0 ships with it. The original text: `git show cfeee31:cmem/roadmap.md`.
 
 ---
 
@@ -194,7 +194,7 @@ Treat them as dated 2026-09-20, and re-run them before quoting (the corpus can m
 Done:
 * 🏢 **The repo moved to the owner's `synapticforge1` organization.** `origin` is
   `github.com/synapticforge1/wasmrt`, and every `.md` link now points there; `wazmrt` and `rsxtk`
-  moved too; `wasmtk` followed by 2026-10-23 (below; `INDEX.md`, "update the project memory" step 4). Pushed through
+  moved too; `wasmtk` followed by 2026-10-23 (below; the canonical table is the workspace's `../cmem/projects.md`, "Where each project lives"). Pushed through
   `78d31a50d`.
 * 🟢 **Scripts run on Bun only.** Owner: *"deno is going away"*. All nine `scripts/*.ts` build under
   Bun 1.4.3; their shebangs, the gate commands and `line_endings.rs`'s fix message now say `bun`
@@ -263,10 +263,26 @@ repo's `cmem/`.** Ordered by size and by who has to act:
   author/committer fields keep it, and the 2026-10-24 rewrite left every identity unchanged.
 
 **C. Memory conformance (medium; repo-internal)**
-* **H2**: `CLAUDE.md` is **49,055 bytes** (2026-10-23); the letter asks for a pointer file. Move
-  the INDEX narrative to `open-work.md`. Renumber the duplicated `§3.11 §3.12 §1.7 §4.4 §4.5`.
-  README, CHANGELOG and roadmap must "reflect a shipped stage" before `1.0.0` (drift-register
-  R1–R9). Policy: `../cmem/memory-conventions.md`.
+* ✅ **H2 — memory conformance: DONE 2026-10-24** (owner: "proceed with the rest of H2"). Policy:
+  `../cmem/memory-conventions.md`; the old text of every cut file is `git show cfeee31:<path>`.
+  * `CLAUDE.md` **51,326 → 3,784 bytes**, a pointer; INDEX **154,958 → about 7,200 bytes** (policy,
+    triggers, one line per file); bootstrap ~11 KB. The status lives once, in the new `open-work.md`;
+    the roadmap's handoff and `overview.md`'s Status section now point there.
+  * R2: the five duplicated `best-practices.md` numbers renumbered (§1.13, §3.15/§3.15a, §3.16, §4.14,
+    §4.15), every citation retargeted after reading it in context (one judged by date and wording:
+    `opcode.rs`'s removed-guard comment → §4.14), and a one-line index at the top. A duplicate
+    check proved on the old file (it finds exactly the five) finds none now.
+  * R3: README intro and status, `tests/README.md`, the CHANGELOG header and "Next", the ROADMAP's
+    spec row, and the unused `workspace.package.description` (also the cargo warning) removed.
+  * R4 (pin "a stub"), R6 (invariants: `Rc<RefCell>`, raw `0xC5`, `repr(u8)`, "no tail_call
+    flag"), R7 (the coordinate trigger's step 5), R8 (`loaders.md` "~38 fns" → 75 counted;
+    `overview.md` oracle-diffing; the LICENSE line), R9 (the threads patch: wasmtk committed it,
+    now `6a08cb05`) — each corrected as a dated one-line correction.
+  * Every link in the rewritten files resolves (the checker was inverted). ⚠️ NOT in the letter and
+    NOT done: summarizing the superseded paragraphs kept in `roadmap.md` and `known-issues.md`
+    (both still large); that is the policy's general rule, a separate pass.
+  * R5's other half is `interop.md:83` ("`1.0.0` (the conformance clear-out, T13) is not started"),
+    wazmrt's text: relayed (`open-work.md`).
 * ✅ **H6 — the gated bump: DONE 2026-10-24** (owner: "push then H6", then "proceed"). Detail and
   the inversions: `releasing.md`, "THE NUMBER".
   * `scripts/surface.ts` generates the surface (Rust `pub` API of `wasmrt-core` and `wasmrt-capi`,
@@ -440,47 +456,10 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 A fresh clone **on this host** needs a local git setting to stop `.git` growing. That is a fact about
 this machine, so it lives in machine-local notes, not here (workspace rule).
 
-##### 🚦 HANDOFF — where to pick up (updated 2026-10-24)
+##### 🚦 HANDOFF — where to pick up: **`open-work.md`** (since 2026-10-24)
 
-**State, measured 2026-10-24:** spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`:
-0 regressed); **602 workspace tests**, 0 failed, 1 ignored (from Git Bash); the surface gate, eol and
-definitions gates green. Contract mirror at **v35**, byte-identical to wazmrt (`5fe7138`). 🔒 v35's
-§5 #13 is IMPLEMENTED: a WASI guest sees only `--env`, an empty KEY is refused, a repeated KEY
-replaces (`known-issues.md`, top; Breaking Changes row in the README). §5 #14 needed no change.
-History rewritten twice (2026-10-23 paths, 2026-10-24 drive letters): look old ids up in
-`history-map-2026-10-23.md`, then `history-map-2026-10-24.md`. Nothing is half-finished in this tree.
-
-**Done this week, wasmrt's side of the workspace letters:** H1 (mirror, now v34), H6 (gated bump),
-H8 (measurements), H10 step 1, H13, H15, H16, H18, H19 (both rewrites), H20, H21, H22, H23 (both
-letters of that number: the carry-forward, and the 5.2 re-copy).
-
-**Open, in the order they unblock each other:**
-1. **H2 — memory layout** (track C): `CLAUDE.md` to a pointer of ≤ 5 KB, INDEX one line per file with
-   the narrative moved to an `open-work.md`, renumber the duplicated `best-practices.md` sections,
-   refresh the stale README intro (it still calls wazmrt the oracle and quotes 99.4% / 284 files).
-   This is also H6's memory-layout part.
-2. **1.0.0 release prep** (`releasing.md`): the floor since 0.9.0 is MAJOR, which 1.0.0 meets. The
-   CI gate job has never run on a runner; its first run is the 1.0.0 tag.
-3. **H10 step 2** (track D): derive the hand tables from `definitions.rs` (hot path: A/B/A benchmark),
-   and check D3.
-4. **The D2 `--features` migration**, names and meanings (v32/v33), once binaryang's FL1 settles;
-   re-pin binaryang (v1.14.0 → v1.17.0 or later) with it. Blocked upstream: D2 has no dependency or
-   preset rules, and D1 gates `return_call_ref` under `tailCall`.
-5. **The `1.0.x` ladder** behind 1.0.0: T9 hardening, T10 bug hunt, T11 optimization (the contest:
-   CLI 3.4 ms on the 48 KB module, in-process cold start, the ~5% loop regression, the interpreter
-   ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap), T12 security. Lockstep ended at v33.
-
-**Decided and done 2026-10-24:** the `--env PATH` test is fixed (owner: "fix it"; it now overrides a
-key it creates, so it passes from any shell); the maintainer email is in `Cargo.toml` `authors`
-(owner: "allowed"); workspace letters **H22** (the privacy rule's path test, now in
-`design-decisions.md`, "PRIVACY") and the second **H23** (re-copy ★ rule 5.2: the copy is now
-EXACT, 28/28, diffed against the canonical text) are done on wasmrt's side.
-
-**To relay (wasmrt cannot write there):** binaryang — D1's `return_call_ref` feature and D2's
-missing dependency rules; wazmrt — `call_ref` with GC on and function-references off; wasmtk — the
-uncommitted `proposals/threads/` patch is theirs to commit; GitHub — old ids stay retrievable until
-its garbage collection (a full purge is a Support request). *(The workspace generalized rule 5.2 on
-2026-10-24, as asked.)*
+The current state and the open list live in [`open-work.md`](open-work.md) and nowhere else
+(workspace letter H2). The handoffs below are dated records of how the work stood then.
 
 ##### 🚦 HANDOFF — where to pick up (updated 2026-09-20, day 6)
 
@@ -604,7 +583,7 @@ and `rust-toolchain.toml` already pins the nightly it requires. `bun scripts/mir
 
 🎓 **Three things to carry into tomorrow, all paid for today:**
 1. **Re-measure the corpus before trusting a delta.** wasmtk syncs it; the file count is part of the
-   measurement (§1.7). Day 3 opened on numbers that were four files stale and a failure total that
+   measurement (§1.13). Day 3 opened on numbers that were four files stale and a failure total that
    matched the old one by coincidence.
 2. **Hand the output to wasmtime whenever anything format-level moves.** It found the
    `i32.trunc_sat_*` divergence in one command after the whole port had missed it (§3.8b).

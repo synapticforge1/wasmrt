@@ -707,7 +707,7 @@ fn read_block_type(r: &mut Reader) -> DecodeResult<BlockType> {
     if v >= 0 {
         // No range check: `read_var_s33` sign-extends bit 32, so a NON-NEGATIVE result is at most
         // `u32::MAX` by construction. The `v > u32::MAX` guard that used to sit here could not
-        // fire, and a branch that cannot fire is decoration that reads like a defence (§4.4).
+        // fire, and a branch that cannot fire is decoration that reads like a defence (§4.14).
         return Ok(BlockType::TypeIndex(v as u32));
     }
     if v == -64 {

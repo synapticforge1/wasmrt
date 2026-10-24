@@ -86,7 +86,7 @@ Checked off as each capability lands and passes its gate.
 | --- | --- | --- |
 | Assemble `.wat` → `.wasm` | ✅ | 0.7 |
 | Run `.wast` spec scripts | ✅ | 0.7 |
-| Pass the official WebAssembly spec testsuite | 🚧 99.4% — **zero failures and zero skips is the `1.0.0` gate** | 0.7 → 1.0.0 |
+| Pass the official WebAssembly spec testsuite | ✅ on the source tree: 64,603 / 0 / 0 over 288 files (2026-10-24), unreleased — **zero failures and zero skips is the `1.0.0` gate** | 0.7 → 1.0.0 |
 
 ### WASI & the CLI
 | Use case | Status | Lands in |

@@ -58,7 +58,7 @@ measurement quoted in place:
 | `interop.md` flag POSITION | ⚠⚠ DIVERGENT AND LIVE — a trailing `--dir` is donated to the guest | applied: `cannot preopen …`, rc 1; a trailing unknown flag is `unknown flag`, rc 1 |
 | `interop.md` F1 | `wasmrt m.wasm f` summarizes, rc 0 | names the missing export, rc **1** |
 | three trailing "🔧 Open" sections | open, "all unfixed" | resolved by later passes; marked 🗄 HISTORICAL at the heading, bullets left as written |
-| wasmtk's threads patch (roadmap #1) | uncommitted in their tree | committed by wasmtk (`a0025812753`) |
+| wasmtk's threads patch (roadmap #1) | uncommitted in their tree | committed by wasmtk. 🔁 *2026-10-24:* `a0025812753` no longer resolves in wasmtk (its history was rewritten) and its memory maps no such id; the commit that carries the patch today is `6a08cb05` (2026-09-19, "keep the threads tables+malformed patches, restore multiple-memories"), found by path, not by a map |
 
 🆕 **One of the eight left a real gap behind it**: the decision gate was closed by a pass whose
 property nothing pinned. `tests/imported_table_dispatches_to_the_owner.wast` now does — B holds a
@@ -269,7 +269,7 @@ corpus defects wasm-tools refuses on the same lines).
 
 ⚠️ One review finding was **not** a defect and was removed as decoration instead: `read_block_type`'s
 `v > u32::MAX` guard cannot fire, because `read_var_s33` sign-extends bit 32 and a non-negative
-result is at most `u32::MAX` by construction (§4.4).
+result is at most `u32::MAX` by construction (§4.14).
 
 
 ## ✅ CLOSED 2026-09-19 — a WASI SUBSYSTEM REVIEW found TEN, including a SANDBOX ESCAPE
@@ -454,8 +454,9 @@ wasm-tools before it is changed.
 annotated block giving the reason. `proposals/threads/` is **494 / 0 / 0**. Verified on wasmtime 48 as well: the three
 modules as `assert_invalid "memory size"` PASS there, and the removed `assert_malformed` form FAILS there. ⚠️ wasmtime's
 own runner stops earlier in this file, at line 67 — on reason WORDING ("…65536 pages (4GiB)" vs its "…0x10000
-65536-byte pages"), not a verdict; it never reaches the patch. ⚠️ **Uncommitted in the wasmtk tree on purpose**, and
-`update-testsuite.py` will overwrite it on the next sync — re-check then.
+65536-byte pages"), not a verdict; it never reaches the patch. ⚠️ **Uncommitted in the wasmtk tree on purpose** (🔁 *wasmtk
+committed it the same day, `6a08cb05`; checked 2026-10-24*), and `update-testsuite.py` will overwrite it on the next
+sync — re-check then.
 
 *The entry as it stood:*
 
@@ -645,6 +646,7 @@ only valid use is as an `assert_invalid` operand, which is exactly what stopped 
 and multi-table keep positive coverage in core's `*0`/`*1` variants (`address1.wast`, `align0.wast`,
 `data0.wast`, …), so nothing is lost.
 
+🔁 *2026-10-24: wasmtk's own session committed it on 2026-09-19 (`6a08cb05`), as intended.* At the time:
 🔒🔒 **The patch is UNCOMMITTED in the wasmtk tree, deliberately.** The owner authorised the *write* this
 time; that does not extend to committing in another project's repo, which is what launders authorship.
 Two files are modified and nothing else — `git status` in wasmtk shows exactly
@@ -779,7 +781,7 @@ times in one function) are refused, and that is correct. **Measured, not assumed
   malformed; `func.wast` asserts `duplicate local` three times.
 * ⚠️ **The `anyfunc` that IS correct is the JS WebAssembly API's `element: "anyfunc"`** — which
   `wasmtk/src/wast.ts:362` uses, and which V8 *requires* (node and deno reject `"funcref"` there).
-  Same word, different surface. Full write-up: `best-practices.md` §3.11.
+  Same word, different surface. Full write-up: `best-practices.md` §3.15.
 
 Nothing in `cargo test` or CI reads that corpus; 529/532 is a manual measurement of somebody else's
 files. Fixing them is a wasmtk change, not a wasmrt one.

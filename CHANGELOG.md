@@ -1,10 +1,14 @@
 # Changelog
 
 All notable changes to wasmrt are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and wasmrt uses a **progress** versioning
-scheme: `0.x` releases climb toward **1.0.0 = complete on wasmrt's own terms** — every in-scope proposal
-implemented, conformance at its achievable ceiling, the C ABI stable, and the size and speed numbers
-measured and defended. See [ROADMAP.md](ROADMAP.md) for the stage ladder and the live use-case matrix.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and wasmrt follows
+[SemVer 2.0.0](https://semver.org/spec/v2.0.0.html), with each bump checked by a gate (README,
+"Versioning"). **1.0.0 is the conformance clear-out**: the official spec testsuite with zero failures,
+zero skips and nothing unrun. See [ROADMAP.md](ROADMAP.md) for the stage ladder and the live use-case
+matrix.
+
+*Until 2026-08-19, 1.0.0 meant "complete on wasmrt's own terms", and the 0.x releases were a progress
+ladder toward it; the ladder was re-cut then, and SemVer adopted 2026-10-24.*
 
 *Through 0.9.0 the target was phrased as full parity with the [`wazmrt`](https://github.com/synapticforge1/wazmrt)
 reference oracle; that anchor was retired 2026-08-11 when the two runtimes became independent entrants
@@ -15,8 +19,10 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-_Next: **0.10.0 (T9)** — the correctness punch-list, tail calls, licensing and docs, size + performance
-measurement, and module pin verification. Then **0.11.0 (T10)** — a bug hunt and code-hygiene pass; **0.12.0 (T11)** — an optimization review of the shipped binaries and the C ABI; and **0.13.0 (T12)** — a security review of the penetration surfaces, with recommended mitigations._
+_Next: **1.0.0 (T13)** — the conformance clear-out, which the unreleased work below completes. Then
+**1.0.1** (T9, hardening), **1.0.2** (T10, a bug hunt and code-hygiene pass), **1.0.3** (T11, an
+optimization review of the shipped binaries and the C ABI) and **1.0.4** (T12, a security review),
+each version subject to the bump gate._
 
 ### Changed (2026-10-24)
 

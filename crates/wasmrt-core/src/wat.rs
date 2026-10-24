@@ -843,7 +843,7 @@ fn obsolete_type_keyword(atom: &str) -> Option<&'static str> {
         // Renamed by reference-types. `obsolete-keywords.wast` asserts the module is malformed.
         // ⚠️ Not to be confused with the **JS WebAssembly API**'s `element: "anyfunc"`, which is
         // that surface's required spelling — V8 rejects `"funcref"` there. Same word, different
-        // language; see `cmem/best-practices.md` §3.11.
+        // language; see `cmem/best-practices.md` §3.15.
         "anyfunc" => Some("funcref"),
         _ => None,
     }
