@@ -13,7 +13,7 @@ configurations, against binaryang v2.2.0's `wasm-validate` (exported with `git a
 
 ## 🔧 2026-10-24 — D2's TYPE RULE (binaryang § 44, wasm-tools' rule), adopted owner-directed
 
-binaryang's § 44 (drafted, not yet sent) states D2 `typeRules` = wasm-tools 1.262's rule (owner:
+binaryang's § 44 (sent by the owner 2026-10-24, binaryang's record) states D2 `typeRules` = wasm-tools 1.262's rule (owner:
 "wasm-tools' rule"); the owner directed wasmrt to adopt it before the binaryang release ("do the fix
 first"). Probe: 20 value types × all 16 on/off subsets of reference-types / function-references /
 gc / exceptions, `wasmrt --features` against `wasm-tools validate --features=-all,…`. **52 of 320

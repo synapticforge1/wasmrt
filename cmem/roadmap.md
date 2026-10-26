@@ -303,7 +303,8 @@ repo's `cmem/`.** Ordered by size and by who has to act:
     Versioning section; the "patch stays single-digit" cadence rule is retired.
   * The workspace ★ rules (28) are in `best-practices.md` under a dated stamp. The first copy had to
     generalize one phrase in 5.2, which named the development drive; the workspace changed the
-    canonical text the same day (its letter H23, 2026-10-24), and the re-copy is EXACT.
+    canonical text the same day (its letter H24 — filed as a second "H23", renumbered by the
+    workspace 2026-10-24), and the re-copy is EXACT.
   * NOT done under H6: the **memory layout** part (pointer file ≤ 5 KB, INDEX one line per file),
     which is H2's work and stays open there; and rule 3's previous-tag test run (`releasing.md`
     says why).
@@ -408,7 +409,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
     nothing extra.
   * **I6:** one vocabulary gap (`sat-float-to-int`) and four D2 flags wasmrt lacks, all classified.
   * **I7:** source unchanged since 2026-09-20, but the workspace harness runs a stale build.
-  * **I8: the runtimes lose.** They emit two `name` sections where wasm-tools and binaryang emit one.
+  * **I8: the runtimes lost** (as measured that day): two `name` sections where wasm-tools and
+    binaryang emit one. ✅ Fixed 2026-10-23 with the H13 batch (`known-issues.md`); re-measured
+    2026-10-26: the unit test's bytes = `wasm-tools parse` 1.262.0 output, byte for byte.
   * **I3/I4:** the sweeps were run against wazmrt (gate 3, fuzz 12 + 3) and binaryang (gate 3,
     fuzz 2). Observations handed over, not diagnosed in their trees.
   * 🔴 Fixed on the way: **six GC array ops gated by no flag** (latent).

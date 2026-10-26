@@ -222,4 +222,5 @@ preset and dependency rules follow D2. Two findings follow from reading the defi
    const-expr depth > 8 and the element flags are NOT re-measured since the 2026-09-21 build.
 3. **To the workspace:** I8 measured (the runtimes lose); the harness binary path; I5/I6 for wasmrt as
    above. ~~Canonical rule 5.2 names the development drive by its letter~~ ✅ the workspace changed
-   it on 2026-10-24 (its letter H23), and wasmrt's copy is exact again.
+   it on 2026-10-24 (its letter H24, first filed as a second "H23"), and wasmrt's copy is exact
+   again.

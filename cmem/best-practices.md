@@ -1901,12 +1901,12 @@ messages, so the misreading was in the code, the doc comment and the tests at on
 scorer is too weak, fix the scorer**; a workaround applied to the cases you wrote leaves every
 other case scored by the rule you already know is wrong. [wasmrt]
 
-## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letters H6, H23)
+## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letters H6, H24)
 
 *Copied from `../cmem/best-practices.md`, the canonical text: its 28 convergent (★) rules, under their
 section headings, verbatim, so a script can diff this block against the workspace. A change is
-RE-COPIED from the workspace, never edited here. **Re-copied the same day (workspace letter H23,
-2026-10-24):** the first copy had to generalize one phrase in 5.2, which named the development drive
+RE-COPIED from the workspace, never edited here. **Re-copied the same day (workspace letter H24 —
+filed as a second "H23" and renumbered by the workspace — 2026-10-24):** the first copy had to generalize one phrase in 5.2, which named the development drive
 by its letter; the workspace changed the canonical text to name the FILESYSTEM instead, so this copy
 is now exact. wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
 

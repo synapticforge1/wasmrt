@@ -24,7 +24,8 @@ stays in the topic file named.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 (steps 1 and 2), H13, H15, H16, H18, H19,
-  H20, H21, H22, H23 (both).
+  H20, H21, H22, H23 (carry-forward), H24 (the rule 5.2 re-copy, cited as "H23" until the workspace
+  renumbered it). H25: nothing addressed to wasmrt.
 
 ## Open, in the order they unblock each other
 

@@ -40,7 +40,7 @@ conformance clear-out); next are the review stages T9–T12, each numbered by th
 - 🔒 **Nothing is pushed, published or tagged unless the owner says so.**
 - 🔒 **PRIVACY — this repo is public.** No secrets, no machine-specific detail (a user profile, a
   project-tree location, even a bare drive letter saying where something lives); one maintainer email,
-  in `Cargo.toml` `authors` only; machine facts in the gitignored `cmem/local/`. Scan the staged diff
+  in `Cargo.toml` `authors` and as the commit author/committer only (owner, 2026-10-26); machine facts in the gitignored `cmem/local/`. Scan the staged diff
   AND the message before every commit.
 - 🔒 **Tooling:** committed scripts are TypeScript run by **Bun** (`node:` builtins only; no Deno APIs,
   no Python); a one-time script may be shell and is deleted after use; **never a heredoc** — write the
