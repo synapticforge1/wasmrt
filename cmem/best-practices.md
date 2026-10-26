@@ -1908,7 +1908,9 @@ section headings, verbatim, so a script can diff this block against the workspac
 RE-COPIED from the workspace, never edited here. **Re-copied the same day (workspace letter H24 —
 filed as a second "H23" and renumbered by the workspace — 2026-10-24):** the first copy had to generalize one phrase in 5.2, which named the development drive
 by its letter; the workspace changed the canonical text to name the FILESYSTEM instead, so this copy
-is now exact. wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
+is now exact. **Text-compared 2026-10-26:** the 28 bullets by number and full normalized text
+against the workspace, 0 differences (one-time script; inverted: a one-word change to 6.1 is
+reported). wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
 
 <!-- BEGIN workspace-star-block 2026-10-24 -->
 #### §1 Evidence and measurement

@@ -54,5 +54,11 @@ stays in the topic file named.
   `sharedheap_bundle/main_wasic.wat`): wasm-tools refuses the source, and so does wasmrt. A
   generator defect, found by `scripts/wat-corpus.ts` on 2026-10-24 (the files appear and disappear
   between runs, so their builds are live).
+* **The workspace (relayed 2026-10-26, owner-directed, as "Notes from wasmrt" in its
+  `handoffs.md`):** its wasmrt letter rows, drift rows R1–R9 and `open-work.md` lines (539/603,
+  "mirror v11–v31", lockstep, the compatibility gate) are behind; each comes with a check. Waiting
+  on the workspace to verify. **Canonical ★ 6.1 quotes binaryang `b8fafaa3f`**, which is pre-purge
+  (rsxtk found it; `8d9ba0cb9` on binaryang's `origin/main`). wasmrt's copy is exact, so the id is
+  re-copied once the workspace fixes it, never edited here.
 * **GitHub:** old commit ids from both rewrites stay retrievable until its garbage collection; a full
   purge is a Support request (owner).

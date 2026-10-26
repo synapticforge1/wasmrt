@@ -216,11 +216,14 @@ preset and dependency rules follow D2. Two findings follow from reading the defi
    a refusal in both runtimes. 🆕 **D2 needs dependency and preset rules** before the v33 migration
    can settle `call_ref`. Also its validator's three accepted gate rows and two fuzz accept-invalid
    cases, as observations to triage.
-2. **To wazmrt:** ~~the table64 gate~~ ✅ fixed in wazmrt 2.0.0 (v33 re-measured, and wasmrt
+2. ✅ *Superseded 2026-10-24 — all closed, measured on wazmrt `bd97ae2` (`call_ref`: v37; const-expr
+   depth and element flags: `b919ef2`); see `open-work.md` § To relay.* **To wazmrt:** ~~the table64 gate~~ ✅ fixed in wazmrt 2.0.0 (v33 re-measured, and wasmrt
    confirmed: all three refuse); ~~the table-initializer gate~~ ✅ fixed (v33); `call_ref` with GC on
    and function-references off is still admitted (measured on 2.0.0; v33 calls it a D2 question);
    const-expr depth > 8 and the element flags are NOT re-measured since the 2026-09-21 build.
-3. **To the workspace:** I8 measured (the runtimes lose); the harness binary path; I5/I6 for wasmrt as
+3. ✅ *Relayed 2026-10-26 (owner-directed) in the workspace's `handoffs.md`, "Notes from wasmrt":
+   I8 has been fixed since 2026-10-23 and was re-measured on wasm-tools 1.262; the harness must
+   rebuild wasmrt before it measures.* **To the workspace:** I8 measured (the runtimes lose); the harness binary path; I5/I6 for wasmrt as
    above. ~~Canonical rule 5.2 names the development drive by its letter~~ ✅ the workspace changed
    it on 2026-10-24 (its letter H24, first filed as a second "H23"), and wasmrt's copy is exact
    again.
