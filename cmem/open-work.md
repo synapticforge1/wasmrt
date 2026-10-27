@@ -16,8 +16,12 @@ stays in the topic file named.
 * **binaryang pinned at v2.2.0** (`6e1923397def`; D2 2.2.0 with `typeRules` / `encodingRules`).
   **wasmrt = binaryang 2.2.0 on all 6,860 judgements** (wazmrt's `d2-matrix.ts`: wasmrt's S1 corpus
   × D2's 49 configurations), and `definitions_check` holds both rule lists in `cargo test`.
-* Contract mirror **v40**, byte-identical to wazmrt's committed copy (`bd97ae2`); the type rule
-  AGREED (v39), the table-initializer correction (v40). **Verified by running both** (wazmrt built
+* Contract mirror **v41** (2026-10-27, ledger C7), byte-identical to wazmrt's committed copy
+  (`0edbc5c`, SHA-256 `e951b402…`). v41 is record-only: a `(@custom "name" …)` is the only `name`
+  section on both runtimes. **Verified by running both** on 2026-10-27 (wazmrt 5.0.0 built from a
+  `git archive` of `0edbc5c`, wasmrt `2ee6628` release, wasm-tools 1.262): wazmrt's two `h8-fixtures`
+  and a `"names"` control (kept, plus a generated `name`) assemble to the same bytes on all three.
+  Before it: the type rule AGREED (v39), the table-initializer correction (v40). **Verified by running both** (wazmrt built
   from a `git archive` of `bd97ae2`, since its working tree was mid-edit): wazmrt ⇄ wasmrt **0 of
   2,401** over wazmrt's corpus and **0 of 6,860** over wasmrt's; wazmrt ⇄ binaryang 2.2.0 0 of 6,860
   over wasmrt's. Release lockstep ended at v33.
@@ -25,7 +29,11 @@ stays in the topic file named.
   up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 (steps 1 and 2), H13, H15, H16, H18, H19,
   H20, H21, H22, H23 (carry-forward), H24 (the rule 5.2 re-copy, cited as "H23" until the workspace
-  renumbered it). H25: nothing addressed to wasmrt.
+  renumbered it). H25: nothing addressed to wasmrt. **Answered 2026-10-27** (the workspace verifies
+  and closes): H27 + C8 (★ block re-copied under the canonical stamp, 28 = 28, 0 differences; X18
+  prose in `docs/port/06-build-docs-licensing.md`), H28 (recorded in `design-decisions.md` PRIVACY;
+  wasmrt keeps no `cmem/` contact note), C7 (v41 mirrored), the binary path scan (`git grep -a`:
+  clean), and the pull line (`CLAUDE.md` and this INDEX now read `workspace-correspondence.md` first).
 
 ## Open, in the order they unblock each other
 
@@ -57,8 +65,12 @@ stays in the topic file named.
 * **The workspace (relayed 2026-10-26, owner-directed, as "Notes from wasmrt" in its
   `handoffs.md`):** its wasmrt letter rows, drift rows R1–R9 and `open-work.md` lines (539/603,
   "mirror v11–v31", lockstep, the compatibility gate) are behind; each comes with a check. Waiting
-  on the workspace to verify. **Canonical ★ 6.1 quotes binaryang `b8fafaa3f`**, which is pre-purge
-  (rsxtk found it; `8d9ba0cb9` on binaryang's `origin/main`). wasmrt's copy is exact, so the id is
-  re-copied once the workspace fixes it, never edited here.
+  on the workspace to verify. *(The ★ 6.1 pre-purge id: fixed canonically (C8) and re-copied here
+  2026-10-27.)*
+* **wazmrt (an observation, not a contract row):** building `0edbc5c` with `-Doptimize=ReleaseSmall`
+  from a scratch `git archive` on 2026-10-27 failed wazmrt's own size gate: `wazmrt.lib` 1,075,426 vs
+  ceiling 1,075,310 (+116); the `.exe` and `.dll` exactly at their ceilings. Cause UNMEASURED (a guess
+  to check: a static library records object paths, and the scratch path was long). Relay through
+  the owner.
 * **GitHub:** old commit ids from both rewrites stay retrievable until its garbage collection; a full
   purge is a Support request (owner).

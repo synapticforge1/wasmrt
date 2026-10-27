@@ -1,6 +1,6 @@
 # wazmrt build + docs + licensing — Port Map
 
-Ground truth: live repo `…/wasmExamples/wazmrt`; target `…/wasmExamples/wasmrt` (empty: LICENSE+README only).
+Ground truth: live repo `../wazmrt` (a sibling of this repo); target this repo (then empty: LICENSE+README only).
 Rename wazmrt→wasmrt throughout; keep "Jon Marcum", year 2026. Pipeline: decode→validate→instantiate→execute + text front-end + WASI.
 
 ## 1. BUILD GRAPH (build.zig) — dual-target contract

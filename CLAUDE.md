@@ -1,8 +1,9 @@
 # wasmrt
 
-> **At session start, read `../cmem/handoffs.md` for letters addressed to this repo.** The workspace
-> session reviews across the sibling repos and reports there; nothing is ever written into this repo
-> from outside (owner, 2026-09-20).
+> **At session start, and before each new work item, read `../cmem/workspace-correspondence.md`**
+> for every open row addressed to wasmrt or touching what you will change, then the letter it points
+> to in `../cmem/handoffs.md` (🔒 owner, 2026-10-26). Answer in the row's "full text" cell; only the
+> row's creator closes it. Nothing is ever written into this repo from outside (owner, 2026-09-20).
 
 A fast, small, idiomatic-**Rust** WebAssembly runtime, built to replace wasmtime under the owner's
 `universalWasmLoader-*` projects. It began as a port of the Zig runtime `wazmrt`; 🔒 **since

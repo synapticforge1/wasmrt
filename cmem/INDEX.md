@@ -1,8 +1,9 @@
 # cmem — wasmrt's project memory
 
-> **At session start, read `../cmem/handoffs.md` for letters addressed to this repo.** The workspace
-> session reviews across the sibling repos and reports there; nothing is written into this repo from
-> outside (owner, 2026-09-20).
+> **At session start, and before each new work item, read `../cmem/workspace-correspondence.md`**
+> for every open row addressed to wasmrt or touching what you will change, then the letter it points
+> to in `../cmem/handoffs.md` (🔒 owner, 2026-10-26). Answer in the row's "full text" cell; only the
+> row's creator closes it. Nothing is written into this repo from outside (owner, 2026-09-20).
 
 `cmem/` is the single home for ALL project memory: committed, portable, one topic file per domain,
 and this INDEX one line per file (workspace `../cmem/memory-conventions.md`). **The current state and
@@ -81,7 +82,7 @@ committed BEFORE the publish handoff.
 | [architecture.md](architecture.md) | the crates, the dual native/`wasm32` target, how a module flows through the engine |
 | [design-decisions.md](design-decisions.md) | 🔒 owner rules (PROVE DO NOT ASSUME, TOOLING, PRIVACY, oracle retired) and invariants not to revert |
 | [best-practices.md](best-practices.md) | 🎓 the lessons this port paid for, each with its defect; the workspace ★ rules copied at the end |
-| [interop.md](interop.md) | 🤝 the wasmrt ⇄ wazmrt swappability contract, mirrored verbatim (v40 on 2026-10-26; the version lives in `open-work.md`) |
+| [interop.md](interop.md) | 🤝 the wasmrt ⇄ wazmrt swappability contract, mirrored verbatim (v41 on 2026-10-27; the version lives in `open-work.md`) |
 | [shared-definitions.md](shared-definitions.md) | binaryang's D1/D2/D3, vendored and GENERATED into `definitions.rs` and the shipped `tables.rs`; what the cross-check asserts; the type rule that is ahead of the pin |
 | [testing.md](testing.md) | every gate, how to run it, what it can and cannot see; dated counts |
 | [known-issues.md](known-issues.md) | the defect log, newest first: cause, fix, the test that pins it |

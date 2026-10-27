@@ -6,3 +6,6 @@
 
 # Machine-local memory: absolute paths and other private facts (workspace rule, Records).
 /cmem/local/
+
+# Tool settings record machine paths and are never tracked (workspace rule, Records).
+/.claude/settings.local.json

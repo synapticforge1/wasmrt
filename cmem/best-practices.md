@@ -1901,18 +1901,24 @@ messages, so the misreading was in the code, the doc comment and the tests at on
 scorer is too weak, fix the scorer**; a workaround applied to the cases you wrote leaves every
 other case scored by the rule you already know is wrong. [wasmrt]
 
-## ★ THE WORKSPACE RULES — copied from workspace cmem on 2026-10-24 (letters H6, H24)
+## ★ THE WORKSPACE RULES — re-copied 2026-10-27 (letters H6, H24, H27; ledger C8)
 
-*Copied from `../cmem/best-practices.md`, the canonical text: its 28 convergent (★) rules, under their
+Copied from synapticforge1/cmem/best-practices.md on 2026-10-27
+
+*The canonical text's 28 convergent (★) rules, under their
 section headings, verbatim, so a script can diff this block against the workspace. A change is
 RE-COPIED from the workspace, never edited here. **Re-copied the same day (workspace letter H24 —
 filed as a second "H23" and renumbered by the workspace — 2026-10-24):** the first copy had to generalize one phrase in 5.2, which named the development drive
 by its letter; the workspace changed the canonical text to name the FILESYSTEM instead, so this copy
 is now exact. **Text-compared 2026-10-26:** the 28 bullets by number and full normalized text
 against the workspace, 0 differences (one-time script; inverted: a one-word change to 6.1 is
-reported). wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
+reported). **Re-copied 2026-10-27** (H27: the stamp above is the canonical wording, the folder as it
+is now; C8: the workspace corrected 6.1's pre-purge binaryang id `b8fafaa3f` to `8d9ba0cb9`):
+regenerated from the canonical file by a one-time Bun script, text check 28 = 28, 0 differences;
+inverted: before the re-copy the same check reported `DIFF 6.1` and nothing else.
+wasmrt's own numbered sections above keep their numbers; these keep the workspace's.*
 
-<!-- BEGIN workspace-star-block 2026-10-24 -->
+<!-- BEGIN workspace-star-block 2026-10-27 -->
 #### §1 Evidence and measurement
 
 - **1.1 ★ An exit code is not evidence; diff the OUTPUT counts, per file.** Exit-0 runs silently
@@ -2002,7 +2008,7 @@ reported). wasmrt's own numbered sections above keep their numbers; these keep t
 
 - **6.1 ★ A written result is a CLAIM: a commit message, a status line, a doc of a safety guard, a
   contract row verified by reading. Compare it to the artifact; put a pin where the tool enforces
-  it.** `b8fafaa3f` said "pin to 132" and left 116; prose has no failure mode. [binaryang + wabt-ts + wasmrt]
+  it.** `8d9ba0cb9` (was `b8fafaa3f` before binaryang's 2026-10-23 purge; corrected here 2026-10-26, ledger C8) said "pin to 132" and left 116; prose has no failure mode. [binaryang + wabt-ts + wasmrt]
 - **6.2 ★ Write down the thing you only said out loud; write the negatives (what was varied, what
   held fixed), the calibration, and what you did NOT check; distinguish clean / measured /
   UNMEASURED.** Knowledge that exists only in a conversation is operationally identical to

@@ -210,13 +210,17 @@ is public. Only the gitignored `cmem/local/` is private.*
 **The rest of the same rule:**
 
 * **No secrets** (tokens, keys, passwords). A leaked secret is rotated, not just deleted.
-* **Email:** one maintainer contact email in the manifest field the package registry reads, and
-  nowhere else: `Cargo.toml` `[workspace.package] authors` (owner, 2026-10-24: "allowed"). The
-  commit author/committer email is the owner's own address, by owner exception (2026-10-23,
-  re-confirmed 2026-10-24); the workspace default is the noreply address.
+* **Email — the one exception is the maintainer contact address** (🔒 owner, 2026-10-26, workspace
+  letter H28; was a wasmrt-only waiver 2026-10-23 / 24, now the workspace rule). It may appear in
+  exactly three places: the manifest field the registry reads (`Cargo.toml` `[workspace.package]
+  authors`), the git commit author/committer address (noreply is fine too), and ONE committed
+  `cmem/` note that names the maintainer contact. wasmrt uses the first two and keeps no such note;
+  nowhere else, and never repeated through `cmem/`.
 * **Machine facts** (drives, filesystems, paths, installed tools) go in `cmem/local/environment.md`.
 * **Scan before every commit, and before every push of memory**: the staged diff AND the message,
-  for drive letters used as locations, user names, tool or agent names, emails and paths. ⚠️ When
+  for drive letters used as locations, user names, tool or agent names, emails and paths. **Scan
+  binaries too** (workspace, 2026-10-26: committed `.wasm` in two siblings carried drive paths in
+  DWARF through every `git grep -I` scan): run the pattern with `git grep -a` as well. ⚠️ When
   you edit a long existing line, re-read all of it: re-committing old text is adding it (how the
   2026-10-24 finding happened).
 * **History counts.** A detail already pushed is removed from history too, by an owner-approved

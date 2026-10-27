@@ -261,6 +261,9 @@ repo's `cmem/`.** Ordered by size and by who has to act:
 * 🔒 **Re-confirmed 2026-10-24** (owner: *"Yes I approve my email in the maintainer's/authors
   field"*), asked because the workspace rule names only the registry manifest field: the commit
   author/committer fields keep it, and the 2026-10-24 rewrite left every identity unchanged.
+* *Superseded 2026-10-26 (owner, workspace letter H28): the wasmrt-only exception is now the
+  workspace rule for every repo, and the "Owner exception (2026-10-23)" passage cited above is gone
+  from `../cmem/working-rules.md` § Records. Current text: `design-decisions.md` PRIVACY.*
 
 **C. Memory conformance (medium; repo-internal)**
 * ✅ **H2 — memory conformance: DONE 2026-10-24** (owner: "proceed with the rest of H2"). Policy:
