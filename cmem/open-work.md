@@ -4,15 +4,24 @@
 `memory-conventions.md`). Each item points at its record. Completed work leaves this file; its record
 stays in the topic file named.
 
-## 🚦 State — measured 2026-10-24
+## 🚦 State — measured 2026-11-09
 
-* Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed).
-* **606 workspace tests**, 0 failed, 1 ignored (2026-10-24, after the binaryang 2.2.0 re-pin);
-  clippy clean; `surface.ts --check`, eol, definitions and the C-ABI gate green.
-* **2.0.0 RELEASED 2026-10-24**: tag `v2.0.0` = release commit `1715139`; `wasmrt-core`,
-  `wasmrt-capi` and `wasmrt` at 2.0.0 on crates.io (verified through its API);
-  `surface/released.txt` records it (public surface identical to 1.0.0's). The bump floor since:
-  **PATCH**. *(1.0.0: tag `v1.0.0` = `9871fd4`.)*
+* Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed,
+  2026-11-09).
+* **606 workspace tests**, 0 failed, 1 ignored (2026-11-09, rustc nightly `708c94ef0` 2026-11-03);
+  clippy clean (`-D warnings`); `surface.ts --check`, eol, definitions and the C-ABI gate green
+  (the C-ABI gate needs `CC=gcc` on this host). `bun scripts/check-github-release.ts` 17/17.
+* **2.0.1 (2026-11-09; no code changes since 2.0.0)**: the GitHub Release page is made through the REST API
+  (H30). The bump gate's floor since 2.0.0 was PATCH (surface 0, semver patch ×2, behaviour 0 / 0).
+  The tag, CI run, page and crates.io publish are recorded in `releasing.md` § Status.
+  *(2.0.0: tag `v2.0.0` = `1715139`; 1.0.0: tag `v1.0.0` = `9871fd4`.)*
+* ⚠️ **The toolchain floats** (`rust-toolchain.toml` = `nightly`), so the binary sizes move with
+  nothing changed in the source. **Proven 2026-11-09** by building the same tree in the same target
+  directory on both nightlies: `19833af72` (2026-10-20) gives 2.0.0's CLI 846,848 B and DLL
+  534,528 B exactly; `708c94ef0` (2026-11-03) gives 845,824 B and 535,552 B. Speed over six
+  alternating rounds: the new nightly is about 2–4% slower at the median, with the ranges overlapping.
+  Both run about 15% slower than on 2026-10-24 (machine state). Whether to pin a dated nightly is a
+  question for T11, which decides the contest on size and speed.
 * **binaryang pinned at v2.2.0** (`6e1923397def`; D2 2.2.0 with `typeRules` / `encodingRules`).
   **wasmrt = binaryang 2.2.0 on all 6,860 judgements** (wazmrt's `d2-matrix.ts`: wasmrt's S1 corpus
   × D2's 49 configurations), and `definitions_check` holds both rule lists in `cargo test`.

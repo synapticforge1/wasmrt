@@ -7,9 +7,9 @@ Since 2026-08-11 the two are **independent runtimes** that stay command-line com
 replace the other. wasmrt's correctness is anchored on the official WebAssembly spec testsuite, on
 wasmtime's observable behaviour, and on a corpus of real WASI programs.
 
-> **Status: `2.0.0`.** `1.0.0` was the conformance clear-out; `2.0.0` corrects one validation rule (an
+> **Status: `2.0.1`.** `1.0.0` was the conformance clear-out; `2.0.0` corrects one validation rule (an
 > `exact` reference type needs reference-types) and holds wasmrt to binaryang's shared feature
-> rules. wasmrt can **assemble**, **decode**, **type-check**, and **run**
+> rules; `2.0.1` changes only how the release page is made (no code changes). wasmrt can **assemble**, **decode**, **type-check**, and **run**
 > WebAssembly — `wasmrt run fac.wasm fac 10` → `3628800`, `wasmrt wat mod.wat -o mod.wasm`. Execution
 > covers integer + floating-point compute, linear memory (incl. **multi-memory** and **memory64**),
 > tables / `call_indirect` / reference types, **WasmGC**, **SIMD** (the full `v128` set, incl. relaxed),

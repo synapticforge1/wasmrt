@@ -293,8 +293,19 @@ bump + public trackers + **full `cmem/` sync** + release commit (checklist steps
 hands over the publish commands. Established rhythm since v0.1.0; the pre-publish doc-sync gate added
 2026-07-31 (v0.6.4) after earlier releases shipped with docs lagging a turn behind.
 
-## Status (2026-10-24)
+## Status (2026-11-09)
 
+- **v2.0.1 (2026-11-09), owner: "update the project memory files, commit, push, release"**:
+  no code changes since 2.0.0. It carries the H30 release-page change (§ Tooling) and the
+  records. Checklist, measured 2026-11-09 on rustc nightly `708c94ef0`: 606 workspace tests, 0
+  failed, 1 ignored; clippy `-D warnings` clean; surface check, eol, definitions and C-ABI gate
+  (`CC=gcc`) green; S1 in `cargo test`; the floor against `v2.0.0` 0 / 0; S2 64,603 / 0 / 0, 0
+  regressed. S3 (wasmtk's corpus) was not run: the source is identical. Size and speed: see the
+  CHANGELOG [2.0.1] and `open-work.md` (the floating nightly, proven by building on both). Both
+  binaries import only Windows-provided DLLs, and the CLI runs on a system-only `PATH`.
+  `bump.ts patch`: 2.0.0 → 2.0.1. **Steps 7–8 were done by the agent this time, on the owner's
+  "release"**: the crates.io login was already on this machine. Tag, CI run, page `author.login`
+  and crates.io read-back: the lines below.
 - **✅ v2.0.0 PUBLISHED (2026-10-24, release commit `1715139`, tag `v2.0.0`)** — all three crates at
   2.0.0 on crates.io (checked through its API); `surface/released.txt` re-recorded from the tag (step
   9, its own commit; only its `released-as` line changed). The floor since is PATCH. **Next: the

@@ -23,6 +23,34 @@ _Next: the review stages, in order: T9 (hardening), T10 (a bug hunt and code-hyg
 optimization review of the shipped binaries and the C ABI) and T12 (a security review), each
 numbered by the bump gate._
 
+## [2.0.1] — 2026-11-09 — the release page through GitHub's REST API
+
+**No code changes.** The three crates have the same source as 2.0.0, and the public Rust API,
+`wasmrt.h` and the command line are unchanged; this release carries the release-workflow change and
+the project records. The bump gate measured the floor since 2.0.0 as patch: 0 surface changes,
+cargo-semver-checks patch on both libraries, and 0 modules changing verdict in either direction.
+
+**Size and speed.** The source is identical, so any difference comes from the compiler. The repository
+follows the current Rust nightly (`rust-toolchain.toml`), and that has moved since 2.0.0. Built the same
+way in the same directory, the 2026-10-20 nightly gives exactly 2.0.0's sizes (CLI 846,848 B, C ABI DLL
+534,528 B). The 2026-11-03 nightly gives a CLI of 845,824 B (1,024 B smaller) and a DLL of 535,552 B
+(1,024 B larger). Speed, in six rounds that alternated between the two compilers on one machine: cold
+start on the 48 KB module 3.58–4.09 ms with the new nightly against 3.36–3.70 ms with the old one, and
+the steady loop about 2–4% slower at the median. Every range overlaps. Both compilers measured about
+15% slower than on 2026-10-24, so the machine's state that day accounts for more than the compiler
+does.
+
+### Changed
+
+- **The GitHub Release page is made through GitHub's REST API instead of the GitHub CLI.**
+  `scripts/github-release.ts` makes the same page as before: the CHANGELOG heading as the title, and
+  that section as the body. Before it writes anything, it checks that the CHANGELOG has a non-empty
+  section for the version and that the tag exists on GitHub at the commit being released. It stops
+  without writing if the page already exists, and after creating one it reads the page back and checks
+  the tag again. Only the job that makes the page can write to the repository, and its checkout keeps no
+  credential. `scripts/check-github-release.ts` tests the script against a mock API (17 checks), and
+  the release workflow runs it before that job.
+
 ## [2.0.0] — 2026-10-24 — a validation correction, and binaryang D2 2.2.0
 
 **One correction, and it is why this is a major release:** with reference-types disabled, wasmrt
