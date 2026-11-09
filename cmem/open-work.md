@@ -34,6 +34,11 @@ stays in the topic file named.
   prose in `docs/port/06-build-docs-licensing.md`), H28 (recorded in `design-decisions.md` PRIVACY;
   wasmrt keeps no `cmem/` contact note), C7 (v41 mirrored), the binary path scan (`git grep -a`:
   clean), and the pull line (`CLAUDE.md` and this INDEX now read `workspace-correspondence.md` first).
+* **Answered 2026-11-09** (the workspace verifies and closes): **H30**, the release page now made
+  through the REST API (`scripts/github-release.ts`, self-test 17/17, six mutants caught;
+  `releasing.md` § Tooling). ⚠️ The first page's `author.login` is UNMEASURED until the next tag.
+  **H31** and **H32** recorded (`design-decisions.md` § Tooling amendments 2026-11-08 / 11-09);
+  nothing to move for H31 (1.4.4 already). **C8** (wasmrt is its creator): closed in the ledger.
 
 ## Open, in the order they unblock each other
 

@@ -2,9 +2,10 @@ name: release
 
 # On a version tag: first the COMPATIBILITY GATE (the tag's version must be the
 # manifest's and must clear the SemVer floor since the last release, letter H6),
-# then a GitHub Release from the CHANGELOG. Publishing to crates.io stays manual
-# (the owner runs `cargo publish`, AFTER this gate is green); see cmem/releasing.md.
-# No secrets: the built-in GITHUB_TOKEN is enough.
+# then a GitHub Release from the CHANGELOG, made by `scripts/github-release.ts` through the REST
+# API (no `gh`, letter H30). Publishing to crates.io stays manual (the owner runs
+# `cargo publish`, AFTER this gate is green); see cmem/releasing.md.
+# No secrets: the built-in GITHUB_TOKEN is enough; only the last job may write.
 
 on:
   push:
@@ -12,7 +13,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   compatibility-gate:
@@ -41,48 +42,34 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: bun scripts/bump.ts --verify-tag "$TAG"
 
+      - name: The release-page script passes its self-test (mock API, before any write token)
+        run: bun scripts/check-github-release.ts
+
+      - name: The release page would be made from this tag (read-only dry run, real API)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/github-release.ts --dry-run
+
+  # The page through GitHub's REST API, never `gh` (workspace letters H30, H32): the tag must
+  # exist and peel to this run's commit; an existing page means done; POST, then read it back.
+  # Title and body come from the CHANGELOG, as before. The checkout keeps no credential.
   github-release:
     needs: compatibility-gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Check out the tagged commit
+      - name: Check out the tagged commit (no credential left in .git/config)
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Extract this version's CHANGELOG section
-        id: notes
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          VERSION="${TAG#v}"
-          PRE="## [${VERSION}]"
-
-          # Body: everything under the "## [x.y.z]" heading up to the next section.
-          # Literal-string matching (index==1), so brackets/dots need no escaping.
-          awk -v pre="$PRE" '
-            index($0, pre) == 1 { f = 1; next }
-            f && index($0, "## [") == 1 { exit }
-            f { print }
-          ' CHANGELOG.md > notes.md
-
-          if [ ! -s notes.md ]; then
-            echo "::error::No CHANGELOG section found for ${PRE} — refusing to publish an empty release."
-            exit 1
-          fi
-
-          # Title = the heading line without the leading "## " (quote the pattern so
-          # the "##" is not parsed as bash's longest-prefix operator).
-          HEADING="$(awk -v pre="$PRE" 'index($0, pre) == 1 { print; exit }' CHANGELOG.md)"
-          echo "title=${HEADING#'## '}" >> "$GITHUB_OUTPUT"
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
 
       - name: Create the GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          TITLE: ${{ steps.notes.outputs.title }}
-        run: |
-          set -euo pipefail
-          gh release create "$TAG" \
-            --title "$TITLE" \
-            --notes-file notes.md \
-            --verify-tag
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/github-release.ts

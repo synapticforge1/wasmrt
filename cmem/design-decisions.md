@@ -50,7 +50,9 @@ recorded here 2026-10-23.**
   and record the comparison in the commit. The 2026-09-19 gate ports below already met this bar.
 * **Conformance, measured 2026-10-23:** `git ls-files` shows no `.sh`, `.ps1`, `.bat`, `.nu`,
   `.mjs` or `.py`. The only shell is the `run:` blocks in `.github/workflows/release.yml`, which the
-  workspace rule accepts (a `run:` block only launches commands).
+  workspace rule accepts (a `run:` block only launches commands). *(Since 2026-11-09 each one only
+  launches `rustup`, `cargo install` or `bun`; the `awk` notes extraction moved into
+  `scripts/github-release.ts`.)*
 * 🔒 **A ONE-TIME script may be a shell script — ADOPTED here (owner, 2026-10-23: "adopt the
   looser one").** A script that is used once and then deleted may be PowerShell, bash, Bun or Rust,
   whichever fits. Three things still hold:
@@ -64,6 +66,24 @@ recorded here 2026-10-23.**
   damage below came from scripted edits that silently applied nothing, a one-time **edit** script
   must still assert that each match applied exactly once and read back what it changed (workspace
   Tooling rule 4). Language is not the safeguard; the assertion is.
+
+🆕 **WORKSPACE AMENDMENTS, 2026-11-08 / 11-09 (letters H30, H31, H32; `../cmem/working-rules.md`
+§ Tooling rules 9 and 10), recorded here 2026-11-09.**
+* 🔒 **No `gh`, in CI too (owner, 2026-11-08: "just checking the repo is easier"; "yes change
+  those").** Read what GitHub holds with `git ls-remote origin`, `git fetch`, or crates.io's public
+  API. A task only GitHub's web UI can do is an OWNER item, never "blocked on gh". A workflow calls
+  GitHub's REST API from a Bun step with the job's own `GITHUB_TOKEN`. **Done here 2026-11-09:**
+  `release.yml`'s one call (`gh release create`) became `scripts/github-release.ts`; see
+  `releasing.md` § Tooling.
+* 🔒 **Every Bun-version notation is the latest installed Bun, always (owner, 2026-11-09: "update
+  any notations on bun version to the latest installed version always").** Check `bun --version`
+  before writing one; when the owner installs a newer Bun, the pins, setup lines and any minimum move at
+  this repo's next session. A DATED measurement ("builds under Bun 1.4.3, measured 2026-10-21", above)
+  stays as written until that test is re-run. **Measured 2026-11-09:** `bun --version` = 1.4.4 on
+  Windows; `release.yml`'s two `bun-version:` pins are 1.4.4; wasmrt declares no Bun floor; the
+  remaining 1.4.3 lines (`design-decisions.md` §1, `testing.md`, `roadmap.md`) are dated results.
+* 🔒 **Every tagged release gets its GitHub Release page made BY CI (owner, 2026-11-09, H32), only
+  for new tags (no backfill).** wasmrt has had this since v0.6.4; H30 changed how, not what.
 
 **Owner's rule, restated 2026-09-19 because it was being honoured in `scripts/` and ignored
 everywhere else:** *"python scripts not allowed either, only deno or bun"*. `scripts/` holds `.ts`

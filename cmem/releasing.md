@@ -181,9 +181,10 @@ owner does 7–8; the agent then does 9.
    tag: GitHub fires no tag event when more than three tags are pushed at once). 🆕 **Pushing the `v*`
    tag fires `.github/workflows/release.yml`, whose first job is the COMPATIBILITY GATE**:
    `bun scripts/bump.ts --verify-tag vX.Y.Z` checks the manifest carries `X.Y.Z` and that `X.Y.Z`
-   clears the floor since the last release. Only if it passes does the second job extract this
-   version's `CHANGELOG.md` section and create the GitHub Release (built-in `GITHUB_TOKEN`; it fails
-   loudly if the CHANGELOG has no `## [X.Y.Z]` section). ⚠️ **The order changed on 2026-10-24**: the
+   clears the floor since the last release. Only if it passes does the second job create the
+   GitHub Release from this version's `CHANGELOG.md` section through the REST API (built-in
+   `GITHUB_TOKEN`; `scripts/github-release.ts`, § Tooling; it fails loudly if the CHANGELOG has no
+   non-empty `## [X.Y.Z]` section). ⚠️ **The order changed on 2026-10-24**: the
    publish used to come before the tag, which would make a CI gate on the tag a check that runs after
    the crates are already on crates.io. Locally, `bun scripts/bump.ts --verify-tag vX.Y.Z` is the same
    check and can run before the push.
@@ -233,11 +234,36 @@ whether you meant to or not.
 ## Tooling
 
 - **`.github/workflows/release.yml`** (in place since v0.6.4): a tag-triggered GitHub Action. Push a
-  `v*` tag → it extracts the matching `CHANGELOG.md` `## [X.Y.Z]` section (literal-string match, no regex
-  escaping) and runs `gh release create` with those notes. Secret-free (built-in `GITHUB_TOKEN`). This is
+  `v*` tag → the compatibility gate, then the GitHub Release page, titled with the matching
+  `CHANGELOG.md` `## [X.Y.Z]` heading and carrying that section as its body. Secret-free (built-in
+  `GITHUB_TOKEN`). This is
   the **only** CI automation so far — deliberately scoped to the GitHub-release step; **`cargo publish`
   remains manual** (needs the owner's crates.io token, and the owner chose not to build CI publishing up
   front). To add crate publishing later, extend this workflow with a `CRATES_IO_TOKEN` repo secret.
+- 🆕 **The release page (2026-11-09; workspace letters H30 and H32): no `gh`.** Until then the page was
+  made by `gh release create --verify-tag`. Now `scripts/github-release.ts` (Bun, `fetch`, REST API)
+  makes it, keeping H32's order: (0) the CHANGELOG has a non-empty `## [X.Y.Z]` section, checked before
+  any request; (1) the tag exists on GitHub and peels, with annotated tags followed, to `GITHUB_SHA`
+  (`POST /releases` would otherwise CREATE a missing tag); (2) a page already there means done, with no
+  write, so a re-run is safe; (3) POST, then read the page back (the tag, not a draft) and peel the tag
+  again. Each request has a 30 s limit, body included. The page is the same as before: the CHANGELOG
+  heading as the title and the section as the body. No generated notes, and no
+  `generate_release_notes`, which is the one place wasmrt departs from H32's recipe: the CHANGELOG is
+  the release note. **Jobs:** the `compatibility-gate` job (`contents: read`) also runs the self-test and a
+  read-only `--dry-run` against the real API. The `github-release` job alone has `contents: write`. Its
+  checkout keeps no credential (`persist-credentials: false`), and it runs only Bun and the script; no
+  `cargo`, no package code. **The self-test** is `bun scripts/check-github-release.ts`: a `node:http`
+  mock API, 17 checks. Missing, other-commit or annotated-other tags are refused with no POST; a
+  CHANGELOG with no section or an empty one is refused with no request at all; the cases also cover an
+  existing page, a lightweight and an annotated create (with the POST body checked), POST 422, a
+  read-back draft, a tag moved after the POST, a dry run, no token, a non-`vX.Y.Z` tag, an unknown
+  argument and a stalled API. **Inverted 2026-11-09** by six one-line mutants, each caught only by its
+  own case or cases. They removed the sha check, the existing-page stop, the time limit, the
+  empty-section refusal, the draft read-back check and the re-peel. **Real GitHub, read-only
+  `--dry-run`, 2026-11-09:** `v2.0.0` at `1715139` peels and finds its page (exit 0, no write); the same
+  tag given `v1.0.0`'s commit is refused. ⚠️ **Unmeasured on GitHub Actions** until the next real tag:
+  the first page's `author.login` (expected `github-actions[bot]`) is written into the workspace ledger
+  row H30 then. Owner, 2026-11-09: only new tags get pages; nothing is backfilled.
 - 🏢 **The org move does not touch publishing (workspace letter H20, recorded 2026-10-23).** H20 exists
   because a registry's trusted-publishing (OIDC) policy is locked to the GitHub owner and repository
   **IDs**, and the move to `synapticforge1` changed the owner ID (nuget.org refused loader-dotnet's
@@ -261,8 +287,8 @@ the published commit already carries them. Keep them in lockstep with the versio
 
 ## Who runs the publish
 
-The **owner** runs `cargo publish` + `git tag` + `gh release` + push for each version (needs the
-crates.io token). The agent implements the task and does the **entire** release prep first — version
+The **owner** runs `cargo publish` + `git tag` + push for each version (needs the crates.io token);
+the GitHub Release page is made by CI from the tag (never by hand or `gh`, letters H30 and H32). The agent implements the task and does the **entire** release prep first — version
 bump + public trackers + **full `cmem/` sync** + release commit (checklist steps 1–6) — and only then
 hands over the publish commands. Established rhythm since v0.1.0; the pre-publish doc-sync gate added
 2026-07-31 (v0.6.4) after earlier releases shipped with docs lagging a turn behind.
