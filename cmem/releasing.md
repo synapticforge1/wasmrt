@@ -261,9 +261,8 @@ whether you meant to or not.
   own case or cases. They removed the sha check, the existing-page stop, the time limit, the
   empty-section refusal, the draft read-back check and the re-peel. **Real GitHub, read-only
   `--dry-run`, 2026-11-09:** `v2.0.0` at `1715139` peels and finds its page (exit 0, no write); the same
-  tag given `v1.0.0`'s commit is refused. ⚠️ **Unmeasured on GitHub Actions** until the next real tag:
-  the first page's `author.login` (expected `github-actions[bot]`) is written into the workspace ledger
-  row H30 then. Owner, 2026-11-09: only new tags get pages; nothing is backfilled.
+  tag given `v1.0.0`'s commit is refused. ✅ **Measured on GitHub Actions by 2.0.1** (run 42724412211):
+  the page's `author.login` is `github-actions[bot]` (§ Status). Owner, 2026-11-09: only new tags get pages; nothing is backfilled.
 - 🏢 **The org move does not touch publishing (workspace letter H20, recorded 2026-10-23).** H20 exists
   because a registry's trusted-publishing (OIDC) policy is locked to the GitHub owner and repository
   **IDs**, and the move to `synapticforge1` changed the owner ID (nuget.org refused loader-dotnet's
@@ -304,8 +303,16 @@ hands over the publish commands. Established rhythm since v0.1.0; the pre-publis
   CHANGELOG [2.0.1] and `open-work.md` (the floating nightly, proven by building on both). Both
   binaries import only Windows-provided DLLs, and the CLI runs on a system-only `PATH`.
   `bump.ts patch`: 2.0.0 → 2.0.1. **Steps 7–8 were done by the agent this time, on the owner's
-  "release"**: the crates.io login was already on this machine. Tag, CI run, page `author.login`
-  and crates.io read-back: the lines below.
+  "release"**: the crates.io login was already on this machine.
+  **✅ PUBLISHED 2026-11-09**: release commit `c3cb7dd` = tag `v2.0.1` = `origin/main` (`ls-remote`).
+  Workflow run 42724412211 succeeded, with every step of both jobs green (public Actions API),
+  including the self-test and the real-API dry run in the gate. **H30 measured on Actions**: the
+  Release page `v2.0.1` was made by **`github-actions[bot]`**. It is not a draft; its title is the
+  CHANGELOG heading and its body is the 1,972-character section; the tag did not move. Then
+  `cargo publish` wasmrt-core → wasmrt-capi → wasmrt: all three at 2.0.1 on crates.io and not
+  yanked (its API, created 2026-11-10T00:04 UTC). Step 9: `surface/released.txt` re-recorded from
+  the tag. Only its `released-as` and `tools` lines changed, so the public surface is identical to
+  2.0.0's. The floor since is PATCH.
 - **✅ v2.0.0 PUBLISHED (2026-10-24, release commit `1715139`, tag `v2.0.0`)** — all three crates at
   2.0.0 on crates.io (checked through its API); `surface/released.txt` re-recorded from the tag (step
   9, its own commit; only its `released-as` line changed). The floor since is PATCH. **Next: the

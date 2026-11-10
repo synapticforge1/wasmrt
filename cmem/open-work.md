@@ -11,9 +11,10 @@ stays in the topic file named.
 * **606 workspace tests**, 0 failed, 1 ignored (2026-11-09, rustc nightly `708c94ef0` 2026-11-03);
   clippy clean (`-D warnings`); `surface.ts --check`, eol, definitions and the C-ABI gate green
   (the C-ABI gate needs `CC=gcc` on this host). `bun scripts/check-github-release.ts` 17/17.
-* **2.0.1 (2026-11-09; no code changes since 2.0.0)**: the GitHub Release page is made through the REST API
-  (H30). The bump gate's floor since 2.0.0 was PATCH (surface 0, semver patch ×2, behaviour 0 / 0).
-  The tag, CI run, page and crates.io publish are recorded in `releasing.md` § Status.
+* **2.0.1 RELEASED 2026-11-09 (no code changes since 2.0.0)**: tag `v2.0.1` = release commit `c3cb7dd`;
+  all three crates at 2.0.1 on crates.io (verified through its API); Release page by
+  `github-actions[bot]` through the REST API (H30, run 42724412211). `surface/released.txt` records it
+  (surface identical to 2.0.0's). The bump floor since: **PATCH**. Detail: `releasing.md` § Status.
   *(2.0.0: tag `v2.0.0` = `1715139`; 1.0.0: tag `v1.0.0` = `9871fd4`.)*
 * ⚠️ **The toolchain floats** (`rust-toolchain.toml` = `nightly`), so the binary sizes move with
   nothing changed in the source. **Proven 2026-11-09** by building the same tree in the same target
@@ -45,7 +46,7 @@ stays in the topic file named.
   clean), and the pull line (`CLAUDE.md` and this INDEX now read `workspace-correspondence.md` first).
 * **Answered 2026-11-09** (the workspace verifies and closes): **H30**, the release page now made
   through the REST API (`scripts/github-release.ts`, self-test 17/17, six mutants caught;
-  `releasing.md` § Tooling). ⚠️ The first page's `author.login` is UNMEASURED until the next tag.
+  `releasing.md` § Tooling). Measured by 2.0.1: the page's `author.login` = `github-actions[bot]`.
   **H31** and **H32** recorded (`design-decisions.md` § Tooling amendments 2026-11-08 / 11-09);
   nothing to move for H31 (1.4.4 already). **C8** (wasmrt is its creator): closed in the ledger.
 
