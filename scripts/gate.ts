@@ -8,11 +8,13 @@
 //                                   is made from, and the release's entry in cmem/release.md with
 //                                   both required reviews (review-process.md § 0, letter H35)
 //
-// Each step's exit code is read; the first failure stops the gate with that step's name. Steps that
+// Each step's exit code is read; the first failure stops the gate with that step's name — and in
+// GitHub Actions also as an error annotation carrying the step's failing lines, readable through the
+// public API without a login (the job log is not; found 2026-11-12, run 43287131453). Steps that
 // need a tool this host lacks fail loudly rather than skip (a C compiler: set CC, `c-gate.ts`).
 // Not here, by nature: S2 (`behaviour-s2.ts`, the spec suite from wasmtk's corpus — a sibling
 // checkout CI does not have) and S3; `cmem/releasing.md` keeps them in the local checklist.
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
@@ -57,12 +59,37 @@ if (release) {
   );
 }
 
+/** Run a step with its output streamed through (a 10-minute test run must show progress) and its
+ *  last lines kept, so a failure can be reported by name WITH its cause. */
+function runStep(cmd: string, args: string[], env: Record<string, string> | undefined): Promise<{ code: number | null; tail: string[] }> {
+  return new Promise((resolve) => {
+    const tail: string[] = [];
+    const keep = (chunk: Buffer) => {
+      for (const l of chunk.toString("utf8").split(/\r?\n/)) if (l.trim()) tail.push(l);
+      if (tail.length > 200) tail.splice(0, tail.length - 200);
+    };
+    const p = spawn(cmd, args, { cwd: repo, stdio: ["inherit", "pipe", "pipe"], env: { ...process.env, ...env } });
+    p.stdout.on("data", (c: Buffer) => { process.stdout.write(c); keep(c); });
+    p.stderr.on("data", (c: Buffer) => { process.stderr.write(c); keep(c); });
+    p.on("error", (e) => { tail.push(`could not start ${cmd}: ${e.message}`); resolve({ code: -1, tail }); });
+    p.on("close", (code) => resolve({ code, tail }));
+  });
+}
+
 console.log(`gate${release ? " --release" : ""}: ${steps.length} steps, version ${version}`);
 for (const [label, cmd, args, env] of steps) {
   console.log(`\n== ${label}: ${cmd === bun ? "bun" : cmd} ${args.join(" ")}`);
-  const r = spawnSync(cmd, args, { cwd: repo, stdio: "inherit", env: { ...process.env, ...env } });
-  if (r.status !== 0) {
-    console.error(`\ngate: FAILED at "${label}" (exit ${r.status ?? r.signal})`);
+  const r = await runStep(cmd, args, env);
+  if (r.code !== 0) {
+    console.error(`\ngate: FAILED at "${label}" (exit ${r.code})`);
+    // In GitHub Actions, also as an error ANNOTATION: the API serves annotations to anyone, while a
+    // job's log needs a login — and this project reads CI without `gh` (workspace Tooling rule 9).
+    if (process.env.GITHUB_ACTIONS === "true") {
+      const esc = (s: string) => s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+      const why = r.tail.filter((l) => /error|fail|panick|refus|✗|FAILED|warning: unused/i.test(l)).slice(-25);
+      const body = (why.length ? why : r.tail.slice(-25)).join("\n").slice(-3500);
+      console.log(`::error title=${esc(`gate failed at "${label}" (exit ${r.code})`).replace(/[:,]/g, " ")}::${esc(body)}`);
+    }
     process.exit(1);
   }
 }
