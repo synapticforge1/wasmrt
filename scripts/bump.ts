@@ -20,12 +20,23 @@
 // lower components, so `0.9.3 → minor` is `0.10.0`.
 //
 // The bump commit never touches surface/ (rule 5): an intended surface change is re-baselined in its
-// own commit with `bun scripts/surface.ts --update`, and after the release commit is tagged,
+// own commit with `bun scripts/surface.ts --update`, and after CI has tagged the release,
 // `bun scripts/surface.ts --release-from vX.Y.Z` records it, in its own commit.
+//
+// 🔒 The workspace's uniform release shape (letter H33, release-process.md § 5; owner, 2026-11-10):
+//   U1  the level is an ARGUMENT, never a default — and before it, a security and a hardening review,
+//       each ended by an empty round, recorded in cmem/release.md (H35; `release.ts` checks it);
+//   U2  the bump is ITS OWN commit, made here: `bump to vX.Y.Z`, Cargo.toml + Cargo.lock only, on top
+//       of the release notes already merged into `main`;
+//   U3  a real bump refuses a dirty tree (untracked files count), and for a patch or a minor runs the
+//       PREVIOUS release's integration tests against this tree (`prev-tag-tests.ts`); a major skips
+//       them, since breaking them is what a major is for.
+// Then `bun scripts/release.ts` (U4) pushes `main`, and CI does the rest.
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
+import { prevTagTests } from "./prev-tag-tests.ts";
 import { CURRENT, type Floor, floorOf, generate, generateFromRef, printDiff, readSnapshot, RELEASED, repo, tools } from "./surface.ts";
 
 const RANK: Record<Floor, number> = { patch: 0, minor: 1, major: 2 };
@@ -164,6 +175,18 @@ if (import.meta.main) {
   const kind = argv[0] as Floor;
   // `Object.hasOwn`, not `in`: `in` also matches inherited names such as `toString`.
   if (!Object.hasOwn(RANK, kind)) { console.error("usage: bun scripts/bump.ts patch|minor|major [--dry-run] | --verify-tag vX.Y.Z"); process.exit(2); }
+  const dryRun = argv.includes("--dry-run");
+  for (const a of argv.slice(1)) {
+    if (a !== "--dry-run") { console.error(`unknown argument "${a}"`); process.exit(2); }
+  }
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  if (!dryRun) {
+    const dirty = git("status", "--porcelain", "--untracked-files=all");
+    if (dirty.status !== 0 || dirty.stdout.trim()) {
+      console.log(`✗ the tree is not clean (untracked files count) — commit the release notes first (U2):\n${dirty.stdout}${dirty.stderr}`);
+      process.exit(1);
+    }
+  }
   const rel = parse(released), have = parse(manifestVersion());
   const target = inc(rel, kind);
   if (cmp(have, rel) > 0 && cmp(target, have) < 0) {
@@ -172,8 +195,18 @@ if (import.meta.main) {
   }
   const why = judge(rel, target, floors(released));
   if (why) { console.log(`✗ bump ${kind} REFUSED: ${why}`); process.exit(1); }
+  if (kind === "major") {
+    console.log(`previous   skipped: a major may break v${released}'s tests`);
+  } else {
+    const t = prevTagTests(`v${released}`);
+    console.log(`previous   ${t.green ? "green" : "RED"}   v${released}'s integration tests against this tree: ${t.summary}`);
+    if (!t.green) {
+      console.log(`${t.failures}\n✗ bump ${kind} REFUSED: this tree breaks what v${released}'s tests pin — a major, or a regression to fix`);
+      process.exit(1);
+    }
+  }
   console.log(`✓ ${released} → ${show(target)} (${kind})`);
-  if (argv.includes("--dry-run")) process.exit(0);
+  if (dryRun) process.exit(0);
 
   const path = join(repo, "Cargo.toml");
   const src = readFileSync(path, "utf8");
@@ -186,5 +219,13 @@ if (import.meta.main) {
   writeFileSync(path, next);
   const u = spawnSync("cargo", ["update", "--workspace", "--offline"], { cwd: repo, encoding: "utf8" });
   if (u.status !== 0) { console.log(`✗ cargo update failed:\n${u.stderr}`); process.exit(1); }
-  console.log(`Cargo.toml + Cargo.lock: ${old} → ${show(target)}. Next: the CHANGELOG heading and README status (cmem/releasing.md).`);
+  // U2: the bump is its own commit, made here, holding exactly the two version files.
+  const msg = `bump to v${show(target)}`;
+  const c = git("commit", "-q", "-m", msg, "--", "Cargo.toml", "Cargo.lock");
+  if (c.status !== 0) { console.log(`✗ git commit failed:\n${c.stdout}${c.stderr}`); process.exit(1); }
+  const files = git("show", "--name-only", "--format=", "HEAD").stdout.split(/\r?\n/).filter(Boolean).sort().join(",");
+  if (files !== "Cargo.lock,Cargo.toml") { console.log(`✗ the bump commit holds ${files}, not Cargo.toml + Cargo.lock`); process.exit(1); }
+  const left = git("status", "--porcelain", "--untracked-files=all").stdout.trim();
+  if (left) { console.log(`✗ the bump left the tree dirty:\n${left}`); process.exit(1); }
+  console.log(`Cargo.toml + Cargo.lock: ${old} → ${show(target)}, committed as "${msg}". Next: bun scripts/release.ts (cmem/releasing.md).`);
 }

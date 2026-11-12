@@ -4,13 +4,15 @@
 `memory-conventions.md`). Each item points at its record. Completed work leaves this file; its record
 stays in the topic file named.
 
-## 🚦 State — measured 2026-11-09
+## 🚦 State — measured 2026-11-12
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed,
-  2026-11-09).
-* **606 workspace tests**, 0 failed, 1 ignored (2026-11-09, rustc nightly `708c94ef0` 2026-11-03);
-  clippy clean (`-D warnings`); `surface.ts --check`, eol, definitions and the C-ABI gate green
-  (the C-ABI gate needs `CC=gcc` on this host). `bun scripts/check-github-release.ts` 17/17.
+  2026-11-09; not re-run 2026-11-12 — no `src/` change since).
+* **`bun scripts/gate.ts` 12 / 12 green** (2026-11-12, a fresh clone, rustc nightly `708c94ef0`):
+  **606 workspace tests**, 0 failed, 1 ignored; clippy `-D warnings`; `surface.ts --check`, eol,
+  definitions, the C-ABI gate (`CC=gcc` on this host); the release-script self-tests 34 / 36 / 22;
+  v2.0.0's integration tests against HEAD 70 / 0; the publish dry run. The same list is CI's
+  `checks` (`testing.md`, top).
 * **2.0.1 RELEASED 2026-11-09 (no code changes since 2.0.0)**: tag `v2.0.1` = release commit `c3cb7dd`;
   all three crates at 2.0.1 on crates.io (verified through its API); Release page by
   `github-actions[bot]` through the REST API (H30, run 42724412211). `surface/released.txt` records it
@@ -44,6 +46,15 @@ stays in the topic file named.
   prose in `docs/port/06-build-docs-licensing.md`), H28 (recorded in `design-decisions.md` PRIVACY;
   wasmrt keeps no `cmem/` contact note), C7 (v41 mirrored), the binary path scan (`git grep -a`:
   clean), and the pull line (`CLAUDE.md` and this INDEX now read `workspace-correspondence.md` first).
+* **Answered 2026-11-12** (the workspace verifies and closes): **H33**, the release flow in the
+  owner's order — `release.yml` runs on `main`: `checks` (`gate.ts`) → CI's tag → the page → crates.io
+  by trusted publishing, three crates in order, skip-if-listed, read back fatal; `bump.ts` makes the
+  bump commit and runs the previous release's tests (U2, U3); `release.ts` pushes `main` only (U4);
+  no `uses:`, Rust `nightly-2026-11-04` and Bun pinned and checked (U9); every release recorded in
+  [release.md](release.md) (U11). Rehearsed end to end in a scratch clone (`releasing.md` § Tooling).
+  **H34**: the owner-commands block (the workspace's write) committed as written. **H35**: the three
+  review words beside it, wasmrt's slots in [review-process.md](review-process.md), and "release"
+  refusing an entry without both reviews (`release-record.ts`, in `release.ts` and CI).
 * **Answered 2026-11-09** (the workspace verifies and closes): **H30**, the release page now made
   through the REST API (`scripts/github-release.ts`, self-test 17/17, six mutants caught;
   `releasing.md` § Tooling). Measured by 2.0.1: the page's `author.login` = `github-actions[bot]`.
@@ -52,6 +63,12 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
+0. ✅ **The crates.io trusted publishers are set** (owner, 2026-11-12: "trusted publisher is already
+   set"; not readable from here without a crates.io login — the next release's `publish` job is the
+   first real OIDC exchange, and if it fails there: fix the setting, "Re-run failed jobs", no new
+   version). 🗓️ OWNER: the workstation's `cargo login` token can be revoked. **The first push of this
+   change measures CI's `checks` on Linux** (state `none`: no tag, no publish) — read its run before
+   any release relies on it.
 1. **The review ladder** — T9 hardening, T10 bug hunt, T11 optimization, T12 security, in that
    order. 🔒 **Their version numbers come from the gate, not the plan** (owner, 2026-10-24, accepting
    `2.0.0` for the `exact`-type correction): each release after `2.0.0` is whatever `bump.ts` says. *(The ladder had pre-assigned `1.0.1`–`1.0.4`.)* T11 decides the contest: the CLI's 3.4 ms on

@@ -87,7 +87,9 @@ committed BEFORE the publish handoff.
 | [testing.md](testing.md) | every gate, how to run it, what it can and cannot see; dated counts |
 | [known-issues.md](known-issues.md) | the defect log, newest first: cause, fix, the test that pins it |
 | [security-model.md](security-model.md) | the WASI sandbox, the pin gate, the ceilings, the threat model |
-| [releasing.md](releasing.md) | SemVer and the gated bump; the binding per-release checklist |
+| [releasing.md](releasing.md) | SemVer and the gated bump; the binding per-release checklist; the CI release flow (checks → tag → page → crates.io) |
+| [release.md](release.md) | 🔒 every release, newest first ("Release History"), each with its summary, and from now on its two required reviews |
+| [review-process.md](review-process.md) | wasmrt's slots in the workspace review standard: worst silent case, reference results, the seven surfaces, the environments |
 | [roadmap.md](roadmap.md) | the task ladder (T0–T13), each pass's record, the scoped plans |
 | [loaders.md](loaders.md) | the consumers (`universalWasmLoader-*`, wasmtk, rsxtk) and the `wasmrt.h` surface they call |
 | [licensing.md](licensing.md) | MIT OR Apache-2.0, the SPDX convention, provenance and attribution |
@@ -102,3 +104,28 @@ committed BEFORE the publish handoff.
 * `scripts/` — every gate, a Bun script (`testing.md`); `surface/` — the compatibility gate's snapshots.
 * `docs/port/` — the port's wazmrt deep-read maps; historical.
 * `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`, `third_party/LICENSES.md`.
+
+## Owner commands: "commit", "push", "release" (owner, 2026-11-10)
+
+🔒 Written into every project by the workspace session on the owner's direction (2026-11-10:
+"please write that into each project"; workspace `cmem/working-rules.md` Tooling rule 12, letter
+H34). When the owner says:
+
+- **"commit"** — first run "update the project memory files" (re-derive this repo's `cmem/` from
+  its current state), then commit to the branch being worked on. Nothing is pushed.
+- **"push"** — perform "commit", then merge the branch into `main`, then push `main` (and the
+  working branch) to GitHub (`origin`) and read it back with `git ls-remote`.
+- **"release"** — perform "push", then the release process: the workspace's
+  `cmem/release-process.md` §§ 5–8 — CI checks first, then CI pushes the tag, then the GitHub
+  Release page from the tag, then the publish to the registry — recorded in `cmem/release.md`
+  § "Release History" (newest first, a summary of what changed). The level (patch / minor /
+  major) is the owner's: ask if it was not given.
+
+Each command includes the one before it, and none goes further than its own word (a "commit"
+never pushes, a "push" never releases). This repo's own gate and merge rules apply at each step.
+
+**"review" / "security review" / "hardening review"** (🔒 owner, 2026-11-12; letter H35): the
+workspace `../cmem/review-process.md` §§ 2 / 3 / 4, in rounds until one finds nothing; wasmrt's slots
+in [review-process.md](review-process.md). None commits, pushes or releases. 🔒 **"release" needs
+both a security and a hardening review first**, recorded in [release.md](release.md) before the bump
+(`release.ts` and CI refuse otherwise); the flow: [releasing.md](releasing.md).

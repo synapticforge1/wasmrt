@@ -19,6 +19,16 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
+### Changed
+
+- **Releases are tagged and published by CI** (no code change; the crates are unaffected). A push of
+  `main` runs `.github/workflows/release.yml`: the full gate first, then — only for a new version —
+  CI's tag, the GitHub Release page from it, and the three crates published to crates.io through
+  trusted publishing in dependency order, each read back. Nothing is tagged or published by hand any
+  more. `scripts/bump.ts` makes the `bump to vX.Y.Z` commit and runs the previous release's
+  integration tests for a patch or a minor; `scripts/release.ts` checks and pushes `main` only.
+  Every release now records a security review and a hardening review before it is bumped.
+
 _Next: the review stages, in order: T9 (hardening), T10 (a bug hunt and code-hygiene pass), T11 (an
 optimization review of the shipped binaries and the C ABI) and T12 (a security review), each
 numbered by the bump gate._

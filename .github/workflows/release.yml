@@ -1,75 +1,251 @@
 name: release
 
-# On a version tag: first the COMPATIBILITY GATE (the tag's version must be the
-# manifest's and must clear the SemVer floor since the last release, letter H6),
-# then a GitHub Release from the CHANGELOG, made by `scripts/github-release.ts` through the REST
-# API (no `gh`, letter H30). Publishing to crates.io stays manual (the owner runs
-# `cargo publish`, AFTER this gate is green); see cmem/releasing.md.
-# No secrets: the built-in GITHUB_TOKEN is enough; only the last job may write.
+# 🔒 The owner's order (2026-11-10; workspace letter H33, release-process.md § 5 U5–U9): "CI to check
+# first, then push the tag, and then create the release page from the tag, then publish the package
+# to the registry". `scripts/release.ts` pushes `main` only — nobody pushes a tag. Every push of
+# `main` runs this workflow; it is a RELEASE when Cargo.toml's version has no tag yet ("new"), or has
+# one on this very commit ("rerun": finish what a failed run left). Otherwise ("none") only `checks`
+# runs.
+#
+#   checks  - contents: read, NO secret, a clone without credentials. The whole gate on the pushed
+#             commit — `bun scripts/gate.ts`, the SAME list `scripts/release.ts` runs locally: eol,
+#             definitions, build, tests, clippy, surface, C ABI, the release scripts' self-tests, the
+#             previous release's tests against this tree, `cargo publish --workspace --dry-run`; for a
+#             release (`--release`) also the floor since the last release, the CHANGELOG section and
+#             cmem/release.md's entry with both required reviews. All third-party code runs here.
+#   tag     - contents: write, NO checkout. CI's annotated tag vX.Y.Z on this commit (REST API), read
+#             back. A tag made with GITHUB_TOKEN starts no workflow run, so the next jobs run here.
+#   release - contents: write, NO checkout. The GitHub Release page FROM that tag (H32's order), titled
+#             and filled from the CHANGELOG section — BEFORE the publish, by the owner's order.
+#   publish - id-token: write + contents: read, LAST. crates.io trusted publishing (owner's D2: no
+#             stored token): skip every crate crates.io already lists; GitHub OIDC -> a short-lived
+#             crates.io token; wasmrt-core, wasmrt-capi, wasmrt in that order with
+#             `cargo publish --no-verify` (nothing built: `checks` built and dry-ran this commit);
+#             revoke the token; read all three back, FATAL.
+#
+# Every step is `run:`; there is no `uses:`. Pinned: Rust as a DATED nightly through the runner's
+# rustup (it verifies the signed channel manifest), and refused unless rustc reports the expected
+# commit; cargo-public-api and cargo-semver-checks by version, --locked; Bun by version AND sha256
+# (Bun's SHASUMS256.txt; move BUN_VERSION and BUN_SHA256 together — workspace Tooling rule 10). The
+# dated nightly is CI's pin only: the local rust-toolchain.toml still floats, and whether to pin it
+# there is T11's question (it moves the binary sizes; cmem/open-work.md). Every request has a time
+# limit (best-practices 7.21). A failed job is fixed by "Re-run failed jobs": each job skips what is
+# done; never a new or moved tag (U12).
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
-permissions:
-  contents: read
+permissions: {}
+
+# One group per commit, never cancelled: a re-run of the same commit waits for the first; two
+# commits with the same untagged version cannot both tag (the second finds the tag elsewhere: none).
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  RUST_TOOLCHAIN: nightly-2026-11-04
+  RUSTC_COMMIT: 708c94ef0
+  PUBLIC_API_VERSION: "0.52.0"
+  SEMVER_CHECKS_VERSION: "0.51.0"
+  BUN_VERSION: "1.4.4"
+  BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c
 
 jobs:
-  compatibility-gate:
+  checks:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      state: ${{ steps.state.outputs.state }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Check out the tagged commit, with history and tags
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # Full history and tags: the floor and the previous release's tests compare with earlier tags.
+      - name: Checkout (no credentials)
+        run: |
+          git clone -q --no-checkout "https://github.com/$GITHUB_REPOSITORY" .
+          git checkout -q --detach "$GITHUB_SHA"
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::error::checked out $head, this run is for $GITHUB_SHA"
+            exit 1
+          fi
 
-      - name: Install the nightly toolchain (rustdoc JSON for the surface diff)
-        run: rustup toolchain install nightly --profile minimal
+      - name: Read the version ([workspace.package] in Cargo.toml)
+        id: version
+        run: |
+          v=$(awk '/^\[workspace\.package\]/ { w = 1; next } /^\[/ { w = 0 } w && /^version[[:space:]]*=/ { gsub(/.*=[[:space:]]*"|".*/, ""); print; exit }' Cargo.toml)
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::no X.Y.Z [workspace.package] version in Cargo.toml (got '$v')"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Cargo.toml version $v"
 
-      - name: Install the surface and semver tools, at the versions releasing.md names
-        run: cargo install --locked cargo-public-api@0.52.0 cargo-semver-checks@0.51.0
+      - name: Install Bun (pinned by sha256)
+        run: |
+          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  $RUNNER_TEMP/bun.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP" && mkdir -p "$HOME/.bun/bin"
+          mv "$RUNNER_TEMP/bun-linux-x64/bun" "$HOME/.bun/bin/" && rm -rf "$RUNNER_TEMP/bun.zip" "$RUNNER_TEMP/bun-linux-x64"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          "$HOME/.bun/bin/bun" --version
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-
-      - name: The version clears the floor since the last release
+      # new = the version's tag is absent (a release); rerun = it peels to THIS commit (finish a
+      # failed run); none = it is elsewhere (an ordinary push of an already-released version).
+      - name: Is this a release?
+        id: state
         env:
-          TAG: ${{ github.ref_name }}
-        run: bun scripts/bump.ts --verify-tag "$TAG"
+          VERSION: ${{ steps.version.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }} # contents: read — only lifts the API rate limit
+        run: bun scripts/github-release.ts state
 
-      - name: The release-page script passes its self-test (mock API, before any write token)
-        run: bun scripts/check-github-release.ts
+      - name: Install Rust (a dated nightly, pinned and checked)
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy \
+            --target wasm32-unknown-unknown --target wasm32-wasip1
+          echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >> "$GITHUB_ENV"
+          v=$(RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" rustc -V)
+          echo "$v"
+          case "$v" in *"($RUSTC_COMMIT "*) ;; *) echo "::error::$RUST_TOOLCHAIN is '$v', not rustc $RUSTC_COMMIT"; exit 1 ;; esac
 
-      - name: The release page would be made from this tag (read-only dry run, real API)
+      - name: Install the surface tool (pinned)
+        run: cargo install --locked "cargo-public-api@$PUBLIC_API_VERSION"
+
+      - name: Install the semver tool (pinned; a release only)
+        if: steps.state.outputs.state != 'none'
+        run: cargo install --locked "cargo-semver-checks@$SEMVER_CHECKS_VERSION"
+
+      - name: The gate (scripts/gate.ts — the list release.ts runs locally)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun scripts/github-release.ts --dry-run
+          STATE: ${{ steps.state.outputs.state }}
+        run: |
+          if [ "$STATE" = none ]; then bun scripts/gate.ts; else bun scripts/gate.ts --release; fi
 
-  # The page through GitHub's REST API, never `gh` (workspace letters H30, H32): the tag must
-  # exist and peel to this run's commit; an existing page means done; POST, then read it back.
-  # Title and body come from the CHANGELOG, as before. The checkout keeps no credential.
-  github-release:
-    needs: compatibility-gate
+  tag:
+    needs: checks
+    if: needs.checks.outputs.state != 'none'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Check out the tagged commit (no credential left in .git/config)
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+      # No checkout (workspace C30 / H32): only the release script, at the exact commit checked.
+      - name: Fetch the release script at this commit
+        run: |
+          mkdir -p scripts
+          curl -fsSL --retry 3 --retry-delay 5 --max-time 60 -o scripts/github-release.ts \
+            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/scripts/github-release.ts"
+          head -n 2 scripts/github-release.ts
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
+      - name: Install Bun (pinned by sha256)
+        run: |
+          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  $RUNNER_TEMP/bun.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP" && mkdir -p "$HOME/.bun/bin"
+          mv "$RUNNER_TEMP/bun-linux-x64/bun" "$HOME/.bun/bin/" && rm -rf "$RUNNER_TEMP/bun.zip" "$RUNNER_TEMP/bun-linux-x64"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
 
-      - name: Create the GitHub Release
+      - name: Create the tag (REST API)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun scripts/github-release.ts
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: bun scripts/github-release.ts tag
+
+  release:
+    needs: [checks, tag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The script and the CHANGELOG it reads, at this commit, in the repository's layout.
+      - name: Fetch the release script and the CHANGELOG at this commit
+        run: |
+          mkdir -p scripts
+          for f in scripts/github-release.ts CHANGELOG.md; do
+            curl -fsSL --retry 3 --retry-delay 5 --max-time 60 -o "$f" \
+              "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/$f"
+          done
+          head -n 2 scripts/github-release.ts
+
+      - name: Install Bun (pinned by sha256)
+        run: |
+          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  $RUNNER_TEMP/bun.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP" && mkdir -p "$HOME/.bun/bin"
+          mv "$RUNNER_TEMP/bun-linux-x64/bun" "$HOME/.bun/bin/" && rm -rf "$RUNNER_TEMP/bun.zip" "$RUNNER_TEMP/bun-linux-x64"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Create the GitHub Release page from the tag (REST API)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: bun scripts/github-release.ts page
+
+  publish:
+    needs: [checks, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # crates.io trusted publishing; nothing else
+    env:
+      VERSION: ${{ needs.checks.outputs.version }}
+    steps:
+      - name: The tag still peels to this commit
+        run: |
+          tag="refs/tags/v$VERSION"
+          refs=$(git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY" "$tag" "$tag^{}")
+          at=$(printf '%s\n' "$refs" | awk -v t="$tag" '$2 == t "^{}" { p = $1 } $2 == t { l = $1 } END { print (p != "" ? p : l) }')
+          if [ "$at" != "$GITHUB_SHA" ]; then
+            echo "::error::v$VERSION is '$at', this run is for $GITHUB_SHA; refusing to publish"
+            exit 1
+          fi
+
+      # `cargo publish --no-verify` packages the source; it builds nothing, so no package code runs
+      # beside the id-token.
+      - name: Checkout this commit (no credentials, no history)
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git fetch -q --depth=1 origin "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Install Rust (the same dated nightly, checked)
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >> "$GITHUB_ENV"
+          v=$(RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" rustc -V)
+          case "$v" in *"($RUSTC_COMMIT "*) ;; *) echo "::error::$RUST_TOOLCHAIN is '$v', not rustc $RUSTC_COMMIT"; exit 1 ;; esac
+
+      - name: Install Bun (pinned by sha256)
+        run: |
+          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  $RUNNER_TEMP/bun.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP" && mkdir -p "$HOME/.bun/bin"
+          mv "$RUNNER_TEMP/bun-linux-x64/bun" "$HOME/.bun/bin/" && rm -rf "$RUNNER_TEMP/bun.zip" "$RUNNER_TEMP/bun-linux-x64"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Which crates lack this version on crates.io?
+        id: has
+        run: bun scripts/crates-io.ts has
+
+      - name: Trusted-publishing token (GitHub OIDC -> crates.io)
+        if: steps.has.outputs.missing != '0'
+        run: bun scripts/crates-io.ts token
+
+      - name: Publish wasmrt-core, wasmrt-capi, wasmrt (dependency order; listed ones skipped)
+        if: steps.has.outputs.missing != '0'
+        run: bun scripts/crates-io.ts publish
+
+      - name: Revoke the token
+        if: always() && env.CARGO_REGISTRY_TOKEN != ''
+        run: bun scripts/crates-io.ts revoke
+
+      - name: Read all three back from crates.io (fatal)
+        run: bun scripts/crates-io.ts readback

@@ -44,7 +44,9 @@ function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd 
 
 export function tools(): string {
   const api = run("cargo", ["public-api", "--version"]).trim();
-  const rustc = run("rustup", ["run", "nightly", "rustc", "-V"]).trim();
+  // The ACTIVE toolchain, which is what `cargo public-api` runs (measured 2026-11-12: it follows
+  // RUSTUP_TOOLCHAIN): locally rust-toolchain.toml's `nightly`; in CI the dated pin of release.yml.
+  const rustc = run("rustc", ["-V"]).trim();
   return `${api}; ${rustc}`;
 }
 

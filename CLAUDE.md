@@ -28,9 +28,11 @@ the review stages T9–T12, each numbered by the bump gate. Detail: `cmem/open-w
   wasmrt mirrors it verbatim; byte-compare the copies; verify rows by RUNNING both. Coordinate
   BEFORE shipping a change to a contract surface.
 - **"Look for code issues"**, **"evaluate a reference project"** — `cmem/INDEX.md`.
-- **A release** — the checklist in [`cmem/releasing.md`](cmem/releasing.md); 🔒 memory, roadmap,
-  README and CHANGELOG are committed BEFORE the publish handoff; the version moves only through
-  `bun scripts/bump.ts`.
+- **A release** — the checklist in [`cmem/releasing.md`](cmem/releasing.md) (workspace letters H33,
+  H35): 🔒 a security review and a hardening review to their empty rounds, recorded in
+  [`cmem/release.md`](cmem/release.md); the notes and memory merged into `main` first; then
+  `bun scripts/bump.ts <level>` (the bump commit) and `bun scripts/release.ts` (pushes `main` only).
+  **CI tags, makes the page and publishes to crates.io** — nobody tags or publishes by hand.
 
 ## Rules that bite in the first five minutes (full text: `cmem/design-decisions.md`)
 

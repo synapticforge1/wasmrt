@@ -1,39 +1,52 @@
-// Create the GitHub Release page for a version tag through GitHub's REST API (workspace letters
-// H30 and H32: no `gh`, in CI too; the page is made by CI, never by hand). Run by the
-// `github-release` job of `.github/workflows/release.yml`, after the compatibility gate:
+// The GitHub half of a release, through GitHub's REST API — never `gh` (workspace letters H30, H32,
+// H33). The `release` workflow (`.github/workflows/release.yml`) runs on every push of `main`:
 //
-//   bun scripts/github-release.ts            # create the page (or find it already there)
-//   bun scripts/github-release.ts --dry-run  # every check, no POST
+//   bun scripts/github-release.ts state   # checks job: is this push a release?  new | rerun | none
+//   bun scripts/github-release.ts tag     # tag job (U6): CI's annotated tag vX.Y.Z on GITHUB_SHA
+//   bun scripts/github-release.ts page    # release job (U7): the Release page FROM that tag
+//   … --dry-run                           # every check, nothing written
 //
-// Environment (GitHub Actions sets all but the token, which the job passes in):
-//   GITHUB_REPOSITORY  owner/repo          GITHUB_REF_NAME  the tag, e.g. v2.0.1
-//   GITHUB_SHA         the commit the run is for
-//   GITHUB_TOKEN       contents: write (needed only for the POST; reads work without it)
+// 🔒 The owner's order (2026-11-10): "CI to check first, then push the tag, and then create the
+// release page from the tag, then publish the package to the registry". Nobody pushes a tag by hand
+// any more: `scripts/release.ts` pushes `main` only. A tag made with the job's GITHUB_TOKEN starts no
+// workflow run, so tag, page and publish all run in the one run the push of `main` started.
+//
+// Environment (GitHub Actions sets all but the token and VERSION, which the job passes in):
+//   GITHUB_REPOSITORY  owner/repo        GITHUB_SHA  the commit the run is for
+//   VERSION            X.Y.Z, Cargo.toml's [workspace.package] version (the tag is vX.Y.Z)
+//   GITHUB_TOKEN       contents: write for `tag` / `page`; reads work without it
 //   GITHUB_API_URL     default https://api.github.com (the self-test points it at a mock)
-//   WASMRT_HTTP_TIMEOUT_MS  per-request time limit, default 30000 (best-practices 7.21)
+//   GITHUB_OUTPUT      when set, `state` also writes `state=<answer>` there
+//   WASMRT_HTTP_TIMEOUT_MS  per-request time limit, request to last byte, default 30000 (best-practices 7.21)
 //   WASMRT_CHANGELOG   default CHANGELOG.md at the repository root (the self-test sets it)
 //
-// The page is what `gh release create` made before (H30 changes HOW, not WHAT): title = the
-// CHANGELOG heading without "## ", body = that version's CHANGELOG section. No generated notes.
+// state: the tag is absent → new (a release); it peels to GITHUB_SHA → rerun (finish what a failed
+//        run left); it peels elsewhere → none (an ordinary push of an already-released version).
+// tag:   absent → POST git/tags (annotated, message "vX.Y.Z") + POST git/refs, then read back: it must
+//        peel to GITHUB_SHA. Already on GITHUB_SHA → done, nothing written. Elsewhere → refused: a
+//        published tag never moves.
+// page:  the page is what it has been since v0.6.4 — title = the CHANGELOG heading without "## ",
+//        body = that version's CHANGELOG section, no generated notes (wasmrt's recorded choice: the
+//        CHANGELOG is the release note). H32's order, each step refusing with exit 1 on anything
+//        unexpected: (0) the CHANGELOG has a non-empty section, checked before any request; (1) the
+//        tag exists and peels to GITHUB_SHA (`POST /releases` would CREATE a missing tag from the
+//        default branch); (2) an existing page = done, no write; (3) POST, read back (the tag, not a
+//        draft), peel again. No `target_commitish`, no `release/<tag>` branch (ledger C45).
 //
-// The order (H32; keep it), each step refusing with exit 1 on anything unexpected:
-//   0. The CHANGELOG has a non-empty section for this version (checked before any request).
-//   1. The tag exists on GitHub and peels (annotated tags followed) to GITHUB_SHA.
-//      `POST /releases` would CREATE a missing tag from the default branch.
-//   2. A release for the tag already exists → done, exit 0, no write (a re-run is safe).
-//   3. POST {tag_name, name, body}, then read the release back and check the tag again.
-//
-// Adapted from universalWasmLoader-c `scripts/github-release.ts` (itself from loader-rs).
 // `node:` builtins and `fetch` only. Self-test: `bun scripts/check-github-release.ts`.
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
-const args = process.argv.slice(2);
-for (const arg of args) {
+const argv = process.argv.slice(2);
+const command = argv[0];
+if (!["state", "tag", "page"].includes(command ?? "")) {
+  fail(`the first argument must be state | tag | page (got "${command ?? ""}")`);
+}
+for (const arg of argv.slice(1)) {
   if (arg !== "--dry-run") fail(`unknown argument "${arg}" — use --dry-run or nothing`);
 }
-const dryRun = args.includes("--dry-run");
+const dryRun = argv.slice(1).includes("--dry-run");
 
 function fail(msg: string): never {
   console.error(`github-release: ${msg}`);
@@ -47,29 +60,30 @@ function need(name: string): string {
 }
 
 const repo = need("GITHUB_REPOSITORY");
-const tag = need("GITHUB_REF_NAME");
 const sha = need("GITHUB_SHA");
+const version = need("VERSION");
+const tag = `v${version}`;
 const token = process.env.GITHUB_TOKEN ?? "";
 const api = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
 const timeoutMs = Number(process.env.WASMRT_HTTP_TIMEOUT_MS ?? "30000");
 const changelog = process.env.WASMRT_CHANGELOG || join(import.meta.dirname!, "..", "CHANGELOG.md");
 
 if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) fail(`GITHUB_REPOSITORY "${repo}" is not owner/repo`);
-if (!/^v\d+\.\d+\.\d+$/.test(tag)) fail(`GITHUB_REF_NAME "${tag}" is not a vX.Y.Z tag`);
+if (!/^\d+\.\d+\.\d+$/.test(version)) fail(`VERSION "${version}" is not X.Y.Z`);
 if (!/^[0-9a-f]{40}$/.test(sha)) fail(`GITHUB_SHA "${sha}" is not a full commit id`);
 if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
   fail(`WASMRT_HTTP_TIMEOUT_MS "${timeoutMs}" is not a positive number`);
 }
 
 /** The heading and body of `## [version]` in the CHANGELOG, up to the next `## [`. */
-function notesFor(version: string): { title: string; body: string } {
+function notesFor(v: string): { title: string; body: string } {
   let text: string;
   try {
     text = readFileSync(changelog, "utf8");
   } catch (e) {
     fail(`cannot read ${changelog}: ${(e as Error).message}`);
   }
-  const pre = `## [${version}]`;
+  const pre = `## [${v}]`;
   const lines = text.split("\n");
   const start = lines.findIndex((l) => l.startsWith(pre));
   if (start < 0) fail(`no CHANGELOG section "${pre}"; refusing to publish an empty release`);
@@ -117,10 +131,10 @@ async function call(method: string, path: string, body?: unknown): Promise<{ sta
   return { status: res.status, json };
 }
 
-/** The commit a tag peels to on GitHub, or fail. */
-async function peel(): Promise<string> {
+/** The commit the tag peels to on GitHub (annotated tags followed), or null when it is absent. */
+async function peel(): Promise<string | null> {
   const ref = await call("GET", `/repos/${repo}/git/ref/tags/${tag}`);
-  if (ref.status === 404) fail(`tag ${tag} does not exist on GitHub; refusing (a release would create it)`);
+  if (ref.status === 404) return null;
   if (ref.status !== 200) fail(`GET tag ref ${tag}: HTTP ${ref.status} ${JSON.stringify(ref.json)}`);
   let object = ref.json?.object as { type: string; sha: string } | undefined;
   for (let depth = 0; object?.type === "tag"; depth++) {
@@ -133,18 +147,52 @@ async function peel(): Promise<string> {
   return object.sha;
 }
 
+if (command === "state") {
+  const at = await peel();
+  const state = at === null ? "new" : at === sha ? "rerun" : "none";
+  console.log(`state=${state}  (tag ${tag} ${at === null ? "absent" : `on ${at}`}; this run is for ${sha})`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `state=${state}\n`);
+  process.exit(0);
+}
+
+if (command === "tag") {
+  const at = await peel();
+  if (at === sha) {
+    console.log(`tag ${tag} already on ${sha}, nothing written`);
+    process.exit(0);
+  }
+  if (at !== null) fail(`tag ${tag} is on ${at}, not ${sha}; refusing (a published tag never moves)`);
+  if (dryRun) {
+    console.log(`dry-run: would create the annotated tag ${tag} on ${sha}`);
+    process.exit(0);
+  }
+  if (!token) fail("GITHUB_TOKEN is not set; cannot create the tag");
+  const obj = await call("POST", `/repos/${repo}/git/tags`, { tag, message: tag, object: sha, type: "commit" });
+  if (obj.status !== 201 || !/^[0-9a-f]{40}$/.test(obj.json?.sha ?? "")) {
+    fail(`POST tag object ${tag}: HTTP ${obj.status} ${JSON.stringify(obj.json)}`);
+  }
+  const ref = await call("POST", `/repos/${repo}/git/refs`, { ref: `refs/tags/${tag}`, sha: obj.json.sha });
+  if (ref.status !== 201) fail(`POST ref refs/tags/${tag}: HTTP ${ref.status} ${JSON.stringify(ref.json)}`);
+  const back = await peel();
+  if (back !== sha) fail(`after creating it, tag ${tag} peels to ${back ?? "nothing"}, not ${sha}`);
+  console.log(`tag ${tag} created (annotated, object ${obj.json.sha}) on ${sha}, read back`);
+  process.exit(0);
+}
+
+// page — H32's order.
 // 0. The notes exist (no request is made for a version the CHANGELOG does not describe).
-const notes = notesFor(tag.slice(1));
+const notes = notesFor(version);
 
 // 1. The tag exists and peels to the commit this run is for.
 const peeled = await peel();
+if (peeled === null) fail(`tag ${tag} does not exist on GitHub; refusing (a release would create it)`);
 if (peeled !== sha) fail(`tag ${tag} is ${peeled}, this run is for ${sha}; refusing`);
 console.log(`tag ${tag} = ${sha}`);
 
 // 2. Already released?
 const existing = await call("GET", `/repos/${repo}/releases/tags/${tag}`);
 if (existing.status === 200) {
-  console.log(`GitHub Release ${tag} already exists: ${existing.json?.html_url}`);
+  console.log(`GitHub Release ${tag} already exists, nothing written: ${existing.json?.html_url}`);
   process.exit(0);
 }
 if (existing.status !== 404) fail(`GET release ${tag}: HTTP ${existing.status} ${JSON.stringify(existing.json)}`);
@@ -163,5 +211,5 @@ if (back.status !== 200 || back.json?.tag_name !== tag || back.json?.draft !== f
   fail(`read-back of release ${tag}: HTTP ${back.status} ${JSON.stringify(back.json)}`);
 }
 const after = await peel();
-if (after !== sha) fail(`after the POST, tag ${tag} is ${after}, not ${sha}`);
+if (after !== sha) fail(`after the POST, tag ${tag} is ${after ?? "missing"}, not ${sha}`);
 console.log(`GitHub Release ${tag} created by ${back.json?.author?.login ?? "?"}: ${back.json?.html_url}`);

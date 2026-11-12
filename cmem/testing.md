@@ -4,6 +4,25 @@
 plus the size and speed numbers that decide inclusion. Detail:
 `docs/port/06-build-docs-licensing.md`; the test tree layout is in `tests/README.md`.
 
+## 🆕 2026-11-12 — ONE gate list, run by CI and by `release.ts` (workspace letter H33)
+
+**`bun scripts/gate.ts`** is the gate, and CI's `checks` job runs that same file on every push of
+`main` (`.github/workflows/release.yml`), so the local gate IS CI's gate. In order: eol,
+`definitions.ts --check`, `cargo build --workspace --release --locked`, `cargo test --workspace
+--locked`, clippy `-D warnings`, `surface.ts --check`, the C-ABI gate (`CC=gcc` on this host), the
+three release-script self-tests (`check-github-release.ts` 34, `check-crates-io.ts` 36,
+`check-release-record.ts` 22 — each inverted by mutants), **the previous release's integration tests
+against this tree** (`prev-tag-tests.ts`: the tag's `crates/*/tests/` and `tests/` over HEAD's
+committed tree, `cargo test --test '*'`; 70 tests in 15 binaries), and `cargo publish --workspace
+--no-verify --dry-run`. **`--release` adds** the floor (`bump.ts --verify-tag`), the CHANGELOG section
+and the release's entry in `release.md` with both reviews (`release-record.ts`). Each step's exit code
+is read; the first failure stops it by name (inverted: a CR in a tracked file stops it at `eol`).
+**Measured 2026-11-12 in a fresh clone:** 12 / 12 green, `cargo test` 606 / 0 / 1 in 19 binaries; with
+`--release` at a rehearsal 2.0.2, 15 / 15. Not in it, by nature: S2 and S3 (they need wasmtk's
+corpus, a sibling checkout) and Miri — local, in `releasing.md`'s checklist. ⚠️ **CI runs it on Linux,
+and `cmem/` records no `cargo test` run on Linux before** (grep, 2026-11-12; the old tag workflow ran
+only the floor there); the first push measures it (`checks` only, no release).
+
 ## 🔒 Conformance anchors (owner, 2026-08-11 — the oracle is retired)
 
 **wazmrt is no longer a test anchor.** The two runtimes compete independently for inclusion in wasmtk and
