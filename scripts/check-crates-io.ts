@@ -48,6 +48,9 @@ interface State {
   from: Record<string, string>; // crate -> the commit its .crate names (default SHA, this run's)
   noDownload: string[]; // listed crates whose .crate is not served yet
   paged: boolean; // the version list puts V on a SECOND page
+  shape: Record<string, "dup" | "badsize" | "dirty">; // a hostile .crate (review round 2)
+  dl503: string[]; // the CDN answers 503 for these .crate downloads
+  paging: "" | "repeat" | "404on2"; // the version list's paging misbehaves
 }
 
 const SHA = "a".repeat(40);
@@ -55,14 +58,13 @@ const OTHER = "b".repeat(40);
 
 /** A minimal ustar archive holding `<crate>-<V>/.cargo_vcs_info.json` naming `sha`, gzipped — the
  *  shape of a real .crate (measured on wasmrt-core 2.0.1). */
-function crateFile(crate: string, sha: string): Buffer {
-  const body = Buffer.from(JSON.stringify({ git: { sha1: sha }, path_in_vcs: `crates/${crate}` }, null, 2));
+function member(name: string, body: Buffer, sizeField?: string): Buffer {
   const header = Buffer.alloc(512);
-  header.write(`${crate}-${V}/.cargo_vcs_info.json`, 0, "utf8");
+  header.write(name, 0, "utf8");
   header.write("0000644\0", 100);
   header.write("0000000\0", 108);
   header.write("0000000\0", 116);
-  header.write(body.length.toString(8).padStart(11, "0") + "\0", 124);
+  header.write(sizeField ?? body.length.toString(8).padStart(11, "0") + "\0", 124);
   header.write("00000000000\0", 136);
   header.write("        ", 148);
   header.write("0", 156);
@@ -71,8 +73,18 @@ function crateFile(crate: string, sha: string): Buffer {
   let sum = 0;
   for (const b of header) sum += b;
   header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148);
-  const pad = Buffer.alloc((512 - (body.length % 512)) % 512);
-  return gzipSync(Buffer.concat([header, body, pad, Buffer.alloc(1024)]));
+  return Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512)]);
+}
+function crateFile(crate: string, sha: string, shape?: "dup" | "badsize" | "dirty"): Buffer {
+  const vcs = (s: string, dirty = false) =>
+    Buffer.from(JSON.stringify({ git: { sha1: s, ...(dirty ? { dirty: true } : {}) }, path_in_vcs: `crates/${crate}` }, null, 2));
+  const name = `${crate}-${V}/.cargo_vcs_info.json`;
+  const parts = shape === "dup"
+    ? [member(name, vcs(sha)), member(name, vcs(OTHER))] // the first names this commit, the second (what tar keeps) another
+    : shape === "badsize"
+    ? [member(name, vcs(sha), "0000000017z\0")]
+    : [member(name, vcs(sha, shape === "dirty"))];
+  return gzipSync(Buffer.concat([...parts, Buffer.alloc(1024)]));
 }
 let state: State;
 let audience = "";
@@ -102,9 +114,10 @@ const server = createServer(async (req, res) => {
   }
   if ((m = p.match(/^\/dl\/([\w-]+)\/([\w-]+)-([\d.]+)\.crate$/))) {
     const c = m[1];
+    if (state.dl503.includes(c)) return send(res, 503, {});
     if (!state.listed.includes(c) || state.noDownload.includes(c) || m[3] !== V) return send(res, 403, {});
     res.writeHead(200, { "Content-Type": "application/gzip" });
-    return res.end(crateFile(c, state.from[c] ?? SHA));
+    return res.end(crateFile(c, state.from[c] ?? SHA, state.shape[c]));
   }
   if (p === "/oidc") {
     audience = url.searchParams.get("audience") ?? "";
@@ -124,6 +137,12 @@ const server = createServer(async (req, res) => {
   }
   if ((m = p.match(/^\/api\/v1\/crates\/([\w-]+)\/versions$/))) {
     if (state.listStatus !== 200) return send(res, state.listStatus, {});
+    if (state.paging === "repeat") return send(res, 200, { versions: [{ num: "0.1.0" }], meta: { next_page: "?page=2" } });
+    if (state.paging === "404on2") {
+      return url.searchParams.get("page") === "2"
+        ? send(res, 404, {})
+        : send(res, 200, { versions: [{ num: "0.1.0" }], meta: { next_page: "?page=2" } });
+    }
     const has = state.listed.includes(m[1]);
     if (state.paged && url.searchParams.get("page") !== "2") {
       return send(res, 200, { versions: [{ num: "1.0.1" }], meta: { next_page: "?page=2" } });
@@ -152,16 +171,18 @@ function check(name: string, ok: boolean, detail: string) {
 
 const base: State = {
   listed: [], yanked: [], hidden: [], listStatus: 200, exchange: 200, tokenOnError: false, token: "cio_secret",
-  revoke: 204, oidc: 200, stall: false, from: {}, noDownload: [], paged: false,
+  revoke: 204, oidc: 200, stall: false, from: {}, noDownload: [], paged: false, shape: {}, dl503: [], paging: "",
 };
 
 function runScript(env: Record<string, string>, args: string[]): Promise<{ code: number; out: string }> {
   return new Promise((ok) => {
     const p = spawn(process.execPath, [SCRIPT, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
+    // A script that never ends is a failure, not a hang of the self-test (review round 2).
+    const kill = setTimeout(() => { out += "\n[self-test: killed after 15 s]"; p.kill(); }, 15_000);
     p.stdout.on("data", (c) => (out += c));
     p.stderr.on("data", (c) => (out += c));
-    p.on("close", (code) => ok({ code: code ?? -1, out }));
+    p.on("close", (code) => { clearTimeout(kill); ok({ code: code ?? -1, out }); });
   });
 }
 
@@ -283,6 +304,25 @@ await run("readback: the CLI listed but its .crate never served → exit 1 after
   code: 1, out: ".crate not served yet",
 });
 await run("readback: no GITHUB_SHA → refused", { listed: ALL }, ["readback"], { code: 1, out: "GITHUB_SHA is not set" }, { GITHUB_SHA: "" });
+// Review round 2: a hostile or broken .crate, a flaky CDN, paging that never ends.
+await run("readback: two vcs members (the second names another commit) → refused", { listed: ALL, shape: { wasmrt: "dup" } }, ["readback"], {
+  code: 1, out: "2 copies of",
+});
+await run("readback: a non-octal tar size field → refused", { listed: ALL, shape: { "wasmrt-capi": "badsize" } }, ["readback"], {
+  code: 1, out: "malformed tar size field",
+});
+await run("readback: a crate published from a DIRTY tree → refused", { listed: ALL, shape: { "wasmrt-core": "dirty" } }, ["readback"], {
+  code: 1, out: "DIRTY tree",
+});
+await run("readback: the CDN answering 503 is retried, not fatal at once", { listed: ALL, dl503: ["wasmrt"] }, ["readback"], {
+  code: 1, out: "after 2 attempts",
+});
+await run("has: a version list whose next_page repeats → red, and it ends", { paging: "repeat" }, ["has"], {
+  code: 1, out: "pagination did not end",
+});
+await run("has: a 404 on page 2 is an error, not 'no such crate'", { paging: "404on2" }, ["has"], {
+  code: 1, out: "HTTP 404 (page 2)",
+});
 await run("readback: the CLI missing → exit 1", { listed: ["wasmrt-core", "wasmrt-capi"] }, ["readback"], {
   code: 1, out: "does not serve wasmrt 1.2.3 after 2 attempts",
 });

@@ -51,14 +51,17 @@ const steps: Step[] = [
   ["tests", "cargo", ["test", "--workspace", "--locked"]],
   ["clippy", "cargo", ["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]],
   [`clippy for the other OS (${otherOs})`, "cargo", ["clippy", "--workspace", "--all-targets", "--locked", "--target", otherOs, "--", "-D", "warnings"]],
-  // The dual-target contract (architecture.md): the engine builds freestanding for wasm32.
-  ["wasmrt-core for wasm32-unknown-unknown", "cargo", ["build", "-p", "wasmrt-core", "--release", "--locked", "--target", "wasm32-unknown-unknown"]],
+  // The dual-target contract (architecture.md): the engine builds FREESTANDING for wasm32 — without
+  // its default `std` feature (review round 2: with defaults, an ungated `std` use still built, so the
+  // step proved nothing about `no_std`); and with `std` on WASI.
+  ["wasmrt-core freestanding (no_std) for wasm32-unknown-unknown", "cargo", ["build", "-p", "wasmrt-core", "--release", "--locked", "--no-default-features", "--target", "wasm32-unknown-unknown"]],
   ["wasmrt-core for wasm32-wasip1", "cargo", ["build", "-p", "wasmrt-core", "--release", "--locked", "--target", "wasm32-wasip1"]],
   ["public surface is current", bun, ["scripts/surface.ts", "--check"]],
   ["C ABI", bun, ["scripts/c-gate.ts"], { CC: cc }],
   ["release-page script self-test", bun, ["scripts/check-github-release.ts"]],
   ["crates.io script self-test", bun, ["scripts/check-crates-io.ts"]],
   ["release-record check self-test", bun, ["scripts/check-release-record.ts"]],
+  ["version arithmetic self-test (bump and gate agree)", bun, ["scripts/check-versions.ts"]],
   ["previous release's tests against this tree", bun, ["scripts/prev-tag-tests.ts"]],
   ["publish dry run (all three crates, dependency order)", "cargo", ["publish", "--workspace", "--locked", "--no-verify", "--dry-run"]],
 ];
@@ -75,21 +78,35 @@ if (release) {
 function runStep(cmd: string, args: string[], env: Record<string, string> | undefined): Promise<{ code: number | null; tail: string[] }> {
   return new Promise((resolve) => {
     const tail: string[] = [];
-    const keep = (chunk: Buffer) => {
-      for (const l of chunk.toString("utf8").split(/\r?\n/)) if (l.trim()) tail.push(l);
-      if (tail.length > 200) tail.splice(0, tail.length - 200);
+    // Whole LINES, per stream: a chunk may end mid-line (or mid UTF-8 character); keep the remainder
+    // as bytes until its newline arrives (review round 2).
+    const pending: Record<string, Buffer> = { out: Buffer.alloc(0), err: Buffer.alloc(0) };
+    const push = (l: string) => {
+      if (l.trim()) tail.push(l);
+      if (tail.length > 300) tail.splice(0, tail.length - 300);
+    };
+    const keep = (which: "out" | "err", chunk: Buffer) => {
+      let buf = Buffer.concat([pending[which], chunk]);
+      for (let nl = buf.indexOf(10); nl >= 0; nl = buf.indexOf(10)) {
+        push(buf.subarray(0, nl).toString("utf8").replace(/\r$/, ""));
+        buf = buf.subarray(nl + 1);
+      }
+      pending[which] = buf;
     };
     const p = spawn(cmd, args, { cwd: repo, stdio: ["inherit", "pipe", "pipe"], env: { ...process.env, ...env } });
-    p.stdout.on("data", (c: Buffer) => { process.stdout.write(c); keep(c); });
-    p.stderr.on("data", (c: Buffer) => { process.stderr.write(c); keep(c); });
+    p.stdout.on("data", (c: Buffer) => { process.stdout.write(c); keep("out", c); });
+    p.stderr.on("data", (c: Buffer) => { process.stderr.write(c); keep("err", c); });
     p.on("error", (e) => { tail.push(`could not start ${cmd}: ${e.message}`); resolve({ code: -1, tail }); });
-    p.on("close", (code) => resolve({ code, tail }));
+    p.on("close", (code, signal) => {
+      for (const w of ["out", "err"] as const) if (pending[w].length) push(pending[w].toString("utf8"));
+      resolve({ code: code ?? (signal ? `signal ${signal}` : -1) as any, tail });
+    });
   });
 }
 
 // The local toolchain floats (rust-toolchain.toml = nightly, a T11 question); CI pins one. Say so when
 // they differ: a surface or lint difference may then be the toolchain's, not the change's.
-const pin = /RUSTC_COMMIT:\s*(\w+)/.exec(readFileSync(join(repo, ".github", "workflows", "release.yml"), "utf8"))?.[1];
+const pin = /RUSTC_COMMIT:\s*["']?(\w+)/.exec(readFileSync(join(repo, ".github", "workflows", "release.yml"), "utf8"))?.[1];
 const local = spawnSync("rustc", ["-V"], { cwd: repo, encoding: "utf8" }).stdout?.trim() ?? "";
 if (pin && !local.includes(`(${pin} `)) {
   console.log(`⚠ toolchain: this host has "${local}", CI pins rustc ${pin} (release.yml) — a difference here may be the toolchain's`);
@@ -105,7 +122,12 @@ for (const [label, cmd, args, env] of steps) {
     // job's log needs a login — and this project reads CI without `gh` (workspace Tooling rule 9).
     if (process.env.GITHUB_ACTIONS === "true") {
       const esc = (s: string) => s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
-      const why = r.tail.filter((l) => /error|fail|panick|refus|✗|FAILED|warning: unused/i.test(l)).slice(-25);
+      // The lines that say WHY — not "test result: ok. 0 failed" or a passing test whose name says
+      // "refused" (review round 2: those crowded the window out); assert_eq!'s left/right kept.
+      const why = r.tail.filter((l) =>
+        !/^test .* \.\.\. ok$/.test(l) && !/test result: ok\./.test(l) &&
+        /^error|^warning: |panicked|FAILED|^failures|✗|^\s+(left|right):|assertion|could not|cannot|refused|refusing/i.test(l)
+      ).slice(-30);
       const body = (why.length ? why : r.tail.slice(-25)).join("\n").slice(-3500);
       console.log(`::error title=${esc(`gate failed at "${label}" (exit ${r.code})`).replace(/[:,]/g, " ")}::${esc(body)}`);
     }

@@ -41,6 +41,8 @@ interface State {
   otherTags: string[]; // tags on GitHub besides v1.2.3 (matching-refs)
   listed: string[]; // crates crates.io lists at 1.2.3
   draft: boolean; // a hidden DRAFT release for v1.2.3 exists
+  cratesPaging: "" | "repeat" | "404on2"; // the version list's paging misbehaves
+  draftOnPage2: boolean; // 100 other releases, then the draft on page 2
 }
 let state: State;
 let posts: { path: string; body: any }[] = [];
@@ -81,9 +83,20 @@ const server = createServer(async (req, res) => {
   }
   let m: RegExpMatchArray | null;
   if ((m = path.match(/^\/api\/v1\/crates\/([\w-]+)\/versions$/))) {
+    const pg = new URL(req.url ?? "/", "http://x").searchParams.get("page");
+    if (state.cratesPaging === "repeat") return send(res, 200, { versions: [{ num: "0.1.0" }], meta: { next_page: "?page=2" } });
+    if (state.cratesPaging === "404on2") {
+      return pg === "2" ? send(res, 404, {}) : send(res, 200, { versions: [{ num: "0.1.0" }], meta: { next_page: "?page=2" } });
+    }
     return send(res, 200, { versions: state.listed.includes(m[1]) ? [{ num: "1.2.3" }, { num: "1.2.2" }] : [{ num: "1.2.2" }], meta: { next_page: null } });
   }
   if (path === `/repos/${REPO}/releases` && req.method === "GET") {
+    const pg = new URL(req.url ?? "/", "http://x").searchParams.get("page") ?? "1";
+    if (state.draftOnPage2) {
+      return pg === "1"
+        ? send(res, 200, Array.from({ length: 100 }, (_, i) => ({ tag_name: `v0.0.${i}`, draft: false })))
+        : send(res, 200, [{ tag_name: t, draft: true, id: 9 }]);
+    }
     return send(res, 200, state.draft ? [{ tag_name: t, draft: true, id: 9 }] : [{ tag_name: "v1.2.2", draft: false }]);
   }
   if (path === `/repos/${REPO}/git/ref/tags/${t}`) {
@@ -120,6 +133,7 @@ function check(name: string, ok: boolean, detail: string) {
 const base: State = {
   tag: { kind: "lightweight", commit: SHA }, release: false, postStatus: 201, tagObjStatus: 201, refStatus: 201,
   draftBack: false, stall: false, otherTags: ["v1.2.2", "v1.1.0"], listed: [], draft: false,
+  cratesPaging: "", draftOnPage2: false,
 };
 const ALL_CRATES = ["wasmrt-core", "wasmrt-capi", "wasmrt"];
 
@@ -127,9 +141,11 @@ function runScript(env: Record<string, string>, args: string[]): Promise<{ code:
   return new Promise((ok) => {
     const p = spawn(process.execPath, [SCRIPT, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
+    // A script that never ends is a failure, not a hang of the self-test (review round 2).
+    const kill = setTimeout(() => { out += "\n[self-test: killed after 15 s]"; p.kill(); }, 15_000);
     p.stdout.on("data", (c) => (out += c));
     p.stderr.on("data", (c) => (out += c));
-    p.on("close", (code) => ok({ code: code ?? -1, out }));
+    p.on("close", (code) => { clearTimeout(kill); ok({ code: code ?? -1, out }); });
   });
 }
 
@@ -190,6 +206,24 @@ await run("state, tag absent but a higher tag exists: not new, red", { tag: null
 await run("state, tag absent but crates.io lists the version: the tag was lost, red", { tag: null, listed: ["wasmrt-core"] }, {
   code: 1, posts: 0, out: "the tag was lost",
 }, {}, ["state"]);
+// Review round 2.
+const many = Array.from({ length: 150 }, (_, i) => `v0.${i}.0`);
+await run("state with 150 tags (matching-refs ignores paging): new, in few requests", { tag: null, otherTags: many }, {
+  code: 0, posts: 0, out: "state=new",
+}, {}, ["state"]);
+check("150 tags cost ONE tag listing, not a loop", requests < 10, `${requests} requests`);
+await run("state, crates.io paging that repeats forever: red, and it ends", { tag: null, cratesPaging: "repeat" }, {
+  code: 1, posts: 0, out: "pagination did not end",
+}, {}, ["state"]);
+await run("state, crates.io page 2 answers 404: an error, not 'no such crate'", { tag: null, cratesPaging: "404on2" }, {
+  code: 1, posts: 0, out: "HTTP 404 (page 2)",
+}, {}, ["state"]);
+await run("state, a trailing comma in CRATES is harmless", { tag: null }, { code: 0, posts: 0, out: "state=new" }, {
+  CRATES: `${ALL_CRATES.join(",")},`,
+}, ["state"]);
+await run("state, a tag elsewhere still in flight: the message says to wait", {
+  tag: { kind: "lightweight", commit: OTHER }, listed: [],
+}, { code: 1, posts: 0, out: "STILL IN PROGRESS" }, {}, ["state"]);
 
 // ── tag: CI's annotated tag on this commit ──
 const tagged = await run("tag absent: created, read back", { tag: null }, { code: 0, posts: 2, out: "created (annotated" }, {}, ["tag"]);
@@ -252,6 +286,15 @@ await run("annotated tag at another commit: refused", { tag: { kind: "annotated"
 // 2. An existing release: done, no write.
 await run("release already there: exit 0, no POST", { release: true }, { code: 0, posts: 0, out: "already exists" });
 await run("a hidden DRAFT for the tag: refused, no POST", { draft: true }, { code: 1, posts: 0, out: "a DRAFT release" });
+await run("a hidden DRAFT on the second page of releases: refused, no POST", { draftOnPage2: true }, {
+  code: 1, posts: 0, out: "a DRAFT release",
+});
+const CL3 = join(dir, "CHANGELOG3.md");
+writeFileSync(CL3, "## [1.2.3] — a title <!-- note to self -->\n\n- the change\n");
+const titled = await run("an inline comment in the heading stays out of the page title", {}, { code: 0, posts: 1, out: "created" }, {
+  WASMRT_CHANGELOG: CL3,
+});
+check("the title has no comment", titled[0]?.body?.name === "[1.2.3] — a title", JSON.stringify(titled[0]?.body?.name));
 // 3. Create, read back, re-check.
 const made = await run("lightweight tag: created", {}, { code: 0, posts: 1, out: "created by github-actions[bot]" });
 const b = made[0]?.body;

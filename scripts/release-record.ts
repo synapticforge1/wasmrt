@@ -61,6 +61,9 @@ function prose(lines: string[]): string[] {
     if (/^\s*```/.test(l)) { fence = !fence; out.push(""); continue; }
     if (fence) { out.push(""); continue; }
     let kept = "";
+    // An inline code span is text, not markup: a `<!--` inside backticks opens no comment (review
+    // round 2: it hid both review lines). Spans are blanked to spaces so positions stay.
+    if (!comment) l = l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
     while (l.length) {
       if (comment) {
         const end = l.indexOf("-->");
@@ -81,6 +84,13 @@ function prose(lines: string[]): string[] {
 }
 
 const esc = version.replace(/\./g, "\\.");
+
+/** YYYY-MM-DD that names a day that exists (2026-13-45 does not). */
+function realDate(s: string): boolean {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
 
 if (command === "notes") {
   const path = process.env.WASMRT_CHANGELOG || join(repo, "CHANGELOG.md");
@@ -106,8 +116,11 @@ const stop = nextH2 < 0 ? lines.length : nextH2;
 const head = new RegExp(`^### ${esc}(\\s|$)`);
 const start = lines.findIndex((l, i) => i > history && i < stop && head.test(l));
 if (start < 0) fail(`no "### ${version}" entry under "## Release History" in ${path}`);
-if (!new RegExp(`^### ${esc} — \\d{4}-\\d{2}-\\d{2} — \\S`).test(lines[start])) {
-  fail(`the ${version} heading must read "### ${version} — YYYY-MM-DD — <one line>" (got "${lines[start]}")`);
+// The separators may be an em dash, an en dash or a hyphen (review round 2: a plausible "–" or "-"
+// was refused); the date must be a real calendar date.
+const hm = new RegExp(`^### ${esc} [—–-] (\\d{4}-\\d{2}-\\d{2}) [—–-] \\S`).exec(lines[start]);
+if (!hm || !realDate(hm[1])) {
+  fail(`the ${version} heading must read "### ${version} — YYYY-MM-DD — <one line>" with a real date (got "${lines[start]}")`);
 }
 let end = lines.findIndex((l, i) => i > start && /^#{2,3} /.test(l));
 if (end < 0 || end > stop) end = stop;
@@ -115,24 +128,30 @@ const entry = lines.slice(start + 1, end);
 
 const CLAUSE = /Ended by an empty round: round ([1-9]\d*), (\d{4}-\d{2}-\d{2})\.$/;
 const REVIEW_LINE = /\*\*(Security|Hardening) review:\*\*/;
+const NESTED_ITEM = /^\s+(?:[-*+]|\d+[.)])\s/;
 function review(kind: "Security" | "Hardening"): string {
-  const re = new RegExp(`^\\s*(?:[-*]\\s+)?\\*\\*${kind} review:\\*\\*\\s*(.*)$`);
+  // A `-`, `*`, `+` or numbered list marker is fine (review round 2: `+` and `1.` were refused).
+  const re = new RegExp(`^\\s*(?:(?:[-*+]|\\d+[.)])\\s+)?\\*\\*${kind} review:\\*\\*\\s*(.*)$`);
   const at = entry.map((l, i) => (re.test(l) ? i : -1)).filter((i) => i >= 0);
   if (at.length === 0) fail(`the ${version} entry has no "**${kind} review:**" line (required before every release, H35)`);
   if (at.length > 1) fail(`the ${version} entry has ${at.length} "**${kind} review:**" lines; write one`);
-  // The record may wrap: take the line and its indented continuation lines.
+  // The record may wrap: take the line and its indented continuation lines (spaces or a tab) — but
+  // a NESTED list item is not a continuation: the clause must close the review's own line, not hide
+  // in a sub-bullet under "round 2 is owed" (review round 2).
   let text = re.exec(entry[at[0]])![1];
-  for (let i = at[0] + 1; i < entry.length && /^\s{2,}\S/.test(entry[i]) && !REVIEW_LINE.test(entry[i]); i++) {
+  for (let i = at[0] + 1; i < entry.length && /^(\s{2,}|\t)\S/.test(entry[i]) && !NESTED_ITEM.test(entry[i]) && !REVIEW_LINE.test(entry[i]); i++) {
     text += ` ${entry[i].trim()}`;
   }
   text = text.replace(/\s+/g, " ").trim();
-  if (!CLAUSE.test(text)) {
+  const c = CLAUSE.exec(text);
+  if (!c) {
     fail(`the ${version} ${kind.toLowerCase()} review must END with "Ended by an empty round: round <N>, <YYYY-MM-DD>." (got "${text.slice(-120)}")`);
   }
+  if (!realDate(c[2])) fail(`the ${version} ${kind.toLowerCase()} review's date ${c[2]} is not a real date`);
   return text;
 }
 const sec = review("Security");
 const hard = review("Hardening");
-const summary = entry.filter((l) => l.trim() && !REVIEW_LINE.test(l) && !/^\s{2,}\S/.test(l));
+const summary = entry.filter((l) => l.trim() && !REVIEW_LINE.test(l) && !/^(\s{2,}|\t)\S/.test(l));
 if (summary.length === 0) fail(`the ${version} entry has no summary of what changed (U11)`);
 console.log(`cmem/release.md ${version}: summary (${summary.length} lines); security review — ${CLAUSE.exec(sec)![0]}; hardening review — ${CLAUSE.exec(hard)![0]}`);

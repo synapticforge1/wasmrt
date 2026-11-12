@@ -39,27 +39,10 @@ import { join } from "node:path";
 import process from "node:process";
 import { prevTagTests } from "./prev-tag-tests.ts";
 import { CURRENT, type Floor, floorOf, generate, generateFromRef, printDiff, readSnapshot, RELEASED, repo, tools } from "./surface.ts";
+import { cmp, nextVersion, parse, show, type TagState, type V, verifyTarget } from "./versions.ts";
 
 const RANK: Record<Floor, number> = { patch: 0, minor: 1, major: 2 };
 const max = (a: Floor, b: Floor): Floor => (RANK[a] >= RANK[b] ? a : b);
-
-type V = [number, number, number];
-const parse = (s: string): V => {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(s.trim());
-  if (!m) throw new Error(`not a MAJOR.MINOR.PATCH version: ${s}`);
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-};
-const show = (v: V) => v.join(".");
-const cmp = (a: V, b: V) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-function inc(v: V, k: Floor): V {
-  if (k === "major") return [v[0] + 1, 0, 0];
-  if (k === "minor") return [v[0], v[1] + 1, 0];
-  return [v[0], v[1], v[2] + 1];
-}
-/** What kind of step `from → to` is (the highest component that moved). */
-function kindOf(from: V, to: V): Floor {
-  return to[0] !== from[0] ? "major" : to[1] !== from[1] ? "minor" : "patch";
-}
 
 function manifestVersion(): string {
   const m = /\[workspace\.package\][^[]*?\nversion\s*=\s*"([^"]+)"/.exec(readFileSync(join(repo, "Cargo.toml"), "utf8"));
@@ -135,12 +118,13 @@ function breakingRowPresent(released: string): boolean {
   return names.some((n) => new RegExp(`^\\|\\s*${n.replace(/\./g, "\\.")}\\s*\\|`, "m").test(table));
 }
 
-/** Is `target` allowed after `released` given `floor`? Returns the reason it is not, or "". */
-function judge(released: V, target: V, floor: Floor): string {
-  if (cmp(target, released) <= 0) return `${show(target)} is not after the last release ${show(released)}`;
-  const step = kindOf(released, target);
-  const expect = inc(released, step);
-  if (cmp(target, expect) !== 0) return `a ${step} bump from ${show(released)} is ${show(expect)}, not ${show(target)} (lower components reset)`;
+/** Is `target` allowed after `released` given `floor` and the tagged versions above `released`?
+ *  Returns the reason it is not, or "". Which version comes next is `versions.ts`'s `verifyTarget` —
+ *  the SAME arithmetic `nextVersion` gives the bump, burned versions included (review round 2). */
+function judge(released: V, target: V, floor: Floor, tags: Map<string, TagState>): string {
+  const v = verifyTarget(released, target, tags);
+  if ("refuse" in v) return v.refuse;
+  const step = v.level;
   if (RANK[step] >= RANK[floor]) return "";
   // Rule 6: pre-1.0, a minor stands in for a major — with the Breaking Changes row.
   if (released[0] === 0 && floor === "major" && step === "minor") {
@@ -149,19 +133,44 @@ function judge(released: V, target: V, floor: Floor): string {
   return `the floor is ${floor}, and ${show(released)} → ${show(target)} is a ${step}`;
 }
 
-/** Which of the three crates crates.io lists at `version` (each crate's version list, 30 s limit). */
-async function cratesList(version: string): Promise<string[]> {
-  const found: string[] = [];
-  for (const c of ["wasmrt-core", "wasmrt-capi", "wasmrt"]) {
-    const res = await fetch(`https://crates.io/api/v1/crates/${c}/versions`, {
+const CRATES = ["wasmrt-core", "wasmrt-capi", "wasmrt"];
+
+/** Every version crates.io lists for `crate`: all pages, at most 50, never the same page twice (review
+ *  round 2: the earlier reader took page 1 only, so a published version on page 2 read as "burned"). */
+async function cratesVersions(crate: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  const seen = new Set<string>();
+  for (let url: string | null = `https://crates.io/api/v1/crates/${crate}/versions`, page = 1; url; page++) {
+    if (seen.has(url) || page > 50) { console.log(`✗ crates.io's version list for ${crate}: pagination did not end`); process.exit(1); }
+    seen.add(url);
+    const res = await fetch(url, {
       headers: { "User-Agent": "wasmrt bump script (https://github.com/synapticforge1/wasmrt)" },
       signal: AbortSignal.timeout(30_000),
     }).catch((e) => { console.log(`✗ crates.io: ${(e as Error).message}`); process.exit(1); });
-    if (!res.ok) { console.log(`✗ crates.io's version list for ${c}: HTTP ${res.status}`); process.exit(1); }
-    const v = ((await res.json()) as { versions: { num: string }[] }).versions;
-    if (v.some((x) => x.num === version)) found.push(c);
+    if (res.status === 404 && page === 1) return out;
+    if (!res.ok) { console.log(`✗ crates.io's version list for ${crate}: HTTP ${res.status} (page ${page})`); process.exit(1); }
+    const j = (await res.json()) as { versions: { num: string }[]; meta?: { next_page?: string | null } };
+    for (const x of j.versions) out.add(x.num);
+    url = j.meta?.next_page ? `https://crates.io/api/v1/crates/${crate}/versions${j.meta.next_page}` : null;
   }
-  return found;
+  return out;
+}
+
+/** Every vX.Y.Z tag above `released`, after fetching origin's tags (CI makes the tags, so a clone
+ *  that never fetched them would miss a burned one — review round 2), with its state from crates.io. */
+async function tagStates(released: V): Promise<Map<string, TagState>> {
+  const f = spawnSync("git", ["fetch", "-q", "--tags", "origin"], { cwd: repo, encoding: "utf8" });
+  if (f.status !== 0) { console.log(`✗ git fetch --tags origin failed — the tags decide the next version:\n${f.stderr}`); process.exit(1); }
+  const above = spawnSync("git", ["tag", "-l", "v*"], { cwd: repo, encoding: "utf8" }).stdout.split(/\r?\n/)
+    .filter((t) => /^v\d+\.\d+\.\d+$/.test(t)).map((t) => t.slice(1)).filter((t) => cmp(parse(t), released) > 0);
+  const states = new Map<string, TagState>();
+  if (!above.length) return states;
+  const listed = await Promise.all(CRATES.map(cratesVersions));
+  for (const t of above) {
+    const n = listed.filter((s) => s.has(t)).length;
+    states.set(t, n === 0 ? "burned" : n === CRATES.length ? "released" : "partial");
+  }
+  return states;
 }
 
 function floors(released: string): Floor {
@@ -182,7 +191,7 @@ if (import.meta.main) {
     if (!tag) { console.error("usage: bun scripts/bump.ts --verify-tag vX.Y.Z"); process.exit(2); }
     const v = parse(tag), have = parse(manifestVersion());
     if (cmp(v, have) !== 0) { console.log(`✗ tag ${tag} but Cargo.toml says ${show(have)}`); process.exit(1); }
-    const why = judge(parse(released), v, floors(released));
+    const why = judge(parse(released), v, floors(released), await tagStates(parse(released)));
     if (why) { console.log(`✗ ${tag} refused: ${why}`); process.exit(1); }
     console.log(`✓ ${tag} clears the floor since v${released}`);
     process.exit(0);
@@ -204,24 +213,17 @@ if (import.meta.main) {
     }
   }
   const rel = parse(released), have = parse(manifestVersion());
-  const step = inc(rel, kind);
-  // The LEVEL is judged against the last completed release, as always.
-  const why = judge(rel, step, floors(released));
+  // Which version comes next: the level from the last COMPLETED release, burned versions skipped,
+  // partial or released-without-step-9 ones refused (versions.ts — the same answer `--verify-tag`
+  // gives in the gate). If a release run is still in progress for a tagged version, it reads as
+  // burned or partial here: wait for that run first.
+  const tags = await tagStates(rel);
+  const n = nextVersion(rel, kind, tags);
+  if ("refuse" in n) { console.log(`✗ bump ${kind} REFUSED: ${n.refuse}`); process.exit(1); }
+  for (const b of n.skipped) console.log(`burned     v${show(b)} is tagged but on crates.io for none of the crates: skipped (record it in cmem/release.md)`);
+  const target = n.version;
+  const why = judge(rel, target, floors(released), tags);
   if (why) { console.log(`✗ bump ${kind} REFUSED: ${why}`); process.exit(1); }
-  // A target that already has a tag never completed its release (surface/released.txt moves only after
-  // a release completes, step 9): it is BURNED and never reused — the next patch is taken instead
-  // (review round 1; releasing.md step 7). Unless crates.io lists it: then it DID complete and step 9
-  // was skipped, which must be fixed, not stepped over.
-  let target = step;
-  while (git("rev-parse", "-q", "--verify", `refs/tags/v${show(target)}^{commit}`).status === 0) {
-    const published = await cratesList(show(target));
-    if (published.length) {
-      console.log(`✗ v${show(target)} is tagged AND on crates.io (${published.join(", ")}): it is a completed release, but surface/released.txt still says ${released}. Run step 9 first: bun scripts/surface.ts --release-from v${show(target)} (its own commit).`);
-      process.exit(1);
-    }
-    console.log(`burned     v${show(target)} is tagged but was never published: skipped (record it in cmem/release.md)`);
-    target = inc(target, "patch");
-  }
   if (cmp(have, rel) > 0 && cmp(target, have) < 0) {
     console.log(`✗ Cargo.toml is already at ${show(have)}, past ${released}; a ${kind} bump (${show(target)}) would move it backwards`);
     process.exit(1);

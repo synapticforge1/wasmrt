@@ -72,6 +72,7 @@ const timeoutMs = Number(process.env.WASMRT_HTTP_TIMEOUT_MS ?? "30000");
 if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("WASMRT_HTTP_TIMEOUT_MS must be a positive number");
 const UA = "wasmrt release workflow (https://github.com/synapticforge1/wasmrt)";
 const TOKENS = `${registry}/api/v1/trusted_publishing/tokens`;
+const MAX_PAGES = 50;
 
 /** One request under ONE time limit, request to last byte. Never logs headers or bodies. */
 async function call(method: string, url: string, init: { headers?: Record<string, string>; body?: string } = {}) {
@@ -98,10 +99,15 @@ async function call(method: string, url: string, init: { headers?: Record<string
  *  `meta.next_page` (review round 1: unpaginated today, not promised) — never the version's own URL
  *  before it exists (a caching layer may cache the miss; loader-go, 2026-11-10). */
 async function listed(crate: string): Promise<boolean> {
-  for (let url: string | null = `${registry}/api/v1/crates/${crate}/versions`; url;) {
+  // At most MAX_PAGES, never the same page twice (review round 2: a repeating next_page looped
+  // forever); a 404 means "no such crate" on the first page only.
+  const seen = new Set<string>();
+  for (let url: string | null = `${registry}/api/v1/crates/${crate}/versions`, page = 1; url; page++) {
+    if (seen.has(url) || page > MAX_PAGES) fail(`crates.io's version list for ${crate}: pagination did not end (page ${page})`);
+    seen.add(url);
     const r = await call("GET", url);
-    if (r.status === 404) return false; // the crate itself does not exist
-    if (r.status !== 200 || !Array.isArray(r.json?.versions)) fail(`crates.io's version list for ${crate}: HTTP ${r.status} — re-run when crates.io answers`);
+    if (r.status === 404 && page === 1) return false; // the crate itself does not exist
+    if (r.status !== 200 || !Array.isArray(r.json?.versions)) fail(`crates.io's version list for ${crate}: HTTP ${r.status} (page ${page}) — re-run when crates.io answers`);
     if (r.json.versions.some((v: { num: string }) => v.num === version)) return true;
     const next = r.json.meta?.next_page;
     url = next ? `${registry}/api/v1/crates/${crate}/versions${next}` : null;
@@ -121,7 +127,8 @@ async function packagedFrom(crate: string): Promise<string | null> {
   let bytes: Buffer;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA }, signal });
-    if (res.status === 404 || res.status === 403) return null;
+    // Not served yet (404/403) or a transient CDN error (5xx): "not yet", which `readback` retries.
+    if (res.status === 404 || res.status === 403 || res.status >= 500) return null;
     if (!res.ok) fail(`GET ${url}: HTTP ${res.status} — re-run when crates.io answers`);
     bytes = Buffer.from(await res.arrayBuffer());
   } catch (e) {
@@ -134,27 +141,35 @@ async function packagedFrom(crate: string): Promise<string | null> {
   } catch {
     fail(`${crate} ${version}: the downloaded .crate is not gzip`);
   }
+  // Walk EVERY member (review round 2: the first of two vcs members won, while tar extraction keeps
+  // the last), with strict octal sizes (parseInt stopped silently at a bad digit).
   const want = `${crate}-${version}/.cargo_vcs_info.json`;
+  const found: string[] = [];
   for (let off = 0; off + 512 <= tar.length;) {
     const h = tar.subarray(off, off + 512);
     if (h.every((b) => b === 0)) break;
     const str = (a: number, n: number) => h.subarray(a, a + n).toString("utf8").replace(/\0.*$/s, "");
     const name = (str(345, 155) ? `${str(345, 155)}/` : "") + str(0, 100);
-    const size = parseInt(str(124, 12).trim() || "0", 8);
-    if (!Number.isFinite(size) || size < 0) fail(`${crate} ${version}: a malformed tar header in the .crate`);
-    if (name === want) {
-      let sha: unknown;
-      try {
-        sha = JSON.parse(tar.subarray(off + 512, off + 512 + size).toString("utf8"))?.git?.sha1;
-      } catch {
-        fail(`${crate} ${version}: .cargo_vcs_info.json is not JSON`);
-      }
-      if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) fail(`${crate} ${version}: .cargo_vcs_info.json names no commit`);
-      return sha;
-    }
+    const field = str(124, 12).trim();
+    if (!/^[0-7]+$/.test(field)) fail(`${crate} ${version}: a malformed tar size field ("${field}") in the .crate`);
+    const size = parseInt(field, 8);
+    if (off + 512 + size > tar.length) fail(`${crate} ${version}: a tar member runs past the end of the .crate`);
+    if (name === want) found.push(tar.subarray(off + 512, off + 512 + size).toString("utf8"));
     off += 512 + Math.ceil(size / 512) * 512;
   }
-  fail(`${crate} ${version}: the published .crate has no ${want} — its provenance cannot be read`);
+  if (found.length === 0) fail(`${crate} ${version}: the published .crate has no ${want} — its provenance cannot be read`);
+  if (found.length > 1) fail(`${crate} ${version}: the .crate holds ${found.length} copies of ${want} — refusing to choose`);
+  let info: any;
+  try {
+    info = JSON.parse(found[0]);
+  } catch {
+    fail(`${crate} ${version}: .cargo_vcs_info.json is not JSON`);
+  }
+  const sha = info?.git?.sha1;
+  if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) fail(`${crate} ${version}: .cargo_vcs_info.json names no commit`);
+  // `cargo publish --allow-dirty` records `"dirty": true`: the content is not that commit's.
+  if (info.git.dirty === true) fail(`${crate} ${version}: published from a DIRTY tree at ${sha} — its content is not that commit's`);
+  return sha;
 }
 
 if (command === "has") {

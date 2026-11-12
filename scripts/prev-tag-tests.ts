@@ -59,8 +59,16 @@ function manifestVersion(): V {
  *  release IS the previous one (review round 1: "strictly below" ran v2.0.0's tests while v2.0.1 was
  *  current); on a release's own tagged commit (a CI re-run), the one before it. */
 export function previousTag(): string | null {
-  const have = manifestVersion();
+  // First choice: the last COMPLETED release, as surface/released.txt records it — the one bump.ts
+  // tests against — so a burned (tagged, never published) version is never taken (review round 2).
+  const rel = /^# released-as: (\d+\.\d+\.\d+)$/m.exec(readFileSync(join(repo, "surface", "released.txt"), "utf8"))?.[1];
   const head = must("git", ["rev-parse", "HEAD"], repo).trim();
+  if (rel) {
+    const at = run("git", ["rev-parse", "-q", "--verify", `v${rel}^{commit}`], repo);
+    if (at.status === 0 && at.out.trim() !== head) return `v${rel}`;
+  }
+  // Otherwise (no record, or this IS that release's commit — a CI re-run before step 9):
+  const have = manifestVersion();
   const tags = must("git", ["tag", "-l", "v*"], repo).split(/\r?\n/)
     .map((t) => ({ t, v: parse(t) }))
     .filter((x): x is { t: string; v: V } => x.v !== null && /^v\d+\.\d+\.\d+$/.test(x.t) && cmp(x.v, have) <= 0)
@@ -109,7 +117,9 @@ export function prevTagTests(tag: string): { green: boolean; summary: string; fa
     for (const p of CARRIED) rmSync(join(tree, p), { recursive: true, force: true });
     must("git", ["archive", "--format=tar", "-o", join(scratch, "tests.tar"), tag, "--", ...present], repo);
     must("tar", ["-xf", "../tests.tar"], tree);
-    const r = spawnSync("cargo", ["test", "--workspace", "--locked", "--no-fail-fast", "--test", "*"], {
+    // ONE test thread: an older release's tests may carry the shared-temp-file race R1 fixed in HEAD
+    // (v2.0.1's do), and they cannot be changed — run serially so they cannot flake (review round 2).
+    const r = spawnSync("cargo", ["test", "--workspace", "--locked", "--no-fail-fast", "--test", "*", "--", "--test-threads=1"], {
       cwd: tree,
       encoding: "utf8",
       maxBuffer: 1 << 28,

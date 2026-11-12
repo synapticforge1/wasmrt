@@ -86,6 +86,8 @@ function prose(lines: string[]): string[] {
     if (/^\s*```/.test(l)) { fence = !fence; out.push(""); continue; }
     if (fence) { out.push(""); continue; }
     let kept = "";
+    // An inline code span is text, not markup (the same rule as release-record.ts).
+    if (!comment) l = l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
     while (l.length) {
       if (comment) {
         const end = l.indexOf("-->");
@@ -126,7 +128,8 @@ function notesFor(v: string): { title: string; body: string } {
   if (!lines.slice(start + 1, end).join("\n").trim()) {
     fail(`the CHANGELOG section "${pre}" is empty; refusing to publish an empty release`);
   }
-  return { title: raw[start].slice(3).trim(), body: raw.slice(start + 1, end).join("\n").trim() };
+  // The title from the comment-free heading: an inline `<!-- -->` must not show in the page name.
+  return { title: lines[start].slice(3).trim(), body: raw.slice(start + 1, end).join("\n").trim() };
 }
 
 function headers(): Record<string, string> {
@@ -189,19 +192,30 @@ const vparse = (s: string): V | null => {
 };
 const vcmp = (a: V, b: V) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
-/** Every vX.Y.Z tag on GitHub (all pages). */
+/** Every vX.Y.Z tag on GitHub. ONE request: `git/matching-refs` ignores `per_page`/`page` and
+ *  answers every matching ref at once (measured by review round 2 on nodejs/node: 975 refs on
+ *  "page 1" and on "page 2"), so a page loop never ended once a repo had 100 tags. */
 async function tagsOnGitHub(): Promise<string[]> {
+  const r = await call("GET", `/repos/${repo}/git/matching-refs/tags/v`);
+  if (r.status !== 200 || !Array.isArray(r.json)) fail(`listing tags: HTTP ${r.status} ${JSON.stringify(r.json)}`);
   const out: string[] = [];
-  for (let page = 1; ; page++) {
-    const r = await call("GET", `/repos/${repo}/git/matching-refs/tags/v?per_page=100&page=${page}`);
-    if (r.status !== 200 || !Array.isArray(r.json)) fail(`listing tags: HTTP ${r.status} ${JSON.stringify(r.json)}`);
-    for (const ref of r.json) {
-      const name = String(ref?.ref ?? "").replace(/^refs\/tags\//, "");
-      if (vparse(name)) out.push(name);
-    }
-    if (r.json.length < 100) return out;
+  for (const ref of r.json) {
+    const name = String(ref?.ref ?? "").replace(/^refs\/tags\//, "");
+    if (vparse(name)) out.push(name);
   }
+  return out;
 }
+
+/** The crate names in CRATES (comma-separated; empty entries dropped). */
+function crateNames(): string[] {
+  const names = need("CRATES").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!names.length || !names.every((c) => /^[a-z0-9_-]+$/.test(c))) fail(`CRATES "${process.env.CRATES}" is not a list of crate names`);
+  return names;
+}
+
+/** At most this many pages of any paginated list, and never the same page twice: a paging loop
+ *  must end (review round 2: a repeating `next_page` made 50,688 requests in 4 s). */
+const MAX_PAGES = 50;
 
 /** A tag at or above this version that already exists, or null: a NEW release must be above every
  *  tag (review round 1: a re-run of an abandoned version's old run would otherwise tag it). */
@@ -215,12 +229,14 @@ async function notAboveNewest(): Promise<string | null> {
 /** The crates (CRATES, comma-separated) that crates.io does NOT list at this version, read from each
  *  crate's version list (every page). */
 async function cratesMissing(): Promise<string[]> {
-  const crates = need("CRATES").split(",").map((s) => s.trim()).filter(Boolean);
   const registry = (process.env.CRATES_API_URL || "https://crates.io").replace(/\/+$/, "");
   const missing: string[] = [];
-  for (const c of crates) {
+  for (const c of crateNames()) {
     let found = false;
-    for (let url: string | null = `${registry}/api/v1/crates/${c}/versions`; url && !found;) {
+    const seen = new Set<string>();
+    for (let url: string | null = `${registry}/api/v1/crates/${c}/versions`, page = 1; url && !found; page++) {
+      if (seen.has(url) || page > MAX_PAGES) fail(`crates.io version list for ${c}: pagination did not end (page ${page}, ${url})`);
+      seen.add(url);
       let status = 0, json: any = null;
       try {
         const res = await fetch(url, { headers: { "User-Agent": `${repo} release workflow` }, signal: AbortSignal.timeout(timeoutMs) });
@@ -229,8 +245,9 @@ async function cratesMissing(): Promise<string[]> {
       } catch (e) {
         fail(`crates.io version list for ${c}: ${(e as Error).message}`);
       }
-      if (status === 404) break;
-      if (status !== 200 || !Array.isArray(json?.versions)) fail(`crates.io version list for ${c}: HTTP ${status}`);
+      // A 404 means "no such crate" only on the FIRST page; later, it is an error, not an answer.
+      if (status === 404 && page === 1) break;
+      if (status !== 200 || !Array.isArray(json?.versions)) fail(`crates.io version list for ${c}: HTTP ${status} (page ${page})`);
       found = json.versions.some((v: { num: string }) => v.num === version);
       const next = json.meta?.next_page;
       url = next ? `${registry}/api/v1/crates/${c}/versions${next}` : null;
@@ -249,7 +266,7 @@ if (command === "state") {
     const above = await notAboveNewest();
     if (above) fail(`${tag} has no tag, but ${above} exists: this commit's version is not new (an old run re-run?). Nothing to release; bump the version.`);
     const missing = await cratesMissing();
-    const listed = need("CRATES").split(",").filter((c) => !missing.includes(c.trim()));
+    const listed = crateNames().filter((c) => !missing.includes(c));
     if (listed.length) {
       fail(`${tag} has no tag, yet crates.io already lists ${listed.join(", ")} at ${version}: the tag was lost or deleted. Restore it on the commit those crates were published from (owner) — never tag this commit.`);
     }
@@ -262,7 +279,7 @@ if (command === "state") {
     if (page.status !== 200 && page.status !== 404) fail(`GET release ${tag}: HTTP ${page.status}`);
     const missing = await cratesMissing();
     if (page.status === 404 || missing.length) {
-      fail(`${tag} is tagged on ${at}, but its release is UNFINISHED (page: ${page.status === 200 ? "made" : "missing"}; crates.io missing: ${missing.join(", ") || "none"}). Finish it with "Re-run failed jobs" on the release run for ${at} — GitHub keeps a run re-runnable for 30 days — or, if that run cannot succeed, release the next version and record ${tag} in cmem/release.md as unfinished.`);
+      fail(`${tag} is tagged on ${at}, but its release is not finished (page: ${page.status === 200 ? "made" : "missing"}; crates.io missing: ${missing.join(", ") || "none"}). If the release run for ${at} is STILL IN PROGRESS, wait for it to finish, then "Re-run all jobs" here. If that run FAILED, finish it with "Re-run failed jobs" on it — GitHub keeps a run re-runnable for 30 days — or, if it cannot succeed, release the next version and record ${tag} in cmem/release.md as unfinished.`);
     }
     state = "none";
   }
@@ -317,10 +334,15 @@ if (existing.status === 200) {
 }
 if (existing.status !== 404) fail(`GET release ${tag}: HTTP ${existing.status} ${JSON.stringify(existing.json)}`);
 // `releases/tags/{tag}` does not see DRAFTS: a draft for this tag would be a second page (review round 1).
-const list = await call("GET", `/repos/${repo}/releases?per_page=100`);
-if (list.status !== 200 || !Array.isArray(list.json)) fail(`listing releases: HTTP ${list.status}`);
-const draft = list.json.find((r: { tag_name?: string; draft?: boolean }) => r.tag_name === tag && r.draft);
-if (draft) fail(`a DRAFT release for ${tag} exists (${draft.html_url ?? draft.id}): publish or delete it on GitHub (owner), then "Re-run failed jobs"`);
+// Every page (this endpoint does paginate), at most MAX_PAGES, stopping on a short page.
+for (let p = 1; ; p++) {
+  if (p > MAX_PAGES) fail(`listing releases: more than ${MAX_PAGES} pages`);
+  const list = await call("GET", `/repos/${repo}/releases?per_page=100&page=${p}`);
+  if (list.status !== 200 || !Array.isArray(list.json)) fail(`listing releases: HTTP ${list.status}`);
+  const draft = list.json.find((r: { tag_name?: string; draft?: boolean }) => r.tag_name === tag && r.draft);
+  if (draft) fail(`a DRAFT release for ${tag} exists (${draft.html_url ?? draft.id}): publish or delete it on GitHub (owner), then "Re-run failed jobs"`);
+  if (list.json.length < 100) break;
+}
 
 // 3. Create it, then read it back and check the tag again.
 const body = { tag_name: tag, name: notes.title, body: notes.body, draft: false, prerelease: false };

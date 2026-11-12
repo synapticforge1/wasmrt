@@ -1,12 +1,37 @@
 # Known Issues
 
+## 🔎 2026-11-12 — review round 2 for 2.0.2: round 1's fixes reviewed cold
+
+Four fresh reviewers over `c920e1f..46275c0` (security: the GitHub state machine; crates.io and the
+local scripts — hardening: the gate and environments; failure paths and records). CI on `46275c0`
+(run 43292464301) was GREEN on Linux, the other-OS clippy included. Each fix below is tested and
+inverted against `46275c0`'s code unless the row says otherwise.
+
+| # | what (class) | found by | state |
+| --- | --- | --- | --- |
+| R16 | 🔴 **Paging loops that never end** — GitHub's `git/matching-refs` ignores paging and always answers every tag, so the tag loop never ended past 100 tags (100,848 requests in the self-test before its kill timer); a repeating crates.io `next_page` looped too (in `crates-io.ts`, `github-release.ts`, and `bump.ts` read page 1 only); a 404 on a later page read as "no such crate" | round 2 security ×2 | ✅ one tag request; every crates.io reader: ≤ 50 pages, never the same page twice, a later-page 404 is an error; both self-test harnesses now kill a script after 15 s. Old scripts fail the new cases |
+| R17 | 🔴 **🔁 R9 was NOT fixed, and the ledger said "tested"** — `bump.ts` skipped a burned 2.0.2 to 2.0.3, but `--verify-tag` (in the gate) still demanded 2.0.2: the recovery failed exactly when needed. R9 had no test; its rehearsal used `--dry-run` and never reached the gate | round 2 hardening | ✅ the arithmetic is ONE pure module, `versions.ts` (`nextVersion`, `verifyTarget`), used by the bump AND the gate; `check-versions.ts` 18 cases, including "the gate accepts every version the bump produces" over every level × tag situation. Burned / partly published / published-without-step-9 are told apart (all three crates, all pages); tags fetched from origin first; a target below an existing tag refused. 🔁 *R9's row below claimed a test it did not have* |
+| R18 | 🔴 **The push-URL guard was bypassable** — several push URLs (`config --get` read the last; git pushes to all) and `pushInsteadOf`; both pushed `main` elsewhere in the reviewer's scratch run | round 2 security | ✅ every `git remote get-url --push --all origin` URL must equal the fetch URL; both bypasses refused in a scratch rehearsal |
+| R19 | 🔴 **The freestanding wasm32 step built WITH `std`** (default features), so the `no_std` contract was ungated — an ungated `std` use still built | round 2 hardening | ✅ `--no-default-features` for wasm32-unknown-unknown; with a planted `std` use the old step exits 0, the new 101 |
+| R20 | 🟠 **The previous release's tests (v2.0.1's) still carry R1's race** and ran in parallel — Linux CI could flake until 2.0.2 | round 2 hardening | ✅ `--test-threads=1` (70 / 0 in 12 s); "previous" is now `surface/released.txt`'s release, never a burned tag |
+| R21 | 🟠 The bump-commit check tested a line's SHAPE (any line holding the old version), not which line | round 2 security | ✅ exactly the `[workspace.package]` version and the `wasmrt-core` pin; in `Cargo.lock` exactly the three wasmrt packages' lines; git's own diff (`--no-ext-diff --no-textconv`); a third-party `"2.0.1"` line refused |
+| R22 | 🟠 The provenance reader was lenient — the first of two vcs members won (tar keeps the last); a non-octal size parsed silently; a CDN 5xx was fatal at once; `dirty: true` ignored | round 2 security | ✅ all members walked, duplicates refused; strict octal; 5xx retried by `readback`; a dirty crate refused |
+| R23 | 🟡 The review check refused plausible correct entries (an en dash or hyphen, `+` / numbered bullets, a tab wrap, a backticked `<!--`) and passed wrong ones (the clause in a sub-bullet under "round 2 is OWED", impossible dates) | round 2 hardening | ✅ all fixed, 8 new cases (5 refused before, 3 passed before) |
+| R24 | 🟡 A routine push during an in-flight release read "UNFINISHED" as if broken; a trailing comma in `CRATES`; drafts past the first 100 releases; an inline comment in the page title | round 2 security | ✅ the message says "if STILL IN PROGRESS, wait"; names filtered; drafts paged; title from the comment-free heading |
+| R25 | 🟡 The annotation's lines: "0 failed" and passing test names crowded the window, `left:`/`right:` were dropped, lines split across chunks; the toolchain-pin regex broke on quotes; a Linux developer lacked the Windows target | round 2 hardening | ✅ whole lines per stream, a better filter; quotes allowed; `rust-toolchain.toml` declares both OS targets |
+| R26 | 🔴 **A regression R1's fix introduced**: R1 put the process id into fixture paths; `cli_features_are_applied` asserted "no `7` anywhere in the output", and the refusal names the path — so it failed whenever the pid held a 7 (gate run, pid 53976). Class: an assertion over output that carries a path | the gate, after round 2's fixes | ✅ the assertion now checks what it means (a stdout LINE that is `7`); `git grep` found no other digit-substring assertion in the tests R1 touched |
+| N4 | ⚪ NOT fixed: the tag goes to whichever bump commit's `checks` finish FIRST, not the first pushed (it passed the gate and contains the earlier one) | round 2 security | recorded (`releasing.md` step 7 says so); `release.ts` pushes one bump commit, so it needs a second, racing push |
+| N5 | ⚪ NOT fixed: per-pid temp folders accumulate on Windows (24 entries per gate run); a step leaving a background process on stdout would hang the gate (none does; CI's limit caps it); the symlink check is case-sensitive (theoretical: exFAT has no symlinks, CI is case-sensitive) | round 2 hardening, security | cosmetic or theoretical; recorded |
+| N6 | ⚪ NOT fixed, by nature: the review clause is a sentence a person writes — "not run; when run it will read: Ended by an empty round: …" still passes. The check catches mistakes, not a false record | round 2 hardening | the record's honesty is the author's (PROVE, DO NOT ASSUME) |
+
 ## 🔎 2026-11-12 — review round 1 for 2.0.2 (security + hardening, owner-required before a release)
 
 Six fresh reviewers over `v2.0.1..c920e1f` (the CI release flow, no engine change): security S1
 publish path, S2 tag / page / workflow, S3 local release scripts; hardening H1 environments, H2
 failure paths, H3 records vs code. Plus CI itself: run 43287131453, the first `checks` on Linux,
 was red. Every fix below is tested and inverted (the test fails on the code before it) — evidence
-in `releasing.md` § Tooling and `testing.md` (top). Severity as the review standard ranks it.
+in `releasing.md` § Tooling and `testing.md` (top) — 🔁 *except R9, which had no test and did not
+work (found by round 2, R17).* Severity as the review standard ranks it.
 
 | # | what (class) | found by | state |
 | --- | --- | --- | --- |
@@ -18,14 +43,14 @@ in `releasing.md` § Tooling and `testing.md` (top). Severity as the review stan
 | R6 | 🟠 **A token with a newline would inject variables into GITHUB_ENV** | S1 | ✅ printable-ASCII-only or refused; the old script wrote `BASH_ENV=…` in the test |
 | R7 | 🟠 **The bump-commit guard checked names, not content** — any `Cargo.toml` edit rode in unreviewed; the push followed the user's git config (`followTags`, a separate push URL) | S3 | ✅ only the version lines may change (2 + 3), shown when not; `--no-follow-tags` with an explicit refspec; a differing `pushurl` refused |
 | R8 | 🟠 **`prev-tag-tests.ts`**: no carried paths → the whole tag archived over HEAD; a committed symlink parent → the cleanup deleted OUTSIDE its folder (S3 measured it in WSL); the default "previous" was one release too old; a major ran tests it may break | S3, H3 | ✅ refused by name (no paths; a symlink on the way, HEAD or tag); previous = highest tag ≤ version not on HEAD; a major past it skips (default only) |
-| R9 | 🟡 **`bump.ts` after a burned version** failed with "nothing to commit"; the recovery was unwritten | H2 | ✅ a tagged-but-unpublished target is skipped to the next patch ("burned", printed); a tagged-AND-published one refused ("run step 9"); `releasing.md` step 7 writes the 30-day rule and the recovery |
+| R9 | 🟡 **`bump.ts` after a burned version** failed with "nothing to commit"; the recovery was unwritten | H2 | 🔁 **NOT fixed as claimed** (round 2, R17): the bump skipped to the next patch but the gate refused it, and no test existed. Fixed by R17 |
 | R10 | 🟡 **CI failures were unreadable from here** (job logs need a login) | CI | ✅ `gate.ts` posts the failing step + its lines as a public annotation (that is how R1 was found) |
 | R11 | 🟡 Two commits racing for one version; concurrency per commit, not per version (U9) | S2, H2 | ✅ `tag` / `release` / `publish` serialized per version; the loser's message says a re-run cannot help |
 | R12 | 🟡 CHANGELOG section matched by prefix (`## [1.2.3]-rc.1`), comment-only bodies counted, headings in fences | S3 | ✅ exact heading; fences and comments are not body — the same rule in `release-record.ts` and `github-release.ts` |
 | R13 | 🟡 `eol-gate.ts` skipped a non-ASCII path silently (git quotes it) | H1 | ✅ `git ls-files -z`; the old gate PASSED over a CR in `résumé.md`, the new one fails |
 | R14 | 🟡 The gate did not set `CC` on Windows; wasm32 was installed but never built; no job had a time limit; a hidden draft would mean a second page; crates.io's version list was read as one page | H1, S2 | ✅ `CC=gcc` on Windows; both wasm32 targets built; `timeout-minutes` on every job; drafts refused; `next_page` followed |
 | R15 | 🟡 Records stale or contradicting the code (`releasing.md` "not wired", the old tag-job notes, `bump.ts`'s header, a moved § Status pointer, the rustup "signed manifest" overclaim) | H3, S2 | ✅ corrected, dated notes marked superseded |
-| N1 | ⚪ **NOT fixed — owner's decision:** the crates.io token can be minted from ANY branch whose copy of `release.yml` triggers there (crates.io's trusted publisher names repo + workflow, not the branch) | S1 | 🗓️ OWNER: a GitHub environment limited to `main`, named in each crate's trusted publisher, then `environment:` on `publish` |
+| N1 | ⚪ **NOT fixed — owner's decision:** the crates.io token can be minted from ANY branch whose copy of `release.yml` triggers there (crates.io's trusted publisher names repo + workflow, not the branch) | S1 | 🔒 **OWNER, 2026-11-12: "we will keep the current setup"** — the protection stays the `main`-only trigger plus who has write access; no GitHub environment. (The alternative, for the record: an environment limited to `main`, named in each crate's trusted publisher, and `environment:` on `publish`.) |
 | N2 | ⚪ NOT fixed: the local toolchain floats while CI pins `nightly-2026-11-04` | H1 | a T11 question (it moves the sizes); `gate.ts` now WARNS when they differ |
 | N3 | ⚪ NOT fixed: a re-run cannot fix a defect in the release path at a TAGGED commit (it re-runs that commit's files) | S2, H2 | by design of re-runs; made LOUD (R4) and the recovery written (R9) |
 

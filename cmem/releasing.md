@@ -209,7 +209,15 @@ given). Nobody tags or publishes by hand. Each release is recorded in [release.m
      not on crates.io ("burned", printed) to the next patch — and refuses one that IS on crates.io
      (then step 9 was missed: run it first).
    - The per-version concurrency makes two commits racing for one version wait for each other; the
-     second's `tag` job then says another commit took the version (re-running it cannot help).
+     tag goes to whichever one's `checks` finish FIRST (not necessarily the first pushed — review
+     round 2, N4); the other's `tag` job then says another commit took the version (re-running it
+     cannot help). A push while a release run is still going reads "not finished … if STILL IN
+     PROGRESS, wait": wait, then re-run it.
+   - 🔁 **Burned-version arithmetic is `scripts/versions.ts`** (review round 2, R17: the round-1
+     version did not work): `bump.ts` and the gate's `--verify-tag` ask the same `nextVersion`.
+     A tagged version above the last completed release is *burned* (on crates.io for none of the
+     three crates: skipped), *partial* (some: finish its run, refused) or *released* (all three:
+     run step 9 first, refused). `bump.ts` fetches origin's tags first.
 8. **Read back as a user (U10)** — in a scratch folder: `cargo install wasmrt --version X.Y.Z --root
    <scratch>` and run `wasmrt --version`; record it, with the run id and the read-backs, in
    [release.md](release.md).
@@ -275,6 +283,9 @@ whether you meant to or not.
   commit, never cancelled. **Measured `cargo public-api` follows `RUSTUP_TOOLCHAIN`** (2026-11-12: it
   built with the 2026-10-21 nightly when told to), so `surface.ts` now names the ACTIVE toolchain
   (`rustc -V`, identical locally to the old `rustup run nightly`).
+  - 🔒 **Branch scope (owner, 2026-11-12, on review finding N1: "we will keep the current setup"):**
+    the trusted publisher names the repository and `release.yml`, not a branch or an environment;
+    what limits publishing to `main` is the workflow's `main`-only trigger and who can push.
   - 🔑 **Owner setting — SET (owner, 2026-11-12: "trusted publisher is already set"):** on crates.io, a **trusted publisher** on
     EACH of `wasmrt-core`, `wasmrt-capi` and `wasmrt` — repository `synapticforge1/wasmrt`, workflow
     `release.yml`, no environment. Then the workstation's `cargo login` token can be revoked. Without

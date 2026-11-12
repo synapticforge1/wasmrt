@@ -81,22 +81,42 @@ if (files.join(",") !== "Cargo.lock,Cargo.toml") fail(`the bump commit changes $
 // [workspace.package] version and the wasmrt-core pin; Cargo.lock's three crates.
 const prevVersion = /\[workspace\.package\][^[]*?\nversion\s*=\s*"(\d+\.\d+\.\d+)"/.exec(git("show", "HEAD~1:Cargo.toml"))?.[1];
 if (!prevVersion) fail("cannot read the version Cargo.toml had before the bump commit");
+// WHICH lines (review round 2: a shape test let any line holding the old version through): in
+// Cargo.toml, exactly the [workspace.package] `version = "…"` line and the `wasmrt-core = { path … }`
+// pin; in Cargo.lock, exactly the `version = "…"` lines of the three wasmrt packages. The diff is
+// git's own (no external diff, no textconv), with the full hunk context of each lock entry.
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const SHAPES: Record<string, RegExp[]> = {
+  "Cargo.toml": [/^version = "VER"$/, /^wasmrt-core = \{ path = "crates\/wasmrt-core", version = "VER" \}$/],
+  "Cargo.lock": [/^version = "VER"$/],
+};
 for (const [file, want] of [["Cargo.toml", 2], ["Cargo.lock", 3]] as const) {
-  const lines = git("diff", "--no-color", "-U0", "HEAD~1", "HEAD", "--", file).split(/\r?\n/)
-    .filter((l) => /^[-+]/.test(l) && !/^(---|\+\+\+) /.test(l));
-  const removed = lines.filter((l) => l.startsWith("-")).map((l) => l.slice(1));
-  const added = lines.filter((l) => l.startsWith("+")).map((l) => l.slice(1));
-  const moved = removed.map((l) => l.split(`"${prevVersion}"`).join(`"${version}"`));
-  const onlyVersion = removed.length === want && added.length === want &&
-    removed.every((l) => l.includes(`"${prevVersion}"`)) && moved.join("\n") === added.join("\n");
-  if (!onlyVersion) {
-    fail(`the bump commit's ${file} changes more than the version ${prevVersion} → ${version} (want ${want} version lines):\n${lines.join("\n")}`);
+  const diff = git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "HEAD~1", "HEAD", "--", file).split(/\r?\n/);
+  const body = diff.filter((l) => !/^(diff --git|index |--- a\/|\+\+\+ b\/|@@ )/.test(l));
+  const removed = body.filter((l) => l.startsWith("-")).map((l) => l.slice(1));
+  const added = body.filter((l) => l.startsWith("+")).map((l) => l.slice(1));
+  const shape = (v: string) => SHAPES[file].map((r) => new RegExp(r.source.replace("VER", esc(v))));
+  const okLine = (l: string, v: string) => shape(v).some((r) => r.test(l));
+  let ok = removed.length === want && added.length === want &&
+    removed.every((l) => okLine(l, prevVersion)) && added.every((l) => okLine(l, version)) &&
+    removed.map((l) => l.replace(`"${prevVersion}"`, `"${version}"`)).join("\n") === added.join("\n");
+  if (ok && file === "Cargo.lock") {
+    // Each changed lock line must sit right after `name = "<one of the three crates>"`.
+    const names = diff.filter((_, i) => diff[i + 1]?.startsWith("-version = ")).map((l) => /^ name = "([\w-]+)"$/.exec(l)?.[1]);
+    ok = names.length === 3 && ["wasmrt", "wasmrt-capi", "wasmrt-core"].every((n) => names.includes(n));
+  }
+  if (!ok) {
+    fail(`the bump commit's ${file} changes more than the version ${prevVersion} → ${version} (want exactly the ${want} version lines):\n${diff.slice(0, 40).join("\n")}`);
   }
 }
-// The push below goes to origin's URL; a separate push URL would make every guard read one
-// repository and the push write another.
-const pushUrl = run("git", ["config", "--get", "remote.origin.pushurl"]).stdout.trim();
-if (pushUrl && pushUrl !== git("config", "--get", "remote.origin.url")) fail(`remote.origin.pushurl (${pushUrl}) differs from remote.origin.url; refusing`);
+// The push below goes to origin. EVERY push URL git would use — all of them, with `insteadOf` /
+// `pushInsteadOf` rewrites applied — must be origin's fetch URL (review round 2: `config --get`
+// read only the last of several push URLs, and missed pushInsteadOf; both pushed elsewhere).
+const fetchUrl = git("remote", "get-url", "origin");
+const pushUrls = git("remote", "get-url", "--push", "--all", "origin").split(/\r?\n/).filter(Boolean);
+if (!pushUrls.length || pushUrls.some((u) => u !== fetchUrl)) {
+  fail(`origin's push URL(s) [${pushUrls.join(", ")}] differ from its fetch URL ${fetchUrl}; refusing`);
+}
 
 // ── the tag: absent here and on origin ──
 if (run("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`]).status === 0) fail(`tag ${tag} exists locally`);

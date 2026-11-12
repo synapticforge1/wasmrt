@@ -91,8 +91,11 @@ fn calling_an_export_judges_the_module_under_the_configured_features() {
             !out.status.success(),
             "`{args:?}` executed a module that uses a disabled proposal; got:\n{text}"
         );
-        // The measured symptom: it ran and printed the answer.
-        assert!(!text.contains('7'), "the module must not have executed:\n{text}");
+        // The measured symptom: it ran and printed the answer — a stdout LINE that is `7`. Not "a 7
+        // anywhere": the refusal names the fixture's path, which holds the process id since review
+        // round 1, and a pid containing 7 failed this test (gate run, 2026-11-12, pid 53976).
+        let answered = String::from_utf8_lossy(&out.stdout).lines().any(|l| l.trim() == "7");
+        assert!(!answered, "the module must not have executed:\n{text}");
     }
     // …and with the proposal enabled the very same command answers, so the assertions above are
     // about the feature set rather than about a broken command line.

@@ -10,7 +10,7 @@ and § Previous, with every claim as it was written; `CHANGELOG.md` stays the pu
 **Each entry, from the next release on** (checked by `bun scripts/release-record.ts reviews X.Y.Z`,
 in `release.ts` and in CI's `gate.ts --release`, BEFORE CI may tag):
 
-- the heading `### X.Y.Z — <date> — <one line>`;
+- the heading `### X.Y.Z — YYYY-MM-DD — <one line>` (an em dash, en dash or hyphen; a real date);
 - a summary of what changed (prose, at least one line);
 - 🔒 `- **Security review:** …` and `- **Hardening review:** …` — each run to its EMPTY round on
   everything since the last release, each line ENDING with the fixed clause
@@ -18,7 +18,9 @@ in `release.ts` and in CI's `gate.ts --release`, BEFORE CI may tag):
   "security and hardening reviews should be required before every release"; workspace letter H35,
   `review-process.md`). *(A fixed sentence because review round 1, 2026-11-12, showed a phrase search
   passing "did not end with an empty round".)* Text inside ``` fences or `<!-- -->` does not count;
-  the free text before the clause may say anything ("none pending", "S3 not run");
+  the free text before the clause may say anything ("none pending", "S3 not run"); the line may wrap
+  onto indented lines, but the clause must close the review's OWN line — not a nested sub-bullet;
+  the date is `YYYY-MM-DD` and real;
 - after CI: the run id, the tag's commit, the Release page's author, the three crates read back from
   crates.io, and what was checked as a user (U10: `cargo install wasmrt --version X.Y.Z` in a
   scratch folder, then `wasmrt --version`).

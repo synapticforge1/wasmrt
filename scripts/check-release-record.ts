@@ -60,6 +60,19 @@ const no = (name: string, body: string, out: string) => run(name, ["reviews", "1
 ok("reviews: summary and both reviews with the closing clause", `${SUM}\n\n${SEC}\n${HARD}\n`);
 ok("reviews: a wrapped review line counts", `${SUM}\n\n- **Security review:** two rounds (3 findings, then 0).\n  Ended by an empty round: round 2, 2026-11-12.\n${HARD}\n`);
 ok("reviews: 'none pending' and 'not run' in the text are fine", `${SUM}\n\n- **Security review:** every finding fixed, none pending; S3 was not run. Ended by an empty round: round 3, 2026-11-12.\n${HARD}\n`);
+// Review round 2: plausible correct entries that were refused…
+const okHead = (name: string, head: string) => run(name, ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`, "1.2.3", head) }, { code: 0, out: "Ended by an empty round" });
+okHead("reviews: an en dash in the heading", "### 1.2.3 – 2026-11-12 – a test");
+okHead("reviews: a hyphen in the heading", "### 1.2.3 - 2026-11-12 - a test");
+ok("reviews: `+` and numbered list markers", `${SUM}\n\n+ **Security review:** one round. Ended by an empty round: round 1, 2026-11-12.\n1. **Hardening review:** one round. Ended by an empty round: round 1, 2026-11-12.\n`);
+ok("reviews: a tab-indented wrap", `${SUM}\n\n- **Security review:** one round.\n\tEnded by an empty round: round 1, 2026-11-12.\n${HARD}\n`);
+ok("reviews: an inline-code `<!--` in the summary opens no comment", `The parser now handles \`<!--\` in strings.\n\n${SEC}\n${HARD}\n`);
+// …and wrong ones that passed.
+no("reviews: the clause hidden in a sub-bullet under 'round 2 is OWED.'", `${SUM}\n\n- **Security review:** round 2 is OWED.\n  - Ended by an empty round: round 1, 2026-11-12.\n${HARD}\n`, "must END with");
+no("reviews: an impossible date in the clause", `${SUM}\n\n- **Security review:** one round. Ended by an empty round: round 1, 2026-13-45.\n${HARD}\n`, "not a real date");
+run("reviews: an impossible date in the heading", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`, "1.2.3", "### 1.2.3 — 2026-02-30 — x") }, {
+  code: 1, out: "real date",
+});
 no("reviews: no security review", `${SUM}\n\n${HARD}\n`, 'no "**Security review:**" line');
 no("reviews: no hardening review", `${SUM}\n\n${SEC}\n`, 'no "**Hardening review:**" line');
 for (const bad of [

@@ -8,9 +8,10 @@ stays in the topic file named.
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed,
   2026-11-09; not re-run 2026-11-12 — no `src/` change since).
-* **`bun scripts/gate.ts` 15 / 15 green after review round 1's fixes** (2026-11-12, a fresh clone,
-  rustc `708c94ef0`; adds clippy for Linux, both wasm32 builds; **608** tests, 0 failed, 1 ignored;
-  self-tests 44 / 44 / 37; `known-issues.md` R1–R15). *Before the fixes:* 12 / 12
+* **`bun scripts/gate.ts` 16 / 16 green after review round 2's fixes** (2026-11-12, a fresh clone,
+  rustc `708c94ef0`; **608** tests, 0 failed, 1 ignored; self-tests 53 / 50 / 45 / 18 —
+  `check-versions.ts` new; `known-issues.md` R1–R26). CI on Linux green for round 1's fixes (run
+  43292464301). *Round 1: 15 / 15; before it: 12 / 12*
   **606 workspace tests**, 0 failed, 1 ignored; clippy `-D warnings`; `surface.ts --check`, eol,
   definitions, the C-ABI gate (`CC=gcc` on this host); the release-script self-tests 34 / 36 / 22;
   v2.0.0's integration tests against HEAD 70 / 0; the publish dry run. The same list is CI's
