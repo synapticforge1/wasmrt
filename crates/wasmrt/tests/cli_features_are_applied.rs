@@ -14,7 +14,7 @@
 use std::process::{Command, Output};
 
 fn fixture(name: &str, bytes: &[u8]) -> String {
-    let d = std::env::temp_dir().join("wasmrt_features_applied");
+    let d = std::env::temp_dir().join(format!("wasmrt_features_applied_{}", std::process::id()));
     std::fs::create_dir_all(&d).expect("scratch dir");
     let p = d.join(name);
     std::fs::write(&p, bytes).expect("write fixture");

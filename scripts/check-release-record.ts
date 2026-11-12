@@ -1,6 +1,7 @@
 // Self-test of scripts/release-record.ts: each case writes a CHANGELOG.md or a release.md, runs the
 // script as a subprocess, and asserts the exit code and a fragment of the output. Inverted by mutants
-// (cmem/releasing.md § Tooling).
+// (cmem/releasing.md § Tooling). The hostile wordings are the ones review round 1 (2026-11-12) found
+// passing the first version of the check.
 //
 //   bun scripts/check-release-record.ts [path/to/release-record.ts]
 import { spawnSync } from "node:child_process";
@@ -37,53 +38,67 @@ run("notes: the last section, to end of file", ["notes", "1.2.1"], { changelog: 
 run("notes: no section", ["notes", "9.9.9"], { changelog: cl }, { code: 1, out: "no CHANGELOG section" });
 run("notes: an empty section", ["notes", "1.2.2"], { changelog: cl }, { code: 1, out: "is empty" });
 run("notes: a CRLF file reads the same", ["notes", "1.2.3"], { changelog: cl.replace(/\n/g, "\r\n") }, { code: 0, out: "can be made" });
+run("notes: `## [1.2.4]-rc.1` is not 1.2.4's section", ["notes", "1.2.4"], { changelog: "## [1.2.4]-rc.1\n- x\n" }, {
+  code: 1, out: "no CHANGELOG section",
+});
+run("notes: a body that is only an HTML comment is empty", ["notes", "1.2.4"], { changelog: "## [1.2.4]\n<!-- later -->\n\n## [1.2.3]\n- x\n" }, {
+  code: 1, out: "is empty",
+});
+run("notes: a heading inside a code fence is not a heading", ["notes", "1.2.4"], { changelog: "## [1.2.3]\n```\n## [1.2.4]\n- x\n```\n" }, {
+  code: 1, out: "no CHANGELOG section",
+});
 
 // ── reviews ──
-const entry = (body: string, v = "1.2.3") =>
-  `# release.md\n\n## Release History\n\nNewest first.\n\n### ${v} — 2026-11-12\n\n${body}\n### 1.2.2 — 2026-11-01\n\nolder\n\n## Process\n\ntext\n`;
+const entry = (body: string, v = "1.2.3", head = `### ${v} — 2026-11-12 — a test`) =>
+  `# release.md\n\n## Release History\n\nNewest first.\n\n${head}\n\n${body}\n### 1.2.2 — 2026-11-01 — older\n\nolder\n\n## Process\n\ntext\n`;
 const SUM = "A fix to the widget; nothing else changed.";
-const SEC = "- **Security review:** two rounds (3 findings, then 0); ended by an empty round, round 2.";
-const HARD = "- **Hardening review:** one round, an empty round; the reference sets re-run.";
-run("reviews: summary and both reviews ended by an empty round", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`) }, {
-  code: 0, out: "security review — two rounds",
+const SEC = "- **Security review:** two rounds (3 findings, then 0). Ended by an empty round: round 2, 2026-11-12.";
+const HARD = "- **Hardening review:** one round. Ended by an empty round: round 1, 2026-11-12.";
+const ok = (name: string, body: string) => run(name, ["reviews", "1.2.3"], { release: entry(body) }, { code: 0, out: "Ended by an empty round" });
+const no = (name: string, body: string, out: string) => run(name, ["reviews", "1.2.3"], { release: entry(body) }, { code: 1, out });
+
+ok("reviews: summary and both reviews with the closing clause", `${SUM}\n\n${SEC}\n${HARD}\n`);
+ok("reviews: a wrapped review line counts", `${SUM}\n\n- **Security review:** two rounds (3 findings, then 0).\n  Ended by an empty round: round 2, 2026-11-12.\n${HARD}\n`);
+ok("reviews: 'none pending' and 'not run' in the text are fine", `${SUM}\n\n- **Security review:** every finding fixed, none pending; S3 was not run. Ended by an empty round: round 3, 2026-11-12.\n${HARD}\n`);
+no("reviews: no security review", `${SUM}\n\n${HARD}\n`, 'no "**Security review:**" line');
+no("reviews: no hardening review", `${SUM}\n\n${SEC}\n`, 'no "**Hardening review:**" line');
+for (const bad of [
+  "did not end with an empty round; skipped.",
+  "no empty round reached.",
+  "will end with an empty round.",
+  "skipped (the empty round rule waived).",
+  "nonempty round left open.",
+  "round 3 found two defects, so it was not an empty round; round 4 is owed.",
+  "stopped before an empty round (owner).",
+  "Ended by an empty round: round 0, 2026-11-12.",
+  "Ended by an empty round: round 2, 2026-11-12. Round 3 is owed.",
+  "Ended by an empty round: round 2.",
+]) {
+  no(`reviews: refused — "${bad}"`, `${SUM}\n\n- **Security review:** ${bad}\n${HARD}\n`, "must END with");
+}
+no("reviews: a review inside a code fence does not count", `${SUM}\n\n\`\`\`\n${SEC}\n\`\`\`\n${HARD}\n`, 'no "**Security review:**" line');
+no("reviews: a review inside an HTML comment does not count", `${SUM}\n\n<!--\n${SEC}\n-->\n${HARD}\n`, 'no "**Security review:**" line');
+no("reviews: two security lines", `${SUM}\n\n${SEC}\n${SEC}\n${HARD}\n`, "2 \"**Security review:**\" lines");
+no("reviews: no summary", `${SEC}\n${HARD}\n`, "no summary");
+no("reviews: a fence and a comment are not a summary", `\`\`\`\n\`\`\`\n<!-- todo -->\n${SEC}\n${HARD}\n`, "no summary");
+run("reviews: a bare `### 1.2.3` heading is refused", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`, "1.2.3", "### 1.2.3") }, {
+  code: 1, out: "heading must read",
 });
-run("reviews: a wrapped review line counts", ["reviews", "1.2.3"], {
-  release: entry(`${SUM}\n\n- **Security review:** two rounds (3 findings, then 0); ended by\n  an empty round, round 2.\n${HARD}\n`),
-}, { code: 0, out: "hardening review" });
-run("reviews: no security review", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${HARD}\n`) }, {
-  code: 1, out: 'no "**Security review:**" line',
-});
-run("reviews: no hardening review", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n`) }, {
-  code: 1, out: 'no "**Hardening review:**" line',
-});
-run("reviews: a review not ended by an empty round", ["reviews", "1.2.3"], {
-  release: entry(`${SUM}\n\n- **Security review:** round 1 found 3; fixed.\n${HARD}\n`),
-}, { code: 1, out: "does not say it ended with an empty round" });
-run("reviews: a review still pending", ["reviews", "1.2.3"], {
-  release: entry(`${SUM}\n\n- **Security review:** pending — will end with an empty round.\n${HARD}\n`),
-}, { code: 1, out: "is not finished" });
-run("reviews: two security lines", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${SEC}\n${HARD}\n`) }, {
-  code: 1, out: "2 \"**Security review:**\" lines",
-});
-run("reviews: no summary", ["reviews", "1.2.3"], { release: entry(`${SEC}\n${HARD}\n`) }, { code: 1, out: "no summary" });
 run("reviews: no entry for the version", ["reviews", "1.2.4"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`) }, {
   code: 1, out: 'no "### 1.2.4" entry',
-});
-run("reviews: 1.2.3's reviews do not count for 1.2.30", ["reviews", "1.2.30"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`) }, {
-  code: 1, out: 'no "### 1.2.30" entry',
 });
 run("reviews: 1.2.30's reviews do not count for 1.2.3", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`, "1.2.30") }, {
   code: 1, out: 'no "### 1.2.3" entry',
 });
 run("reviews: an entry under a LATER section does not count", ["reviews", "1.2.3"], {
-  release: `# release.md\n\n## Release History\n\n### 1.2.2\n\nolder\n\n## Archive\n\n### 1.2.3\n\n${SUM}\n${SEC}\n${HARD}\n`,
+  release: `# release.md\n\n## Release History\n\n### 1.2.2 — 2026-11-01 — older\n\nolder\n\n## Archive\n\n### 1.2.3 — 2026-11-12 — x\n\n${SUM}\n${SEC}\n${HARD}\n`,
+}, { code: 1, out: 'no "### 1.2.3" entry' });
+run("reviews: an entry BEFORE Release History does not count", ["reviews", "1.2.3"], {
+  release: `# release.md\n\n## Notes\n\n### 1.2.3 — 2026-11-12 — x\n\n${SUM}\n${SEC}\n${HARD}\n\n## Release History\n\n### 1.2.2 — 2026-11-01 — older\n\nolder\n`,
 }, { code: 1, out: 'no "### 1.2.3" entry' });
 run("reviews: an older entry's reviews do not count for a newer one", ["reviews", "1.2.2"], {
   release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`),
 }, { code: 1, out: 'no "**Security review:**" line' });
-run("reviews: an entry outside Release History does not count", ["reviews", "1.2.3"], {
-  release: `# release.md\n\n## Notes\n\n### 1.2.3\n\n${SUM}\n${SEC}\n${HARD}\n\n## Release History\n\n### 1.2.2\n\nolder\n`,
-}, { code: 1, out: 'no "### 1.2.3" entry' });
 run("reviews: no Release History section", ["reviews", "1.2.3"], { release: "# release.md\n\nnothing\n" }, {
   code: 1, out: 'no "## Release History"',
 });

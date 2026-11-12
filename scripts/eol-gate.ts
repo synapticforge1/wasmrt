@@ -18,12 +18,14 @@ import { join } from "node:path";
 const repo = join(import.meta.dirname!, "..");
 const fix = process.argv.includes("--fix");
 
-const tracked = spawnSync("git", ["ls-files"], { cwd: repo, encoding: "utf8" });
+// `-z`: NUL-separated and unquoted. Without it git QUOTES a non-ASCII path ("\303\251.md"), the read
+// below fails, and the file was skipped as "not checked out" — unchecked, silently (review round 1).
+const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: repo, encoding: "utf8" });
 if (tracked.status !== 0) {
   console.error("eol gate: `git ls-files` failed — run this inside the repository");
   process.exit(2);
 }
-const files = (tracked.stdout ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+const files = (tracked.stdout ?? "").split("\0").filter(Boolean);
 
 const hasCr = (b: Buffer) => b.includes(0x0d);
 const isBinary = (b: Buffer) => b.includes(0);

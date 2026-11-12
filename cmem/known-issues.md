@@ -1,5 +1,34 @@
 # Known Issues
 
+## 🔎 2026-11-12 — review round 1 for 2.0.2 (security + hardening, owner-required before a release)
+
+Six fresh reviewers over `v2.0.1..c920e1f` (the CI release flow, no engine change): security S1
+publish path, S2 tag / page / workflow, S3 local release scripts; hardening H1 environments, H2
+failure paths, H3 records vs code. Plus CI itself: run 43287131453, the first `checks` on Linux,
+was red. Every fix below is tested and inverted (the test fails on the code before it) — evidence
+in `releasing.md` § Tooling and `testing.md` (top). Severity as the review standard ranks it.
+
+| # | what (class) | found by | state |
+| --- | --- | --- | --- |
+| R1 | 🔴 **Parallel tests shared fixed temp paths** — `fixture()` in two CLI test files rewrote ONE file per call; one test's truncating write raced another's `wasmrt` read ("NotAModule"). Linux CI only (0 of 50 local runs). Class: every fixed temp path a test WRITES | CI (annotation, run 43288107734) | ✅ a fresh path per call (pid + counter) for the two no-name helpers; every written fixed root gets the pid (cross-process). `no_two_fixtures_share_a_path` ×2, failing on the old helpers |
+| R2 | 🔴 **`clippy -D warnings` failed on Linux only** — `rng.rs` `os_entropy`'s `#[cfg(unix)]` block ended in `return`, needless once Windows' block is compiled out. Class: one gate, two OSes, neither checking the other's `cfg` paths | H1 | ✅ one function per platform; `gate.ts` now runs clippy for the OTHER OS's target too (Linux from Windows, Windows from Linux; `rust-toolchain.toml` declares the Linux target). Old `rng.rs` fails Linux clippy (`needless_return`) |
+| R3 | 🔴 **The review check passed unfinished reviews** — a phrase search for "empty round" accepted "did not end with an empty round", "no empty round reached", reviews inside a code fence or HTML comment, a bare heading | S3, H3 | ✅ a fixed closing clause (`Ended by an empty round: round N, YYYY-MM-DD.`), fences and comments ignored, the heading format enforced; the old word list (which refused "none pending") gone. 37 cases, 18 fail on the old script |
+| R4 | 🔴 **A tagged-but-unfinished release read as "nothing to do"** — `state` said `none` whenever the tag sat on another commit, so a later push went GREEN while the version never reached crates.io (a burned version, unannounced); and a lost tag let an already-published version be tagged again | S2, H2 | ✅ `state` checks what a tag claims: elsewhere → the page AND all three crates, else RED naming the commit and the 30-day re-run; absent → above every tag and not on crates.io, else RED. `tag` re-checks "above every tag". 11 new cases, all failing on the old script |
+| R5 | 🔴 **"Already on crates.io" was presence, not provenance** — a crate at VERSION published from another commit would be skipped and read back green | S1 | ✅ `publish` skips, and `readback` accepts, only a `.crate` whose `.cargo_vcs_info.json` names THIS commit (measured: the real 2.0.1 crates name `c3cb7dd`) |
+| R6 | 🟠 **A token with a newline would inject variables into GITHUB_ENV** | S1 | ✅ printable-ASCII-only or refused; the old script wrote `BASH_ENV=…` in the test |
+| R7 | 🟠 **The bump-commit guard checked names, not content** — any `Cargo.toml` edit rode in unreviewed; the push followed the user's git config (`followTags`, a separate push URL) | S3 | ✅ only the version lines may change (2 + 3), shown when not; `--no-follow-tags` with an explicit refspec; a differing `pushurl` refused |
+| R8 | 🟠 **`prev-tag-tests.ts`**: no carried paths → the whole tag archived over HEAD; a committed symlink parent → the cleanup deleted OUTSIDE its folder (S3 measured it in WSL); the default "previous" was one release too old; a major ran tests it may break | S3, H3 | ✅ refused by name (no paths; a symlink on the way, HEAD or tag); previous = highest tag ≤ version not on HEAD; a major past it skips (default only) |
+| R9 | 🟡 **`bump.ts` after a burned version** failed with "nothing to commit"; the recovery was unwritten | H2 | ✅ a tagged-but-unpublished target is skipped to the next patch ("burned", printed); a tagged-AND-published one refused ("run step 9"); `releasing.md` step 7 writes the 30-day rule and the recovery |
+| R10 | 🟡 **CI failures were unreadable from here** (job logs need a login) | CI | ✅ `gate.ts` posts the failing step + its lines as a public annotation (that is how R1 was found) |
+| R11 | 🟡 Two commits racing for one version; concurrency per commit, not per version (U9) | S2, H2 | ✅ `tag` / `release` / `publish` serialized per version; the loser's message says a re-run cannot help |
+| R12 | 🟡 CHANGELOG section matched by prefix (`## [1.2.3]-rc.1`), comment-only bodies counted, headings in fences | S3 | ✅ exact heading; fences and comments are not body — the same rule in `release-record.ts` and `github-release.ts` |
+| R13 | 🟡 `eol-gate.ts` skipped a non-ASCII path silently (git quotes it) | H1 | ✅ `git ls-files -z`; the old gate PASSED over a CR in `résumé.md`, the new one fails |
+| R14 | 🟡 The gate did not set `CC` on Windows; wasm32 was installed but never built; no job had a time limit; a hidden draft would mean a second page; crates.io's version list was read as one page | H1, S2 | ✅ `CC=gcc` on Windows; both wasm32 targets built; `timeout-minutes` on every job; drafts refused; `next_page` followed |
+| R15 | 🟡 Records stale or contradicting the code (`releasing.md` "not wired", the old tag-job notes, `bump.ts`'s header, a moved § Status pointer, the rustup "signed manifest" overclaim) | H3, S2 | ✅ corrected, dated notes marked superseded |
+| N1 | ⚪ **NOT fixed — owner's decision:** the crates.io token can be minted from ANY branch whose copy of `release.yml` triggers there (crates.io's trusted publisher names repo + workflow, not the branch) | S1 | 🗓️ OWNER: a GitHub environment limited to `main`, named in each crate's trusted publisher, then `environment:` on `publish` |
+| N2 | ⚪ NOT fixed: the local toolchain floats while CI pins `nightly-2026-11-04` | H1 | a T11 question (it moves the sizes); `gate.ts` now WARNS when they differ |
+| N3 | ⚪ NOT fixed: a re-run cannot fix a defect in the release path at a TAGGED commit (it re-runs that commit's files) | S2, H2 | by design of re-runs; made LOUD (R4) and the recovery written (R9) |
+
 ## 🔁 2026-10-24 — the binaryang 2.2.0 re-pin: one wasmrt defect, one wazmrt finding
 
 Matrix: wazmrt's `cmem/probes/d2-matrix.ts`, wasmrt's S1 corpus (140 modules) × D2's 49

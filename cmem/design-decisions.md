@@ -80,7 +80,8 @@ recorded here 2026-10-23.**
   before writing one; when the owner installs a newer Bun, the pins, setup lines and any minimum move at
   this repo's next session. A DATED measurement ("builds under Bun 1.4.3, measured 2026-10-21", above)
   stays as written until that test is re-run. **Measured 2026-11-09:** `bun --version` = 1.4.4 on
-  Windows; `release.yml`'s two `bun-version:` pins are 1.4.4; wasmrt declares no Bun floor; the
+  Windows; `release.yml`'s two `bun-version:` pins are 1.4.4 *(since 2026-11-12: one `BUN_VERSION`
+  1.4.4 + `BUN_SHA256`, used by four install steps)*; wasmrt declares no Bun floor; the
   remaining 1.4.3 lines (`design-decisions.md` §1, `testing.md`, `roadmap.md`) are dated results.
 * 🔒 **Every tagged release gets its GitHub Release page made BY CI (owner, 2026-11-09, H32), only
   for new tags (no backfill).** wasmrt has had this since v0.6.4; H30 changed how, not what.

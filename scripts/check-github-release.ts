@@ -38,6 +38,9 @@ interface State {
   refStatus: number; // what POST git/refs answers
   draftBack: boolean; // the read-back says draft: true
   stall: boolean; // never answer the ref request in time
+  otherTags: string[]; // tags on GitHub besides v1.2.3 (matching-refs)
+  listed: string[]; // crates crates.io lists at 1.2.3
+  draft: boolean; // a hidden DRAFT release for v1.2.3 exists
 }
 let state: State;
 let posts: { path: string; body: any }[] = [];
@@ -72,6 +75,17 @@ const server = createServer(async (req, res) => {
     return send(res, 500, { message: `mock: no route POST ${path}` });
   }
   const tag = posts.length && state.tagAfterPost !== undefined ? state.tagAfterPost : state.tag;
+  if (path === `/repos/${REPO}/git/matching-refs/tags/v`) {
+    const refs = [...state.otherTags, ...(tag ? [t] : [])].map((n) => ({ ref: `refs/tags/${n}` }));
+    return send(res, 200, refs);
+  }
+  let m: RegExpMatchArray | null;
+  if ((m = path.match(/^\/api\/v1\/crates\/([\w-]+)\/versions$/))) {
+    return send(res, 200, { versions: state.listed.includes(m[1]) ? [{ num: "1.2.3" }, { num: "1.2.2" }] : [{ num: "1.2.2" }], meta: { next_page: null } });
+  }
+  if (path === `/repos/${REPO}/releases` && req.method === "GET") {
+    return send(res, 200, state.draft ? [{ tag_name: t, draft: true, id: 9 }] : [{ tag_name: "v1.2.2", draft: false }]);
+  }
   if (path === `/repos/${REPO}/git/ref/tags/${t}`) {
     if (state.stall) await new Promise((r) => setTimeout(r, 5000));
     if (!tag) return send(res, 404, { message: "Not Found" });
@@ -105,8 +119,9 @@ function check(name: string, ok: boolean, detail: string) {
 
 const base: State = {
   tag: { kind: "lightweight", commit: SHA }, release: false, postStatus: 201, tagObjStatus: 201, refStatus: 201,
-  draftBack: false, stall: false,
+  draftBack: false, stall: false, otherTags: ["v1.2.2", "v1.1.0"], listed: [], draft: false,
 };
+const ALL_CRATES = ["wasmrt-core", "wasmrt-capi", "wasmrt"];
 
 function runScript(env: Record<string, string>, args: string[]): Promise<{ code: number; out: string }> {
   return new Promise((ok) => {
@@ -134,6 +149,7 @@ async function run(
     SystemRoot: process.env.SystemRoot ?? "",
     GITHUB_REPOSITORY: REPO, VERSION: "1.2.3", GITHUB_SHA: SHA, GITHUB_TOKEN: "t0ken", GITHUB_OUTPUT: OUTPUT,
     GITHUB_API_URL: `http://127.0.0.1:${port}`, WASMRT_HTTP_TIMEOUT_MS: "1500", WASMRT_CHANGELOG: CHANGELOG,
+    CRATES: ALL_CRATES.join(","), CRATES_API_URL: `http://127.0.0.1:${port}`,
     ...env,
   }, args);
   const reqOk = want.requests === undefined || requests === want.requests;
@@ -156,10 +172,24 @@ check("state=rerun reaches GITHUB_OUTPUT", output() === "state=rerun\n", JSON.st
 await run("state, annotated tag here (peeled): rerun", { tag: { kind: "annotated", commit: SHA } }, {
   code: 0, posts: 0, out: "state=rerun",
 }, {}, ["state"]);
-await run("state, tag elsewhere: none", { tag: { kind: "lightweight", commit: OTHER } }, {
+await run("state, tag elsewhere, release finished: none", { tag: { kind: "lightweight", commit: OTHER }, release: true, listed: ALL_CRATES }, {
   code: 0, posts: 0, out: "state=none",
 }, {}, ["state"]);
 check("state=none reaches GITHUB_OUTPUT", output() === "state=none\n", JSON.stringify(output()));
+// Review round 1: the tag alone is not the release.
+await run("state, tag elsewhere, a crate never published: UNFINISHED, red", {
+  tag: { kind: "lightweight", commit: OTHER }, release: true, listed: ["wasmrt-core", "wasmrt-capi"],
+}, { code: 1, posts: 0, out: "crates.io missing: wasmrt" }, {}, ["state"]);
+check("an unfinished release writes no state", output() === "", JSON.stringify(output()));
+await run("state, tag elsewhere, no page: UNFINISHED, red", { tag: { kind: "lightweight", commit: OTHER }, listed: ALL_CRATES }, {
+  code: 1, posts: 0, out: "page: missing",
+}, {}, ["state"]);
+await run("state, tag absent but a higher tag exists: not new, red", { tag: null, otherTags: ["v1.2.4", "v1.2.2"] }, {
+  code: 1, posts: 0, out: "v1.2.4 exists",
+}, {}, ["state"]);
+await run("state, tag absent but crates.io lists the version: the tag was lost, red", { tag: null, listed: ["wasmrt-core"] }, {
+  code: 1, posts: 0, out: "the tag was lost",
+}, {}, ["state"]);
 
 // ── tag: CI's annotated tag on this commit ──
 const tagged = await run("tag absent: created, read back", { tag: null }, { code: 0, posts: 2, out: "created (annotated" }, {}, ["tag"]);
@@ -171,8 +201,11 @@ check(
   JSON.stringify(tagged),
 );
 await run("tag already on this commit: nothing written", {}, { code: 0, posts: 0, out: "already on" }, {}, ["tag"]);
-await run("tag elsewhere: refused, nothing written", { tag: { kind: "annotated", commit: OTHER } }, {
-  code: 1, posts: 0, out: "never moves",
+await run("tag elsewhere: refused, nothing written, says a re-run cannot help", { tag: { kind: "annotated", commit: OTHER } }, {
+  code: 1, posts: 0, out: "re-running this run cannot succeed",
+}, {}, ["tag"]);
+await run("tag absent but a higher tag exists: refused, nothing written", { tag: null, otherTags: ["v1.3.0"] }, {
+  code: 1, posts: 0, out: "v1.3.0 exists",
 }, {}, ["tag"]);
 await run("tag object refused (422): exit 1, no ref", { tag: null, tagObjStatus: 422 }, {
   code: 1, posts: 1, out: "POST tag object",
@@ -195,6 +228,19 @@ await run("no CHANGELOG section: refused, no request", {}, { code: 1, posts: 0, 
 await run("empty CHANGELOG section: refused, no request", {}, { code: 1, posts: 0, out: "is empty", requests: 0 }, {
   VERSION: "1.2.2",
 });
+// The section rule is release-record.ts's (review round 1, 2026-11-12): exact heading, fences and
+// comments are not body, a heading in a fence is not a heading.
+const CL2 = join(dir, "CHANGELOG2.md");
+writeFileSync(CL2, "## [1.2.4]-rc.1\n- x\n\n## [1.2.5]\n<!-- later -->\n\n## [1.2.3]\n```\n## [1.2.6]\n- y\n```\n- z\n");
+await run("`## [1.2.4]-rc.1` is not 1.2.4's section: no request", {}, { code: 1, posts: 0, out: "no CHANGELOG section", requests: 0 }, {
+  VERSION: "1.2.4", WASMRT_CHANGELOG: CL2,
+});
+await run("a body that is only a comment is empty: no request", {}, { code: 1, posts: 0, out: "is empty", requests: 0 }, {
+  VERSION: "1.2.5", WASMRT_CHANGELOG: CL2,
+});
+await run("a heading inside a code fence is not a heading: no request", {}, { code: 1, posts: 0, out: "no CHANGELOG section", requests: 0 }, {
+  VERSION: "1.2.6", WASMRT_CHANGELOG: CL2,
+});
 // 1. The tag must exist and peel to this run's commit — never a POST otherwise.
 await run("missing tag: refused, no POST", { tag: null }, { code: 1, posts: 0, out: "does not exist on GitHub" });
 await run("tag at another commit: refused, no POST", { tag: { kind: "lightweight", commit: OTHER } }, {
@@ -205,6 +251,7 @@ await run("annotated tag at another commit: refused", { tag: { kind: "annotated"
 });
 // 2. An existing release: done, no write.
 await run("release already there: exit 0, no POST", { release: true }, { code: 0, posts: 0, out: "already exists" });
+await run("a hidden DRAFT for the tag: refused, no POST", { draft: true }, { code: 1, posts: 0, out: "a DRAFT release" });
 // 3. Create, read back, re-check.
 const made = await run("lightweight tag: created", {}, { code: 0, posts: 1, out: "created by github-actions[bot]" });
 const b = made[0]?.body;

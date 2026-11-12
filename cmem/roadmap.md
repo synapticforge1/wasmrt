@@ -295,7 +295,8 @@ repo's `cmem/`.** Ordered by size and by who has to act:
     `cargo semver-checks`, the H23 carry-forward), refuses a bump below it, and applies pre-1.0
     rule 6 only with a README Breaking Changes row. `--verify-tag` is the CI step: the first job of
     `release.yml`, and the release job needs it. ⚠️ **The CI job has not run yet**: it first runs on
-    the next tag push, so it is UNVERIFIED on a runner.
+    the next tag push, so it is UNVERIFIED on a runner. *(Superseded: it ran for 2.0.1; since 2026-11-12
+    it is a step of `gate.ts --release` in CI's `checks` job, `releasing.md` § Tooling.)*
   * **Measured now: the floor since 0.9.0 is MAJOR**, from all three diffs (54 surface lines removed
     or changed, 8 semver lints in `wasmrt-core`, 6 modules accepted → refused). `1.0.0` satisfies it.
     🎓 `cargo semver-checks` rated `wasmrt-capi` a PATCH although the crate added a C function: it

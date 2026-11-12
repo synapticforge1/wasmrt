@@ -71,11 +71,12 @@ re-tag of the last release; an argument that is not a bump kind is refused (exit
 ⚠️ **What the gate cannot see, said plainly:**
 - **Exit codes and parseable output** beyond `--help`'s syntax: the `interop.md` contract rows carry
   those, and the CLI tests pin them.
-- **Rule 3's "previous tag's tests against the new source"**: not wired. wasmrt's integration tests
-  (`crates/*/tests/`) could in principle be run against a newer tree, but `0.9.0 → now` has a major
-  floor, so they cannot be expected to pass until a release follows `1.0.0`. The behaviour
-  equivalent IS wired (step 1c, S1–S3). **Consumers' suites**: rsxtk is the named consumer and does
-  not link wasmrt yet.
+- **Rule 3's "previous tag's tests against the new source"**: 🆕 **wired 2026-11-12** —
+  `scripts/prev-tag-tests.ts` (the last release's `crates/*/tests/` and `tests/` over this tree; run by
+  `bump.ts` for a patch or a minor, and by every `gate.ts`, which skips it when the version is a major
+  past that release). Unit tests live inside `src/` and are not carried. The behaviour equivalent
+  (step 1c, S1–S3) stays. *(Until 2026-11-12 this line said "not wired".)* **Consumers' suites**:
+  rsxtk is the named consumer and does not link wasmrt yet.
 - **Behaviour the S1 corpus does not contain** (§4.13): S3 over wasmtk's corpus is the wide net.
 
 *(Retired 2026-10-24 by H6: the cadence rule that "the patch component stays a single digit" — a
@@ -195,8 +196,20 @@ given). Nobody tags or publishes by hand. Each release is recorded in [release.m
 7. **CI (U5–U8), one run of `.github/workflows/release.yml`:** `checks` (the gate, `--release`) →
    `tag` (CI's annotated `vX.Y.Z` on that commit, read back) → `release` (the page from the tag,
    CHANGELOG title and body) → `publish` (trusted publishing; wasmrt-core → wasmrt-capi → wasmrt,
-   each skipped if crates.io lists it; the token revoked; all three read back, FATAL). A failed job:
-   **"Re-run failed jobs"**, never a new or moved tag (U12).
+   each skipped if crates.io lists it FROM THIS COMMIT — `.cargo_vcs_info.json` inside the `.crate`;
+   the token revoked; all three read back, FATAL, provenance included). A failed job: **"Re-run failed
+   jobs"**, never a new or moved tag (U12).
+   - ⚠️ **Only that run can finish its release** (review round 1, 2026-11-12): a re-run re-runs the
+     tagged commit's own workflow and scripts, and any LATER push of `main` stops at `checks` with
+     "`vX` is tagged on <commit>, but its release is UNFINISHED" — red, never a green "nothing to
+     do". **GitHub keeps a run re-runnable for 30 days.** If the run cannot succeed (a defect in the
+     release path itself, or the 30 days passed), the version is **burned**: record it in
+     [release.md](release.md) as unfinished, fix the cause, and release the NEXT version: `bump.ts`
+     judges the level against the last COMPLETED release, then skips any target that is tagged but
+     not on crates.io ("burned", printed) to the next patch — and refuses one that IS on crates.io
+     (then step 9 was missed: run it first).
+   - The per-version concurrency makes two commits racing for one version wait for each other; the
+     second's `tag` job then says another commit took the version (re-running it cannot help).
 8. **Read back as a user (U10)** — in a scratch folder: `cargo install wasmrt --version X.Y.Z --root
    <scratch>` and run `wasmrt --version`; record it, with the run id and the read-backs, in
    [release.md](release.md).
@@ -281,6 +294,10 @@ whether you meant to or not.
     rehearsable here:** the OIDC exchange (needs a runner and the owner's setting) and the Linux
     `checks` run — the first push of this change measures the latter with `state=none`, before any
     release depends on it.
+  - 🔁 **Review round 1 (2026-11-12) changed this flow** — `known-issues.md` R1–R15: `state` checks
+    what a tag claims (R4), crates are matched by provenance (R5), the review clause is fixed (R3),
+    per-version concurrency (R11), time limits (R14). Self-tests now 44 / 44 / 37; the numbers just
+    below are the first version's.
   - **Self-tests (each inverted by mutants, 2026-11-12):** `check-github-release.ts` 34 checks (+ `state`
     and `tag`; 8 mutants caught), `check-crates-io.ts` 36 (mock registry + OIDC + a fake cargo; 11
     mutants — one survived first, the exchange's status check, until a case gave an error status a

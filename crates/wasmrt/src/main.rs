@@ -1871,7 +1871,7 @@ mod tests {
     /// a string on every platform without needing privileges to set up.
     #[test]
     fn a_pin_db_that_exists_but_cannot_be_read_is_an_error_not_unarmed() {
-        let dir = std::env::temp_dir().join("wasmrt_pin_db_unreadable");
+        let dir = std::env::temp_dir().join(format!("wasmrt_pin_db_unreadable_{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let err = read_db_file(dir.to_str().unwrap()).expect_err("a directory is not a DB");
         assert!(err.contains("cannot read the pin DB"), "{err}");
@@ -1880,7 +1880,7 @@ mod tests {
         let _ = std::fs::remove_file(&missing);
         assert_eq!(read_db_file(missing.to_str().unwrap()), Ok(None), "absent is fine");
 
-        let present = std::env::temp_dir().join("wasmrt_pin_db_present");
+        let present = std::env::temp_dir().join(format!("wasmrt_pin_db_present_{}", std::process::id()));
         std::fs::write(&present, b"# mode: warn\n").expect("write");
         assert_eq!(
             read_db_file(present.to_str().unwrap()),

@@ -8,7 +8,9 @@ stays in the topic file named.
 
 * Spec suite **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed,
   2026-11-09; not re-run 2026-11-12 — no `src/` change since).
-* **`bun scripts/gate.ts` 12 / 12 green** (2026-11-12, a fresh clone, rustc nightly `708c94ef0`):
+* **`bun scripts/gate.ts` 15 / 15 green after review round 1's fixes** (2026-11-12, a fresh clone,
+  rustc `708c94ef0`; adds clippy for Linux, both wasm32 builds; **608** tests, 0 failed, 1 ignored;
+  self-tests 44 / 44 / 37; `known-issues.md` R1–R15). *Before the fixes:* 12 / 12
   **606 workspace tests**, 0 failed, 1 ignored; clippy `-D warnings`; `surface.ts --check`, eol,
   definitions, the C-ABI gate (`CC=gcc` on this host); the release-script self-tests 34 / 36 / 22;
   v2.0.0's integration tests against HEAD 70 / 0; the publish dry run. The same list is CI's
@@ -16,7 +18,7 @@ stays in the topic file named.
 * **2.0.1 RELEASED 2026-11-09 (no code changes since 2.0.0)**: tag `v2.0.1` = release commit `c3cb7dd`;
   all three crates at 2.0.1 on crates.io (verified through its API); Release page by
   `github-actions[bot]` through the REST API (H30, run 42724412211). `surface/released.txt` records it
-  (surface identical to 2.0.0's). The bump floor since: **PATCH**. Detail: `releasing.md` § Status.
+  (surface identical to 2.0.0's). The bump floor since: **PATCH**. Detail: [release.md](release.md) § 2.0.1.
   *(2.0.0: tag `v2.0.0` = `1715139`; 1.0.0: tag `v1.0.0` = `9871fd4`.)*
 * ⚠️ **The toolchain floats** (`rust-toolchain.toml` = `nightly`), so the binary sizes move with
   nothing changed in the source. **Proven 2026-11-09** by building the same tree in the same target

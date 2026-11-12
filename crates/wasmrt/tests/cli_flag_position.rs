@@ -21,10 +21,20 @@ fn wasmrt() -> Command {
     Command::new(env!("CARGO_BIN_EXE_wasmrt"))
 }
 
+/// A FRESH file per call (process id + counter): parallel tests sharing one path raced — one test's
+/// `fs::write` truncating the file while another's `wasmrt` read it (Linux CI, run 43288107734).
 fn fixture() -> std::path::PathBuf {
-    let p = std::env::temp_dir().join("wasmrt_flagpos.wat");
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let p = std::env::temp_dir().join(format!("wasmrt_flagpos_{}_{n}.wat", std::process::id()));
     std::fs::write(&p, br#"(module (func (export "f")))"#).expect("write fixture");
     p
+}
+
+#[test]
+fn no_two_fixtures_share_a_path() {
+    assert_ne!(fixture(), fixture(), "parallel tests must not write the same fixture file");
 }
 
 /// A directory that does not exist, so a *granted* preopen fails loudly and an *ignored* one

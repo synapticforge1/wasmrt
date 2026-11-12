@@ -13,9 +13,12 @@ in `release.ts` and in CI's `gate.ts --release`, BEFORE CI may tag):
 - the heading `### X.Y.Z — <date> — <one line>`;
 - a summary of what changed (prose, at least one line);
 - 🔒 `- **Security review:** …` and `- **Hardening review:** …` — each run to its EMPTY round on
-  everything since the last release, and the line says so ("ended by an empty round"); written
-  BEFORE the bump (owner, 2026-11-12: "security and hardening reviews should be required before every
-  release"; workspace letter H35, `review-process.md`);
+  everything since the last release, each line ENDING with the fixed clause
+  `Ended by an empty round: round <N>, <YYYY-MM-DD>.`; written BEFORE the bump (owner, 2026-11-12:
+  "security and hardening reviews should be required before every release"; workspace letter H35,
+  `review-process.md`). *(A fixed sentence because review round 1, 2026-11-12, showed a phrase search
+  passing "did not end with an empty round".)* Text inside ``` fences or `<!-- -->` does not count;
+  the free text before the clause may say anything ("none pending", "S3 not run");
 - after CI: the run id, the tag's commit, the Release page's author, the three crates read back from
   crates.io, and what was checked as a user (U10: `cargo install wasmrt --version X.Y.Z` in a
   scratch folder, then `wasmrt --version`).

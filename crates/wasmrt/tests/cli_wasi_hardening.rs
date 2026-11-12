@@ -8,7 +8,7 @@
 use std::process::{Command, Output};
 
 fn scratch(name: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join("wasmrt_wasi_hardening").join(name);
+    let d = std::env::temp_dir().join(format!("wasmrt_wasi_hardening_{}", std::process::id())).join(name);
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).expect("scratch dir");
     d

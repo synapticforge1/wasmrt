@@ -5,7 +5,7 @@
 use std::process::{Command, Output};
 
 fn write(name: &str, bytes: &[u8]) -> String {
-    let d = std::env::temp_dir().join("wasmrt_run_modes");
+    let d = std::env::temp_dir().join(format!("wasmrt_run_modes_{}", std::process::id()));
     std::fs::create_dir_all(&d).expect("scratch dir");
     let p = d.join(name);
     std::fs::write(&p, bytes).expect("write fixture");
@@ -117,7 +117,7 @@ fn features_refuses_an_unknown_proposal_but_never_a_feature_set() {
 #[test]
 fn both_preopen_separators_are_accepted() {
     let cmd = write("sep.wat", COMMAND);
-    let d = std::env::temp_dir().join("wasmrt_run_modes");
+    let d = std::env::temp_dir().join(format!("wasmrt_run_modes_{}", std::process::id()));
     let host = d.to_str().unwrap().to_string();
     for spec in [format!("{host}:/guest"), format!("{host}::/guest"), host.clone()] {
         let out = wasmrt(&["wasi", "--dir", &spec, &cmd]);

@@ -30,6 +30,9 @@
 //   ACTIONS_ID_TOKEN_REQUEST_*  set by GitHub when the job has id-token: write (`token`)
 //   GITHUB_ENV / GITHUB_OUTPUT  where `token` hands the token on / where `has` answers
 //   CARGO_REGISTRY_TOKEN        the token, for `publish` and `revoke`
+//   GITHUB_SHA                  this run's commit: `publish` skips, and `readback` accepts, only a crate
+//                               whose `.cargo_vcs_info.json` names it (provenance, review round 1)
+//   CRATES_DL_URL               default https://static.crates.io/crates (the .crate downloads)
 //   WASMRT_CARGO                the cargo command as a JSON argv prefix, default ["cargo"] (self-test)
 //   WASMRT_HTTP_TIMEOUT_MS      the limit for EACH request, request to last byte; default 30000
 //   READBACK_ATTEMPTS / READBACK_INTERVAL_MS   default 30 × 10000 (5 minutes)
@@ -38,6 +41,7 @@
 // `node:` builtins and `fetch` only. Self-test: `bun scripts/check-crates-io.ts`.
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -90,15 +94,67 @@ async function call(method: string, url: string, init: { headers?: Record<string
   }
 }
 
-/** Does crates.io list VERSION of `crate`? Read from the crate's version LIST, never the version's own
- *  URL before it exists (a caching layer may cache the miss; loader-go, 2026-11-10). */
+/** Does crates.io list VERSION of `crate`? Read from the crate's version LIST — every page, following
+ *  `meta.next_page` (review round 1: unpaginated today, not promised) — never the version's own URL
+ *  before it exists (a caching layer may cache the miss; loader-go, 2026-11-10). */
 async function listed(crate: string): Promise<boolean> {
-  const r = await call("GET", `${registry}/api/v1/crates/${crate}/versions`);
-  if (r.status === 404) return false; // the crate itself does not exist
-  if (r.status === 200 && Array.isArray(r.json?.versions)) {
-    return r.json.versions.some((v: { num: string }) => v.num === version);
+  for (let url: string | null = `${registry}/api/v1/crates/${crate}/versions`; url;) {
+    const r = await call("GET", url);
+    if (r.status === 404) return false; // the crate itself does not exist
+    if (r.status !== 200 || !Array.isArray(r.json?.versions)) fail(`crates.io's version list for ${crate}: HTTP ${r.status} — re-run when crates.io answers`);
+    if (r.json.versions.some((v: { num: string }) => v.num === version)) return true;
+    const next = r.json.meta?.next_page;
+    url = next ? `${registry}/api/v1/crates/${crate}/versions${next}` : null;
   }
-  fail(`crates.io's version list for ${crate}: HTTP ${r.status}`);
+  return false;
+}
+
+/** The commit a PUBLISHED crate was packaged from: `.cargo_vcs_info.json` inside the `.crate`
+ *  (`git.sha1`), or null while the download is not served yet. Presence on crates.io is not
+ *  provenance (review round 1): a crate at VERSION published from another commit must not be skipped
+ *  or read back as this release. Measured 2026-11-12: all three 2.0.1 crates name `c3cb7dd`, v2.0.1's
+ *  commit. */
+async function packagedFrom(crate: string): Promise<string | null> {
+  const dl = (process.env.CRATES_DL_URL || "https://static.crates.io/crates").replace(/\/+$/, "");
+  const url = `${dl}/${crate}/${crate}-${version}.crate`;
+  const signal = AbortSignal.timeout(timeoutMs);
+  let bytes: Buffer;
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA }, signal });
+    if (res.status === 404 || res.status === 403) return null;
+    if (!res.ok) fail(`GET ${url}: HTTP ${res.status} — re-run when crates.io answers`);
+    bytes = Buffer.from(await res.arrayBuffer());
+  } catch (e) {
+    if (signal.aborted) fail(`GET ${url}: no answer within ${timeoutMs} ms`);
+    fail(`GET ${url}: ${(e as Error).message}`);
+  }
+  let tar: Buffer;
+  try {
+    tar = gunzipSync(bytes);
+  } catch {
+    fail(`${crate} ${version}: the downloaded .crate is not gzip`);
+  }
+  const want = `${crate}-${version}/.cargo_vcs_info.json`;
+  for (let off = 0; off + 512 <= tar.length;) {
+    const h = tar.subarray(off, off + 512);
+    if (h.every((b) => b === 0)) break;
+    const str = (a: number, n: number) => h.subarray(a, a + n).toString("utf8").replace(/\0.*$/s, "");
+    const name = (str(345, 155) ? `${str(345, 155)}/` : "") + str(0, 100);
+    const size = parseInt(str(124, 12).trim() || "0", 8);
+    if (!Number.isFinite(size) || size < 0) fail(`${crate} ${version}: a malformed tar header in the .crate`);
+    if (name === want) {
+      let sha: unknown;
+      try {
+        sha = JSON.parse(tar.subarray(off + 512, off + 512 + size).toString("utf8"))?.git?.sha1;
+      } catch {
+        fail(`${crate} ${version}: .cargo_vcs_info.json is not JSON`);
+      }
+      if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) fail(`${crate} ${version}: .cargo_vcs_info.json names no commit`);
+      return sha;
+    }
+    off += 512 + Math.ceil(size / 512) * 512;
+  }
+  fail(`${crate} ${version}: the published .crate has no ${want} — its provenance cannot be read`);
 }
 
 if (command === "has") {
@@ -129,6 +185,9 @@ if (command === "token") {
     const detail = Array.isArray(ex.json?.errors) ? ex.json.errors.map((e: { detail?: string }) => e.detail).join("; ") : "";
     fail(`crates.io refused the trusted-publishing exchange: HTTP ${ex.status}${detail ? ` — ${detail}` : ""} (is a trusted publisher for synapticforge1/wasmrt and release.yml configured on each crate?)`);
   }
+  // The token goes into GITHUB_ENV, one `NAME=value` per line: a newline in it would set other
+  // variables for every later step (review round 1). Printable ASCII, no spaces, or refuse.
+  if (!/^[\x21-\x7e]+$/.test(token)) fail("crates.io returned a token with whitespace or control characters; refusing to hand it on");
   console.log(`::add-mask::${token}`);
   appendFileSync(envFile, `CARGO_REGISTRY_TOKEN=${token}\n`);
   console.log(`crates.io issued a trusted-publishing token (audience ${audience}); handed to the next steps, masked`);
@@ -146,9 +205,16 @@ if (command === "publish") {
   if (!Array.isArray(cargo) || !cargo.length || !cargo.every((s) => typeof s === "string")) {
     fail("WASMRT_CARGO is not a JSON array of strings");
   }
+  const sha = need("GITHUB_SHA");
   for (const c of CRATES) {
     if (await listed(c)) {
-      console.log(`${c} ${version}: already on crates.io, skipped`);
+      // Skipped only when it is THIS commit's crate (a re-run finishing a partial publish).
+      const from = await packagedFrom(c);
+      if (from === null) fail(`${c} ${version} is listed but its .crate is not served yet — "Re-run failed jobs" in a few minutes`);
+      if (from !== sha) {
+        fail(`${c} ${version} is already on crates.io, published from ${from}, not this commit ${sha}: the version was taken elsewhere. Nothing here can finish it — bump the version (owner).`);
+      }
+      console.log(`${c} ${version}: already on crates.io from this commit, skipped`);
       continue;
     }
     console.log(`== cargo publish -p ${c} --locked --no-verify`);
@@ -156,7 +222,9 @@ if (command === "publish") {
       cwd: join(import.meta.dirname!, ".."),
       stdio: "inherit",
     });
-    if (r.status !== 0) fail(`cargo publish -p ${c} failed (exit ${r.status}); the crates after it were not attempted`);
+    if (r.status !== 0) {
+      fail(`cargo publish -p ${c} failed (exit ${r.status}); the crates after it were not attempted. Read cargo's message above; if it was transient, "Re-run failed jobs" (published crates are skipped).`);
+    }
   }
   console.log(`published (or found) all of ${CRATES.join(", ")} at ${version}`);
   process.exit(0);
@@ -170,7 +238,9 @@ if (command === "revoke") {
   process.exit(0);
 }
 
-// readback — FATAL unless crates.io serves VERSION of every crate, none yanked
+// readback — FATAL unless crates.io serves VERSION of every crate, none yanked, each packaged from
+// THIS commit
+const sha = need("GITHUB_SHA");
 const attempts = Number(process.env.READBACK_ATTEMPTS ?? "30");
 const interval = Number(process.env.READBACK_INTERVAL_MS ?? "10000");
 for (const c of CRATES) {
@@ -180,15 +250,19 @@ for (const c of CRATES) {
     const r = await call("GET", `${registry}/api/v1/crates/${c}/${version}`);
     const v = r.json?.version;
     if (r.status === 200 && v?.num === version) {
-      if (v.yanked) fail(`crates.io serves ${c} ${version} but it is YANKED`);
-      console.log(`crates.io serves ${c} ${version} (not yanked), attempt ${i}`);
-      served = true;
-      break;
-    }
-    last = `HTTP ${r.status}`;
+      if (v.yanked) fail(`crates.io serves ${c} ${version} but it is YANKED — the owner decides what to do; a re-run cannot fix it`);
+      const from = await packagedFrom(c);
+      if (from !== null) {
+        if (from !== sha) fail(`crates.io serves ${c} ${version} packaged from ${from}, not this commit ${sha} — not this release (owner)`);
+        console.log(`crates.io serves ${c} ${version} (not yanked, packaged from this commit), attempt ${i}`);
+        served = true;
+        break;
+      }
+      last = "listed, .crate not served yet";
+    } else last = `HTTP ${r.status}`;
     console.log(`${c}: attempt ${i}/${attempts}: ${last}`);
     if (i < attempts) await new Promise((resolve) => setTimeout(resolve, interval));
   }
-  if (!served) fail(`crates.io does not serve ${c} ${version} after ${attempts} attempts (${last})`);
+  if (!served) fail(`crates.io does not serve ${c} ${version} after ${attempts} attempts (${last}) — if it is only slow, "Re-run failed jobs" (the publish step skips what is there)`);
 }
-console.log(`read back: ${CRATES.join(", ")} ${version}, none yanked`);
+console.log(`read back: ${CRATES.join(", ")} ${version}, none yanked, all packaged from ${sha}`);

@@ -39,7 +39,7 @@ contest's own measurement, not a review kind (`roadmap.md`).
     (`bun scripts/behaviour-s2.ts`: 0 regressed);
   - S1, the behaviour corpus (`tests/behaviour/`, 38 configurations) in every `cargo test`, and the
     floor against the last tag (`bun scripts/carry-forward.ts <tag> WORKTREE`: 0 / 0);
-  - `cargo test --workspace`: **606 / 0 / 1** (2026-11-12);
+  - `cargo test --workspace`: **608 / 0 / 1** (2026-11-12, after review round 1);
   - the shared definitions: `bun scripts/definitions.ts --check` and the D2 judgements — **0 of
     6,860** differ from binaryang 2.2.0;
   - the swappability contract: wazmrt ⇄ wasmrt by RUNNING both (`interop.md`; 0 of 2,401 and 0 of

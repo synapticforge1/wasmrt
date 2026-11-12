@@ -100,7 +100,7 @@ fn wast_and_wat_have_no_guest_argv_so_every_position_is_checked() {
     assert_eq!(wasmrt(&["wast", &s, "-v"]).status.code(), Some(0), "`-v` is recognised");
 
     let w = write_temp("wasmrt_uf_wat.wat", MODULE);
-    let out = std::env::temp_dir().join("wasmrt_uf_wat_out.wasm");
+    let out = std::env::temp_dir().join(format!("wasmrt_uf_wat_out_{}.wasm", std::process::id()));
     assert_unknown_flag(&["wat", "--bogus", &w], "--bogus");
     assert_unknown_flag(&["wat", &w, "--bogus"], "--bogus");
     assert_eq!(

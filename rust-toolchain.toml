@@ -3,4 +3,7 @@
 [toolchain]
 channel = "nightly"
 components = ["clippy", "rustfmt"]
-targets = ["wasm32-unknown-unknown", "wasm32-wasip1"]
+# x86_64-unknown-linux-gnu: `scripts/gate.ts` type-checks (clippy) the Linux `cfg` paths on Windows
+# too, because CI runs Linux and the owner runs Windows (2026-11-12). Its standard library only; no
+# linker is needed for a check.
+targets = ["wasm32-unknown-unknown", "wasm32-wasip1", "x86_64-unknown-linux-gnu"]

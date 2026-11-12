@@ -18,7 +18,11 @@ committed tree, `cargo test --test '*'`; 70 tests in 15 binaries), and `cargo pu
 and the release's entry in `release.md` with both reviews (`release-record.ts`). Each step's exit code
 is read; the first failure stops it by name (inverted: a CR in a tracked file stops it at `eol`).
 **Measured 2026-11-12 in a fresh clone:** 12 / 12 green, `cargo test` 606 / 0 / 1 in 19 binaries; with
-`--release` at a rehearsal 2.0.2, 15 / 15. Not in it, by nature: S2 and S3 (they need wasmtk's
+`--release` at a rehearsal 2.0.2, 15 / 15. 🔁 **After review round 1 (same day): 15 steps** — added
+clippy for the OTHER OS's target (Linux from Windows, Windows from Linux: CI runs Linux, the owner
+Windows, and each compiles out the other's `#[cfg]` code; `known-issues.md` R2) and `wasmrt-core` for
+both wasm32 targets (the dual-target contract, never gated before; R14) — **15 / 15 green, 608 / 0 / 1**
+(two new tests, R1); self-tests now 44 / 44 / 37; `--release` adds 3 (18). Not in it, by nature: S2 and S3 (they need wasmtk's
 corpus, a sibling checkout) and Miri — local, in `releasing.md`'s checklist. ⚠️ **CI runs it on Linux,
 and `cmem/` records no `cargo test` run on Linux before** (grep, 2026-11-12; the old tag workflow ran
 only the floor there); the first push measures it (`checks` only, no release).
@@ -1196,7 +1200,8 @@ Two new gates, both Bun scripts, neither inside `cargo test` (they shell out to 
 
 Both were inverted (`releasing.md` lists the 17 reader mutations and the end-to-end refusals).
 ⚠️ `--verify-tag` also runs as the first job of `release.yml`; that job has **not run on a runner
-yet**. Its first run is the next tag.
+yet**. Its first run is the next tag. *(Superseded: it ran on Actions for 2.0.1, run 42724412211; since
+2026-11-12 it is a step of `gate.ts --release` in the `checks` job, on a push of `main` — top section.)*
 
 ### 🆕 Behaviour carry-forward, letter H23 (2026-10-23, late night) — **601 workspace tests**
 

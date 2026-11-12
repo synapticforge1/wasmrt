@@ -75,6 +75,28 @@ const subject = git("log", "-1", "--format=%s", "HEAD");
 if (subject !== `bump to ${tag}`) fail(`the commit on top is "${subject}", not "bump to ${tag}" (run bun scripts/bump.ts <level>)`);
 const files = git("show", "--name-only", "--format=", "HEAD").split(/\r?\n/).filter(Boolean).sort();
 if (files.join(",") !== "Cargo.lock,Cargo.toml") fail(`the bump commit changes ${files.join(", ")}, not only Cargo.toml + Cargo.lock`);
+// …and in those two files, ONLY the version moves (review round 1: a name check let any edit of
+// Cargo.toml — a dependency, a [patch], a profile — ride in unreviewed). Each changed line must be a
+// line that was there before with the old version replaced by the new one: Cargo.toml's
+// [workspace.package] version and the wasmrt-core pin; Cargo.lock's three crates.
+const prevVersion = /\[workspace\.package\][^[]*?\nversion\s*=\s*"(\d+\.\d+\.\d+)"/.exec(git("show", "HEAD~1:Cargo.toml"))?.[1];
+if (!prevVersion) fail("cannot read the version Cargo.toml had before the bump commit");
+for (const [file, want] of [["Cargo.toml", 2], ["Cargo.lock", 3]] as const) {
+  const lines = git("diff", "--no-color", "-U0", "HEAD~1", "HEAD", "--", file).split(/\r?\n/)
+    .filter((l) => /^[-+]/.test(l) && !/^(---|\+\+\+) /.test(l));
+  const removed = lines.filter((l) => l.startsWith("-")).map((l) => l.slice(1));
+  const added = lines.filter((l) => l.startsWith("+")).map((l) => l.slice(1));
+  const moved = removed.map((l) => l.split(`"${prevVersion}"`).join(`"${version}"`));
+  const onlyVersion = removed.length === want && added.length === want &&
+    removed.every((l) => l.includes(`"${prevVersion}"`)) && moved.join("\n") === added.join("\n");
+  if (!onlyVersion) {
+    fail(`the bump commit's ${file} changes more than the version ${prevVersion} → ${version} (want ${want} version lines):\n${lines.join("\n")}`);
+  }
+}
+// The push below goes to origin's URL; a separate push URL would make every guard read one
+// repository and the push write another.
+const pushUrl = run("git", ["config", "--get", "remote.origin.pushurl"]).stdout.trim();
+if (pushUrl && pushUrl !== git("config", "--get", "remote.origin.url")) fail(`remote.origin.pushurl (${pushUrl}) differs from remote.origin.url; refusing`);
 
 // ── the tag: absent here and on origin ──
 if (run("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`]).status === 0) fail(`tag ${tag} exists locally`);
@@ -111,7 +133,9 @@ if (dryRun) {
 }
 
 // ── ONE push of main, read back; no tag ──
-const push = spawnSync("git", ["push", "origin", "main"], { cwd: repo, stdio: "inherit" });
+// An explicit refspec and --no-follow-tags: the user's git config (push.followTags, push.default)
+// must not add tags or other branches to this push (review round 1).
+const push = spawnSync("git", ["push", "--no-follow-tags", "origin", "refs/heads/main:refs/heads/main"], { cwd: repo, stdio: "inherit" });
 if (push.status !== 0) {
   console.error(`release: git push origin main failed (exit ${push.status})`);
   process.exit(1);

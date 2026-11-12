@@ -135,33 +135,36 @@ impl ChaCha20Rng {
 /// Uses only what `std` already exposes, so there is no dependency and no `unsafe`: on
 /// Unix-likes `/dev/urandom` is the documented interface; on Windows it comes from the OS
 /// via `std`'s own `RandomState` hasher keys, which are seeded from `BCryptGenRandom`.
-#[cfg(feature = "std")]
+///
+/// One function per platform, selected by `cfg`: a single body with `#[cfg]` blocks left a
+/// `return` that only Linux saw as needless, so `clippy -D warnings` failed on Linux CI alone
+/// (review round 1, 2026-11-12) — each platform's body must read correctly on its own.
+#[cfg(all(feature = "std", unix))]
 fn os_entropy(dst: &mut [u8]) -> Option<()> {
-    #[cfg(unix)]
-    {
-        use std::io::Read;
-        let mut f = std::fs::File::open("/dev/urandom").ok()?;
-        f.read_exact(dst).ok()?;
-        return Some(());
+    use std::io::Read;
+    let mut f = std::fs::File::open("/dev/urandom").ok()?;
+    f.read_exact(dst).ok()?;
+    Some(())
+}
+
+/// Read `dst.len()` bytes from the OS entropy source (see the unix twin above). `RandomState` is
+/// seeded from the OS CSPRNG (`BCryptGenRandom` on Windows) and is re-keyed per instance. Hashing a
+/// counter under a fresh key per 8 bytes gives an OS-seeded, non-predictable fill without a
+/// dependency or `unsafe`.
+#[cfg(all(feature = "std", not(unix)))]
+fn os_entropy(dst: &mut [u8]) -> Option<()> {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let mut i = 0usize;
+    while i < dst.len() {
+        let mut h = RandomState::new().build_hasher();
+        h.write_usize(i);
+        let v = h.finish().to_le_bytes();
+        let take = core::cmp::min(8, dst.len() - i);
+        dst[i..i + take].copy_from_slice(&v[..take]);
+        i += take;
     }
-    #[cfg(not(unix))]
-    {
-        // `RandomState` is seeded from the OS CSPRNG (`BCryptGenRandom` on Windows) and is
-        // re-keyed per instance. Hashing a counter under a fresh key per 8 bytes gives an
-        // OS-seeded, non-predictable fill without a dependency or `unsafe`.
-        use std::collections::hash_map::RandomState;
-        use std::hash::{BuildHasher, Hasher};
-        let mut i = 0usize;
-        while i < dst.len() {
-            let mut h = RandomState::new().build_hasher();
-            h.write_usize(i);
-            let v = h.finish().to_le_bytes();
-            let take = core::cmp::min(8, dst.len() - i);
-            dst[i..i + take].copy_from_slice(&v[..take]);
-            i += take;
-        }
-        Some(())
-    }
+    Some(())
 }
 
 #[cfg(test)]

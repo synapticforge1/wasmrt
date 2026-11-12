@@ -10,6 +10,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
+import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -40,9 +41,38 @@ interface State {
   listStatus: number; // what the version list answers (200 normally)
   exchange: number; // what the trusted-publishing exchange answers
   tokenOnError: boolean; // a non-200 exchange answer still carries a token
+  token: string; // the token a 200 exchange carries
   revoke: number; // what DELETE answers
   oidc: number; // what GitHub's OIDC endpoint answers
   stall: boolean;
+  from: Record<string, string>; // crate -> the commit its .crate names (default SHA, this run's)
+  noDownload: string[]; // listed crates whose .crate is not served yet
+  paged: boolean; // the version list puts V on a SECOND page
+}
+
+const SHA = "a".repeat(40);
+const OTHER = "b".repeat(40);
+
+/** A minimal ustar archive holding `<crate>-<V>/.cargo_vcs_info.json` naming `sha`, gzipped — the
+ *  shape of a real .crate (measured on wasmrt-core 2.0.1). */
+function crateFile(crate: string, sha: string): Buffer {
+  const body = Buffer.from(JSON.stringify({ git: { sha1: sha }, path_in_vcs: `crates/${crate}` }, null, 2));
+  const header = Buffer.alloc(512);
+  header.write(`${crate}-${V}/.cargo_vcs_info.json`, 0, "utf8");
+  header.write("0000644\0", 100);
+  header.write("0000000\0", 108);
+  header.write("0000000\0", 116);
+  header.write(body.length.toString(8).padStart(11, "0") + "\0", 124);
+  header.write("00000000000\0", 136);
+  header.write("        ", 148);
+  header.write("0", 156);
+  header.write("ustar\0", 257);
+  header.write("00", 263);
+  let sum = 0;
+  for (const b of header) sum += b;
+  header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148);
+  const pad = Buffer.alloc((512 - (body.length % 512)) % 512);
+  return gzipSync(Buffer.concat([header, body, pad, Buffer.alloc(1024)]));
 }
 let state: State;
 let audience = "";
@@ -70,13 +100,19 @@ const server = createServer(async (req, res) => {
     state.listed.push(m[1]);
     return send(res, 200, {});
   }
+  if ((m = p.match(/^\/dl\/([\w-]+)\/([\w-]+)-([\d.]+)\.crate$/))) {
+    const c = m[1];
+    if (!state.listed.includes(c) || state.noDownload.includes(c) || m[3] !== V) return send(res, 403, {});
+    res.writeHead(200, { "Content-Type": "application/gzip" });
+    return res.end(crateFile(c, state.from[c] ?? SHA));
+  }
   if (p === "/oidc") {
     audience = url.searchParams.get("audience") ?? "";
     return state.oidc === 200 ? send(res, 200, { value: "the-jwt" }) : send(res, state.oidc, {});
   }
   if (p === "/api/v1/trusted_publishing/tokens" && req.method === "POST") {
     jwtSent = JSON.parse(await readBody(req)).jwt;
-    if (state.exchange === 200) return send(res, 200, { token: "cio_secret" });
+    if (state.exchange === 200) return send(res, 200, { token: state.token });
     // An error status that still carries a token (a proxy, a partial failure) is still a refusal.
     return send(res, state.exchange, state.tokenOnError
       ? { token: "cio_secret", errors: [{ detail: "upstream error" }] }
@@ -89,7 +125,10 @@ const server = createServer(async (req, res) => {
   if ((m = p.match(/^\/api\/v1\/crates\/([\w-]+)\/versions$/))) {
     if (state.listStatus !== 200) return send(res, state.listStatus, {});
     const has = state.listed.includes(m[1]);
-    return send(res, 200, { versions: has ? [{ num: "1.0.0" }, { num: V }] : [{ num: "1.0.0" }] });
+    if (state.paged && url.searchParams.get("page") !== "2") {
+      return send(res, 200, { versions: [{ num: "1.0.1" }], meta: { next_page: "?page=2" } });
+    }
+    return send(res, 200, { versions: has ? [{ num: "1.0.0" }, { num: V }] : [{ num: "1.0.0" }], meta: { next_page: null } });
   }
   if ((m = p.match(/^\/api\/v1\/crates\/([\w-]+)\/([\d.]+)$/))) {
     const c = m[1];
@@ -112,8 +151,8 @@ function check(name: string, ok: boolean, detail: string) {
 }
 
 const base: State = {
-  listed: [], yanked: [], hidden: [], listStatus: 200, exchange: 200, tokenOnError: false, revoke: 204, oidc: 200,
-  stall: false,
+  listed: [], yanked: [], hidden: [], listStatus: 200, exchange: 200, tokenOnError: false, token: "cio_secret",
+  revoke: 204, oidc: 200, stall: false, from: {}, noDownload: [], paged: false,
 };
 
 function runScript(env: Record<string, string>, args: string[]): Promise<{ code: number; out: string }> {
@@ -139,7 +178,7 @@ async function run(
   const { code, out } = await runScript({
     PATH: process.env.PATH ?? "",
     SystemRoot: process.env.SystemRoot ?? "",
-    VERSION: V, CRATES_API_URL: BASE, WASMRT_HTTP_TIMEOUT_MS: "1500",
+    VERSION: V, CRATES_API_URL: BASE, CRATES_DL_URL: `${BASE}/dl`, GITHUB_SHA: SHA, WASMRT_HTTP_TIMEOUT_MS: "1500",
     READBACK_ATTEMPTS: "2", READBACK_INTERVAL_MS: "10",
     ACTIONS_ID_TOKEN_REQUEST_URL: `${BASE}/oidc?api-version=2.0`, ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req-token",
     GITHUB_ENV: ENVFILE, GITHUB_OUTPUT: OUTPUT, CARGO_REGISTRY_TOKEN: "cio_secret",
@@ -186,6 +225,10 @@ await run("token: an error status carrying a token → still refused", { exchang
   code: 1, out: "HTTP 502",
 });
 check("token: that token is not handed on", file(ENVFILE) === "", JSON.stringify(file(ENVFILE)));
+await run("token: a token with a newline → refused, nothing written to GITHUB_ENV", { token: "cio_x\nBASH_ENV=/tmp/evil" }, ["token"], {
+  code: 1, out: "whitespace or control characters",
+});
+check("token: an injected line never reaches GITHUB_ENV", file(ENVFILE) === "", JSON.stringify(file(ENVFILE)));
 await run("token: GitHub's OIDC fails → exit 1", { oidc: 500 }, ["token"], { code: 1, out: "OIDC token request" });
 await run("token: no OIDC request URL (no id-token: write) → exit 1", {}, ["token"], {
   code: 1, out: "ACTIONS_ID_TOKEN_REQUEST_URL is not set",
@@ -201,7 +244,17 @@ check(
   JSON.stringify(all.calls),
 );
 await run("publish: core already listed → capi and the CLI only", { listed: ["wasmrt-core"] }, ["publish"], {
-  code: 0, out: "wasmrt-core 1.2.3: already on crates.io, skipped", published: ["wasmrt-capi", "wasmrt"],
+  code: 0, out: "wasmrt-core 1.2.3: already on crates.io from this commit, skipped", published: ["wasmrt-capi", "wasmrt"],
+});
+// Review round 1: presence is not provenance.
+await run("publish: core listed but packaged from ANOTHER commit → refused, nothing published", {
+  listed: ["wasmrt-core"], from: { "wasmrt-core": OTHER },
+}, ["publish"], { code: 1, out: `published from ${OTHER}`, published: [] });
+await run("publish: core listed, its .crate not served yet → refused with 're-run'", {
+  listed: ["wasmrt-core"], noDownload: ["wasmrt-core"],
+}, ["publish"], { code: 1, out: "Re-run failed jobs", published: [] });
+await run("publish: the version only on the list's SECOND page is still found (no republish)", { listed: ALL, paged: true }, ["publish"], {
+  code: 0, out: "published (or found)", published: [],
 });
 await run("publish: all listed (re-run) → nothing published", { listed: ALL }, ["publish"], {
   code: 0, out: "published (or found)", published: [],
@@ -223,6 +276,13 @@ await run("revoke: crates.io refuses → exit 1", { revoke: 500 }, ["revoke"], {
 
 // ── readback ──
 await run("readback: all three served → exit 0", { listed: ALL }, ["readback"], { code: 0, out: "read back: wasmrt-core" });
+await run("readback: capi packaged from ANOTHER commit → exit 1", { listed: ALL, from: { "wasmrt-capi": OTHER } }, ["readback"], {
+  code: 1, out: `wasmrt-capi 1.2.3 packaged from ${OTHER}`,
+});
+await run("readback: the CLI listed but its .crate never served → exit 1 after the attempts", { listed: ALL, noDownload: ["wasmrt"] }, ["readback"], {
+  code: 1, out: ".crate not served yet",
+});
+await run("readback: no GITHUB_SHA → refused", { listed: ALL }, ["readback"], { code: 1, out: "GITHUB_SHA is not set" }, { GITHUB_SHA: "" });
 await run("readback: the CLI missing → exit 1", { listed: ["wasmrt-core", "wasmrt-capi"] }, ["readback"], {
   code: 1, out: "does not serve wasmrt 1.2.3 after 2 attempts",
 });

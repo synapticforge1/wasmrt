@@ -24,8 +24,8 @@ name: release
 #             revoke the token; read all three back, FATAL.
 #
 # Every step is `run:`; there is no `uses:`. Pinned: Rust as a DATED nightly through the runner's
-# rustup (it verifies the signed channel manifest), and refused unless rustc reports the expected
-# commit; cargo-public-api and cargo-semver-checks by version, --locked; Bun by version AND sha256
+# rustup (over TLS, each component checked against the channel manifest's sha256 — the manifest's
+# signature is not enforced), and refused unless rustc reports the expected commit, which is the pin; cargo-public-api and cargo-semver-checks by version, --locked; Bun by version AND sha256
 # (Bun's SHASUMS256.txt; move BUN_VERSION and BUN_SHA256 together — workspace Tooling rule 10). The
 # dated nightly is CI's pin only: the local rust-toolchain.toml still floats, and whether to pin it
 # there is T11's question (it moves the binary sizes; cmem/open-work.md). Every request has a time
@@ -39,8 +39,9 @@ on:
 
 permissions: {}
 
-# One group per commit, never cancelled: a re-run of the same commit waits for the first; two
-# commits with the same untagged version cannot both tag (the second finds the tag elsewhere: none).
+# One group per commit, never cancelled: a re-run of the same commit waits for the first. Two commits
+# with the same untagged version are serialized per VERSION at the `tag`, `release` and `publish` jobs
+# (their own groups below): the second's `tag` then finds the first's tag and stops, red, saying so.
 concurrency:
   group: release-${{ github.sha }}
   cancel-in-progress: false
@@ -56,6 +57,7 @@ env:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
     outputs:
@@ -96,17 +98,20 @@ jobs:
 
       # new = the version's tag is absent (a release); rerun = it peels to THIS commit (finish a
       # failed run); none = it is elsewhere (an ordinary push of an already-released version).
+      # Refuses (red) a version whose tag is elsewhere but whose release is unfinished, and a "new"
+      # version that is not above every tag or is already on crates.io (review round 1).
       - name: Is this a release?
         id: state
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          CRATES: wasmrt-core,wasmrt-capi,wasmrt
           GITHUB_TOKEN: ${{ github.token }} # contents: read — only lifts the API rate limit
         run: bun scripts/github-release.ts state
 
       - name: Install Rust (a dated nightly, pinned and checked)
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy \
-            --target wasm32-unknown-unknown --target wasm32-wasip1
+            --target wasm32-unknown-unknown --target wasm32-wasip1 --target x86_64-pc-windows-gnu
           echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >> "$GITHUB_ENV"
           v=$(RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" rustc -V)
           echo "$v"
@@ -129,6 +134,12 @@ jobs:
     needs: checks
     if: needs.checks.outputs.state != 'none'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One release of a VERSION at a time (U9): two commits racing for the same untagged version wait
+    # for each other here; the second then finds the tag on the first and says so (review round 1).
+    concurrency:
+      group: release-v${{ needs.checks.outputs.version }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -158,6 +169,10 @@ jobs:
   release:
     needs: [checks, tag]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-v${{ needs.checks.outputs.version }}-page
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -189,6 +204,10 @@ jobs:
   publish:
     needs: [checks, release]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: release-v${{ needs.checks.outputs.version }}-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write # crates.io trusted publishing; nothing else

@@ -8,7 +8,7 @@
 use std::process::{Command, Output};
 
 fn dir() -> std::path::PathBuf {
-    let d = std::env::temp_dir().join("wasmrt_review_regressions");
+    let d = std::env::temp_dir().join(format!("wasmrt_review_regressions_{}", std::process::id()));
     std::fs::create_dir_all(&d).expect("scratch dir");
     d
 }

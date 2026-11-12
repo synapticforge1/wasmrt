@@ -17,10 +17,22 @@ fn wasmrt() -> Command {
 }
 
 /// A WASI command with nothing to do, so a run that gets past argument handling succeeds.
+///
+/// A FRESH file per call (process id + counter): the tests run in parallel, and when they shared one
+/// path, one test's `fs::write` truncated the file while another test's `wasmrt` was reading it —
+/// "cannot assemble: NotAModule" on Linux CI (run 43288107734, 2026-11-12), never seen on Windows.
 fn fixture() -> String {
-    let p = std::env::temp_dir().join("wasmrt_contract_dir_guest.wat");
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let p = std::env::temp_dir().join(format!("wasmrt_contract_dir_guest_{}_{n}.wat", std::process::id()));
     std::fs::write(&p, br#"(module (func (export "_start")))"#).expect("write fixture");
     p.to_string_lossy().into_owned()
+}
+
+#[test]
+fn no_two_fixtures_share_a_path() {
+    assert_ne!(fixture(), fixture(), "parallel tests must not write the same fixture file");
 }
 
 fn run(args: &[&str]) -> (bool, String) {
@@ -96,7 +108,7 @@ fn features_with_an_equals_sign_is_the_same_flag() {
     let (ok, text) = run(&[&m, "--features=mvp"]);
     assert!(!ok && text.contains("must come BEFORE the module path"), "after the path it names the position; got: {text}");
     // It really is applied: a SIMD module is refused under `--features=mvp`.
-    let simd = std::env::temp_dir().join("wasmrt_contract_simd.wat");
+    let simd = std::env::temp_dir().join(format!("wasmrt_contract_simd_{}.wat", std::process::id()));
     std::fs::write(&simd, br#"(module (func (export "f") (result v128) (v128.const i32x4 1 2 3 4)))"#).unwrap();
     let (ok, text) = run(&["--features=mvp", &simd.to_string_lossy()]);
     assert!(!ok && text.contains("simd"), "`--features=mvp` must refuse a SIMD module, naming it; got: {text}");

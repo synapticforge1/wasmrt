@@ -14,7 +14,7 @@
 // need a tool this host lacks fail loudly rather than skip (a C compiler: set CC, `c-gate.ts`).
 // Not here, by nature: S2 (`behaviour-s2.ts`, the spec suite from wasmtk's corpus — a sibling
 // checkout CI does not have) and S3; `cmem/releasing.md` keeps them in the local checklist.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
@@ -37,14 +37,25 @@ const version = m[1];
 
 type Step = [label: string, cmd: string, args: string[], env?: Record<string, string>];
 const bun = process.execPath;
+// The gate runs on two OSes (CI: Linux; the owner: Windows), and each compiles out the other's
+// `#[cfg]` code. So clippy also runs for the OTHER OS's target — a type-check, no linker needed — so
+// a lint or error in code only one OS compiles is found on either (review round 1, 2026-11-12:
+// `rng.rs`'s unix block failed `clippy -D warnings` on Linux CI only).
+const otherOs = process.platform === "win32" ? "x86_64-unknown-linux-gnu" : "x86_64-pc-windows-gnu";
+// This Windows host has no `cc`; mingw's `gcc` is what the C-ABI gate was measured with.
+const cc = process.env.CC ?? (process.platform === "win32" ? "gcc" : "cc");
 const steps: Step[] = [
   ["eol", bun, ["scripts/eol-gate.ts"]],
   ["shared definitions", bun, ["scripts/definitions.ts", "--check"]],
   ["build (release)", "cargo", ["build", "--workspace", "--release", "--locked"]],
   ["tests", "cargo", ["test", "--workspace", "--locked"]],
   ["clippy", "cargo", ["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]],
+  [`clippy for the other OS (${otherOs})`, "cargo", ["clippy", "--workspace", "--all-targets", "--locked", "--target", otherOs, "--", "-D", "warnings"]],
+  // The dual-target contract (architecture.md): the engine builds freestanding for wasm32.
+  ["wasmrt-core for wasm32-unknown-unknown", "cargo", ["build", "-p", "wasmrt-core", "--release", "--locked", "--target", "wasm32-unknown-unknown"]],
+  ["wasmrt-core for wasm32-wasip1", "cargo", ["build", "-p", "wasmrt-core", "--release", "--locked", "--target", "wasm32-wasip1"]],
   ["public surface is current", bun, ["scripts/surface.ts", "--check"]],
-  ["C ABI", bun, ["scripts/c-gate.ts"]],
+  ["C ABI", bun, ["scripts/c-gate.ts"], { CC: cc }],
   ["release-page script self-test", bun, ["scripts/check-github-release.ts"]],
   ["crates.io script self-test", bun, ["scripts/check-crates-io.ts"]],
   ["release-record check self-test", bun, ["scripts/check-release-record.ts"]],
@@ -74,6 +85,14 @@ function runStep(cmd: string, args: string[], env: Record<string, string> | unde
     p.on("error", (e) => { tail.push(`could not start ${cmd}: ${e.message}`); resolve({ code: -1, tail }); });
     p.on("close", (code) => resolve({ code, tail }));
   });
+}
+
+// The local toolchain floats (rust-toolchain.toml = nightly, a T11 question); CI pins one. Say so when
+// they differ: a surface or lint difference may then be the toolchain's, not the change's.
+const pin = /RUSTC_COMMIT:\s*(\w+)/.exec(readFileSync(join(repo, ".github", "workflows", "release.yml"), "utf8"))?.[1];
+const local = spawnSync("rustc", ["-V"], { cwd: repo, encoding: "utf8" }).stdout?.trim() ?? "";
+if (pin && !local.includes(`(${pin} `)) {
+  console.log(`⚠ toolchain: this host has "${local}", CI pins rustc ${pin} (release.yml) — a difference here may be the toolchain's`);
 }
 
 console.log(`gate${release ? " --release" : ""}: ${steps.length} steps, version ${version}`);

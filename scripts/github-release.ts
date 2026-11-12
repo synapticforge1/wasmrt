@@ -75,23 +75,58 @@ if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
   fail(`WASMRT_HTTP_TIMEOUT_MS "${timeoutMs}" is not a positive number`);
 }
 
-/** The heading and body of `## [version]` in the CHANGELOG, up to the next `## [`. */
+/** Lines with ``` fenced blocks and `<!-- … -->` comments blanked — the SAME rule as
+ *  `release-record.ts notes` (which checks it before CI tags; this file is fetched alone in CI, so the
+ *  rule is kept identical here rather than imported). */
+function prose(lines: string[]): string[] {
+  const out: string[] = [];
+  let fence = false, comment = false;
+  for (const raw of lines) {
+    let l = raw;
+    if (/^\s*```/.test(l)) { fence = !fence; out.push(""); continue; }
+    if (fence) { out.push(""); continue; }
+    let kept = "";
+    while (l.length) {
+      if (comment) {
+        const end = l.indexOf("-->");
+        if (end < 0) { l = ""; break; }
+        comment = false;
+        l = l.slice(end + 3);
+      } else {
+        const start = l.indexOf("<!--");
+        if (start < 0) { kept += l; break; }
+        kept += l.slice(0, start);
+        comment = true;
+        l = l.slice(start + 4);
+      }
+    }
+    out.push(kept);
+  }
+  return out;
+}
+
+/** The heading and body of `## [version]` (exactly: then a space or the end) in the CHANGELOG, up to
+ *  the next `## [`. The body is the section's text as written; it must hold more than fences and
+ *  comments. */
 function notesFor(v: string): { title: string; body: string } {
   let text: string;
   try {
-    text = readFileSync(changelog, "utf8");
+    text = readFileSync(changelog, "utf8").replace(/\r\n/g, "\n");
   } catch (e) {
     fail(`cannot read ${changelog}: ${(e as Error).message}`);
   }
   const pre = `## [${v}]`;
-  const lines = text.split("\n");
-  const start = lines.findIndex((l) => l.startsWith(pre));
+  const raw = text.split("\n");
+  const lines = prose(raw);
+  const head = new RegExp(`^## \\[${v.replace(/\./g, "\\.")}\\](\\s|$)`);
+  const start = lines.findIndex((l) => head.test(l));
   if (start < 0) fail(`no CHANGELOG section "${pre}"; refusing to publish an empty release`);
   let end = lines.findIndex((l, i) => i > start && l.startsWith("## ["));
   if (end < 0) end = lines.length;
-  const body = lines.slice(start + 1, end).join("\n").trim();
-  if (!body) fail(`the CHANGELOG section "${pre}" is empty; refusing to publish an empty release`);
-  return { title: lines[start].slice(3).trim(), body };
+  if (!lines.slice(start + 1, end).join("\n").trim()) {
+    fail(`the CHANGELOG section "${pre}" is empty; refusing to publish an empty release`);
+  }
+  return { title: raw[start].slice(3).trim(), body: raw.slice(start + 1, end).join("\n").trim() };
 }
 
 function headers(): Record<string, string> {
@@ -147,9 +182,90 @@ async function peel(): Promise<string | null> {
   return object.sha;
 }
 
+type V = [number, number, number];
+const vparse = (s: string): V | null => {
+  const m = /^v(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+const vcmp = (a: V, b: V) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+/** Every vX.Y.Z tag on GitHub (all pages). */
+async function tagsOnGitHub(): Promise<string[]> {
+  const out: string[] = [];
+  for (let page = 1; ; page++) {
+    const r = await call("GET", `/repos/${repo}/git/matching-refs/tags/v?per_page=100&page=${page}`);
+    if (r.status !== 200 || !Array.isArray(r.json)) fail(`listing tags: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+    for (const ref of r.json) {
+      const name = String(ref?.ref ?? "").replace(/^refs\/tags\//, "");
+      if (vparse(name)) out.push(name);
+    }
+    if (r.json.length < 100) return out;
+  }
+}
+
+/** A tag at or above this version that already exists, or null: a NEW release must be above every
+ *  tag (review round 1: a re-run of an abandoned version's old run would otherwise tag it). */
+async function notAboveNewest(): Promise<string | null> {
+  const mine = vparse(tag)!;
+  const higher = (await tagsOnGitHub()).filter((t) => t !== tag && vcmp(vparse(t)!, mine) >= 0)
+    .sort((a, b) => vcmp(vparse(b)!, vparse(a)!));
+  return higher[0] ?? null;
+}
+
+/** The crates (CRATES, comma-separated) that crates.io does NOT list at this version, read from each
+ *  crate's version list (every page). */
+async function cratesMissing(): Promise<string[]> {
+  const crates = need("CRATES").split(",").map((s) => s.trim()).filter(Boolean);
+  const registry = (process.env.CRATES_API_URL || "https://crates.io").replace(/\/+$/, "");
+  const missing: string[] = [];
+  for (const c of crates) {
+    let found = false;
+    for (let url: string | null = `${registry}/api/v1/crates/${c}/versions`; url && !found;) {
+      let status = 0, json: any = null;
+      try {
+        const res = await fetch(url, { headers: { "User-Agent": `${repo} release workflow` }, signal: AbortSignal.timeout(timeoutMs) });
+        status = res.status;
+        json = await res.json().catch(() => null);
+      } catch (e) {
+        fail(`crates.io version list for ${c}: ${(e as Error).message}`);
+      }
+      if (status === 404) break;
+      if (status !== 200 || !Array.isArray(json?.versions)) fail(`crates.io version list for ${c}: HTTP ${status}`);
+      found = json.versions.some((v: { num: string }) => v.num === version);
+      const next = json.meta?.next_page;
+      url = next ? `${registry}/api/v1/crates/${c}/versions${next}` : null;
+    }
+    if (!found) missing.push(c);
+  }
+  return missing;
+}
+
 if (command === "state") {
   const at = await peel();
-  const state = at === null ? "new" : at === sha ? "rerun" : "none";
+  let state: string;
+  if (at === sha) state = "rerun";
+  else if (at === null) {
+    // NEW — but only for a version that has never been released and is above every tag.
+    const above = await notAboveNewest();
+    if (above) fail(`${tag} has no tag, but ${above} exists: this commit's version is not new (an old run re-run?). Nothing to release; bump the version.`);
+    const missing = await cratesMissing();
+    const listed = need("CRATES").split(",").filter((c) => !missing.includes(c.trim()));
+    if (listed.length) {
+      fail(`${tag} has no tag, yet crates.io already lists ${listed.join(", ")} at ${version}: the tag was lost or deleted. Restore it on the commit those crates were published from (owner) — never tag this commit.`);
+    }
+    state = "new";
+  } else {
+    // The tag is on another commit. A FINISHED release there means nothing to do here; an unfinished
+    // one must not read as "nothing to do" (review round 1: a green run while a tagged version never
+    // reached crates.io — a burned version nobody was told about).
+    const page = await call("GET", `/repos/${repo}/releases/tags/${tag}`);
+    if (page.status !== 200 && page.status !== 404) fail(`GET release ${tag}: HTTP ${page.status}`);
+    const missing = await cratesMissing();
+    if (page.status === 404 || missing.length) {
+      fail(`${tag} is tagged on ${at}, but its release is UNFINISHED (page: ${page.status === 200 ? "made" : "missing"}; crates.io missing: ${missing.join(", ") || "none"}). Finish it with "Re-run failed jobs" on the release run for ${at} — GitHub keeps a run re-runnable for 30 days — or, if that run cannot succeed, release the next version and record ${tag} in cmem/release.md as unfinished.`);
+    }
+    state = "none";
+  }
   console.log(`state=${state}  (tag ${tag} ${at === null ? "absent" : `on ${at}`}; this run is for ${sha})`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `state=${state}\n`);
   process.exit(0);
@@ -161,7 +277,11 @@ if (command === "tag") {
     console.log(`tag ${tag} already on ${sha}, nothing written`);
     process.exit(0);
   }
-  if (at !== null) fail(`tag ${tag} is on ${at}, not ${sha}; refusing (a published tag never moves)`);
+  if (at !== null) {
+    fail(`tag ${tag} is on ${at}, not ${sha}: another commit took this version. A published tag never moves, so re-running this run cannot succeed — nothing here is left to release; bump the version for this commit's changes.`);
+  }
+  const above = await notAboveNewest();
+  if (above) fail(`${above} exists, so ${tag} is not new: refusing to tag (an old run re-run?). Nothing to do; bump the version.`);
   if (dryRun) {
     console.log(`dry-run: would create the annotated tag ${tag} on ${sha}`);
     process.exit(0);
@@ -196,6 +316,11 @@ if (existing.status === 200) {
   process.exit(0);
 }
 if (existing.status !== 404) fail(`GET release ${tag}: HTTP ${existing.status} ${JSON.stringify(existing.json)}`);
+// `releases/tags/{tag}` does not see DRAFTS: a draft for this tag would be a second page (review round 1).
+const list = await call("GET", `/repos/${repo}/releases?per_page=100`);
+if (list.status !== 200 || !Array.isArray(list.json)) fail(`listing releases: HTTP ${list.status}`);
+const draft = list.json.find((r: { tag_name?: string; draft?: boolean }) => r.tag_name === tag && r.draft);
+if (draft) fail(`a DRAFT release for ${tag} exists (${draft.html_url ?? draft.id}): publish or delete it on GitHub (owner), then "Re-run failed jobs"`);
 
 // 3. Create it, then read it back and check the tag again.
 const body = { tag_name: tag, name: notes.title, body: notes.body, draft: false, prerelease: false };

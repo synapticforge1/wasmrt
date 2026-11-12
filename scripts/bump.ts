@@ -3,7 +3,8 @@
 // (workspace letter H6; `../cmem/layout-and-packaging.md` § "The compatibility gate"; `cmem/releasing.md`).
 //
 //   bun scripts/bump.ts patch|minor|major [--dry-run]   compute the floor, refuse or apply the bump
-//   bun scripts/bump.ts --verify-tag vX.Y.Z              CI on a tag: the manifest says X.Y.Z, and
+//   bun scripts/bump.ts --verify-tag vX.Y.Z              `gate.ts --release` (CI's `checks` and
+//                                                       `release.ts`): the manifest says X.Y.Z, and
 //                                                       X.Y.Z clears the floor since the last release
 //
 // The floor is the HIGHEST of three, each printed with what set it:
@@ -148,6 +149,21 @@ function judge(released: V, target: V, floor: Floor): string {
   return `the floor is ${floor}, and ${show(released)} → ${show(target)} is a ${step}`;
 }
 
+/** Which of the three crates crates.io lists at `version` (each crate's version list, 30 s limit). */
+async function cratesList(version: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const c of ["wasmrt-core", "wasmrt-capi", "wasmrt"]) {
+    const res = await fetch(`https://crates.io/api/v1/crates/${c}/versions`, {
+      headers: { "User-Agent": "wasmrt bump script (https://github.com/synapticforge1/wasmrt)" },
+      signal: AbortSignal.timeout(30_000),
+    }).catch((e) => { console.log(`✗ crates.io: ${(e as Error).message}`); process.exit(1); });
+    if (!res.ok) { console.log(`✗ crates.io's version list for ${c}: HTTP ${res.status}`); process.exit(1); }
+    const v = ((await res.json()) as { versions: { num: string }[] }).versions;
+    if (v.some((x) => x.num === version)) found.push(c);
+  }
+  return found;
+}
+
 function floors(released: string): Floor {
   console.log(`floor since v${released}:`);
   const f = max(max(surfaceFloor(released), semverFloor(released)), behaviourFloor(released));
@@ -188,17 +204,38 @@ if (import.meta.main) {
     }
   }
   const rel = parse(released), have = parse(manifestVersion());
-  const target = inc(rel, kind);
+  const step = inc(rel, kind);
+  // The LEVEL is judged against the last completed release, as always.
+  const why = judge(rel, step, floors(released));
+  if (why) { console.log(`✗ bump ${kind} REFUSED: ${why}`); process.exit(1); }
+  // A target that already has a tag never completed its release (surface/released.txt moves only after
+  // a release completes, step 9): it is BURNED and never reused — the next patch is taken instead
+  // (review round 1; releasing.md step 7). Unless crates.io lists it: then it DID complete and step 9
+  // was skipped, which must be fixed, not stepped over.
+  let target = step;
+  while (git("rev-parse", "-q", "--verify", `refs/tags/v${show(target)}^{commit}`).status === 0) {
+    const published = await cratesList(show(target));
+    if (published.length) {
+      console.log(`✗ v${show(target)} is tagged AND on crates.io (${published.join(", ")}): it is a completed release, but surface/released.txt still says ${released}. Run step 9 first: bun scripts/surface.ts --release-from v${show(target)} (its own commit).`);
+      process.exit(1);
+    }
+    console.log(`burned     v${show(target)} is tagged but was never published: skipped (record it in cmem/release.md)`);
+    target = inc(target, "patch");
+  }
   if (cmp(have, rel) > 0 && cmp(target, have) < 0) {
     console.log(`✗ Cargo.toml is already at ${show(have)}, past ${released}; a ${kind} bump (${show(target)}) would move it backwards`);
     process.exit(1);
   }
-  const why = judge(rel, target, floors(released));
-  if (why) { console.log(`✗ bump ${kind} REFUSED: ${why}`); process.exit(1); }
   if (kind === "major") {
     console.log(`previous   skipped: a major may break v${released}'s tests`);
   } else {
-    const t = prevTagTests(`v${released}`);
+    let t: ReturnType<typeof prevTagTests>;
+    try {
+      t = prevTagTests(`v${released}`);
+    } catch (e) {
+      console.log(`✗ bump ${kind} REFUSED: the previous release's tests could not run: ${(e as Error).message}`);
+      process.exit(1);
+    }
     console.log(`previous   ${t.green ? "green" : "RED"}   v${released}'s integration tests against this tree: ${t.summary}`);
     if (!t.green) {
       console.log(`${t.failures}\n✗ bump ${kind} REFUSED: this tree breaks what v${released}'s tests pin — a major, or a regression to fix`);
