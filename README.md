@@ -156,8 +156,8 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 wasmrt collects nothing and makes no network requests: no telemetry, no update checks. The CLI
 writes only the files you name (`wat … -o <file>`, `pin … --db <file>`) and what a guest writes
 inside a directory you pass with `--dir`. It reads the pin database from its fixed paths
-(`%ProgramData%\…\pins` on Windows, `/etc/…/pins` elsewhere), reading the `ProgramData` variable on
-Windows to find it, and nothing else from the environment. A guest sees only the variables you pass
+(`%ProgramData%\…\pins` on Windows, `/etc/…/pins` elsewhere) or the file you name with `--pins`,
+reading the `ProgramData` variable on Windows to find it, and nothing else from the environment. A guest sees only the variables you pass
 with `--env`.
 
 ## License

@@ -390,8 +390,8 @@ approval binaryang does not have:
 | --- | --- | --- |
 | ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | to set |
 | ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | to set |
-| environment `release` | Required reviewer: the owner; deployment branches: `main` only. `release.yml`'s `tag` job names it, so tag → page → publish waits for one approval | to set |
-| crates.io trusted publisher | per crate: repository, `release.yml`; set (owner, 2026-11-19). An environment named there must be `release` | set |
+| environment `release` | Required reviewer: the owner; deployment branches: `main` only. `release.yml`'s `publish` job names it, so the publish waits for one approval (tag and page do not: a stolen credential could make those directly) | to set |
+| crates.io trusted publisher | per crate (all three): repository, `release.yml`, set (owner, 2026-11-19); **environment: `release`** — add it. 🔒 This is what holds: a stolen push credential can delete the workflow's `environment:` line in the same push, but not forge the token's environment claim (re-review R-S1) | environment to add |
 
 Unchecked by the review (the public API does not show them): collaborators, deploy keys, webhooks and
 apps, secret scanning with push protection, alerts, Actions permissions.
