@@ -216,7 +216,7 @@ Open, each the owner's call:
 3. ✅ **Already done; this entry was stale.** On 2026-10-23, `git remote -v` showed
    `origin = https://github.com/synapticforge1/wasmrt.git`.
 
-🏢 **2026-10-23: wasmtk has moved too.** `jrmarcum/wasmtk` now 301-redirects to
+🏢 **2026-10-23: wasmtk has moved too.** wasmtk's old address under the owner's personal account now 301-redirects to
 `synapticforge1/wasmtk` (HTTP 200, `main` listed by `git ls-remote`). The one wasmtk URL in this repo
 (`testing.md`, "spec testsuite") now points there. ⚠️ The workspace's `../cmem/projects.md` table
 (measured 2026-10-22) and letter H17 still say "NOT MOVED". Report that to the workspace session;

@@ -15,7 +15,8 @@ name: release
 #
 #   checks  - contents: read, NO secret, a clone without credentials. Reads the version and decides
 #             whether this push is a release (`github-release.ts state`). Builds and tests nothing.
-#   tag     - contents: write, NO checkout. CI's annotated tag vX.Y.Z on this commit (REST API), read
+#   tag     - environment `release` (waits for the owner's approval). contents: write, NO checkout.
+#             CI's annotated tag vX.Y.Z on this commit (REST API), read
 #             back. A tag made with GITHUB_TOKEN starts no workflow run, so the next jobs run here.
 #   release - contents: write, NO checkout. The GitHub Release page FROM that tag (H32's order), titled
 #             and filled from the CHANGELOG section — BEFORE the publish, by the owner's order.
@@ -112,6 +113,12 @@ jobs:
   tag:
     needs: checks
     if: needs.checks.outputs.state != 'none'
+    # The owner's approval (review S1, 2026-11-19): the `release` environment requires the owner as
+    # reviewer, so a push of a new version — even with a stolen push credential — tags, pages and
+    # publishes nothing until the owner approves this job; `release` and `publish` need it. An
+    # ordinary push ("none") never reaches it. The environment is a repository setting
+    # (cmem/releasing.md § Repository settings); without it, GitHub creates it unprotected.
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # One release of a VERSION at a time (U9): two commits racing for the same untagged version wait

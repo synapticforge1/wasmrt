@@ -379,6 +379,23 @@ page, publishes and reads back; the agent then reads back as a user and records 
 `git tag`, the push and `cargo publish` from the workstation; the pre-publish doc-sync gate dates from
 2026-07-31, v0.6.4.)*
 
+## Repository settings
+
+Owner-held, set on GitHub (the agent has no login; it reads them back through the public API).
+Review S1 (2026-11-19): nothing stood between a push of `main` and a crates.io publish (`main`
+unprotected, no rulesets, no environment). As for binaryang (its `main` ruleset 27683565), plus the
+approval binaryang does not have:
+
+| setting | what | state |
+| --- | --- | --- |
+| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | to set |
+| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | to set |
+| environment `release` | Required reviewer: the owner; deployment branches: `main` only. `release.yml`'s `tag` job names it, so tag → page → publish waits for one approval | to set |
+| crates.io trusted publisher | per crate: repository, `release.yml`; set (owner, 2026-11-19). An environment named there must be `release` | set |
+
+Unchecked by the review (the public API does not show them): collaborators, deploy keys, webhooks and
+apps, secret scanning with push protection, alerts, Actions permissions.
+
 ## Status — moved
 
 *The per-version records (this file's § Status, § 1.0.0, § 0.9.0 and § Previous until 2026-11-12) are
