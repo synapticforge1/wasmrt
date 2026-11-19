@@ -39,7 +39,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { prevTagTests } from "./prev-tag-tests.ts";
 import { CURRENT, type Floor, floorOf, generate, generateFromRef, printDiff, readSnapshot, RELEASED, repo, tools } from "./surface.ts";
-import { cmp, nextVersion, parse, show, type TagState, type V, verifyTarget } from "./versions.ts";
+import { cmp, nextVersion, parse, show, TAG, type TagState, type V, verifyTarget } from "./versions.ts";
 
 const RANK: Record<Floor, number> = { patch: 0, minor: 1, major: 2 };
 const max = (a: Floor, b: Floor): Floor => (RANK[a] >= RANK[b] ? a : b);
@@ -121,8 +121,8 @@ function breakingRowPresent(released: string): boolean {
 /** Is `target` allowed after `released` given `floor` and the tagged versions above `released`?
  *  Returns the reason it is not, or "". Which version comes next is `versions.ts`'s `verifyTarget` —
  *  the SAME arithmetic `nextVersion` gives the bump, burned versions included (review round 2). */
-function judge(released: V, target: V, floor: Floor, tags: Map<string, TagState>): string {
-  const v = verifyTarget(released, target, tags);
+function judge(released: V, target: V, floor: Floor, tags: Map<string, TagState>, ownTagHere = false): string {
+  const v = verifyTarget(released, target, tags, ownTagHere);
   if ("refuse" in v) return v.refuse;
   const step = v.level;
   if (RANK[step] >= RANK[floor]) return "";
@@ -156,21 +156,67 @@ async function cratesVersions(crate: string): Promise<Set<string>> {
   return out;
 }
 
-/** Every vX.Y.Z tag above `released`, after fetching origin's tags (CI makes the tags, so a clone
- *  that never fetched them would miss a burned one — review round 2), with its state from crates.io. */
-async function tagStates(released: V): Promise<Map<string, TagState>> {
-  const f = spawnSync("git", ["fetch", "-q", "--tags", "origin"], { cwd: repo, encoding: "utf8" });
-  if (f.status !== 0) { console.log(`✗ git fetch --tags origin failed — the tags decide the next version:\n${f.stderr}`); process.exit(1); }
-  const above = spawnSync("git", ["tag", "-l", "v*"], { cwd: repo, encoding: "utf8" }).stdout.split(/\r?\n/)
-    .filter((t) => /^v\d+\.\d+\.\d+$/.test(t)).map((t) => t.slice(1)).filter((t) => cmp(parse(t), released) > 0);
+/** Origin's vX.Y.Z tags with the commit each peels to — read from ORIGIN (`git ls-remote`), not the
+ *  local clone: a tag deleted on origin stays in a clone after `fetch --tags` (review round 3), and
+ *  CI's fresh clone sees only origin's. Names with leading zeros are not versions (`TAG`). */
+function originTags(): Map<string, string> {
+  const r = spawnSync("git", ["ls-remote", "--tags", "origin"], { cwd: repo, encoding: "utf8" });
+  if (r.status !== 0) { console.log(`✗ git ls-remote --tags origin failed — the tags decide the next version:\n${r.stderr}`); process.exit(1); }
+  const at = new Map<string, string>();
+  for (const line of r.stdout.split(/\r?\n/)) {
+    const m = /^([0-9a-f]{40})\trefs\/tags\/(\S+?)(\^\{\})?$/.exec(line);
+    if (!m || !TAG.test(m[2])) continue;
+    if (m[3] || !at.has(m[2])) at.set(m[2], m[1]); // the peeled ^{} line wins for an annotated tag
+  }
+  return at;
+}
+
+/** Is a release workflow run for `sha` still queued or running on GitHub (public REST API, no `gh`)?
+ *  A tagged version mid-release reads as burned or partial on crates.io; it must be waited for, not
+ *  stepped over (review round 3). */
+async function runInFlight(sha: string): Promise<boolean> {
+  // In CI (`--verify-tag` in the gate) the `state` step has already refused an unfinished release of
+  // THIS version, and a bump is made locally, where this check runs; an unauthenticated runner IP
+  // shares GitHub's 60-an-hour limit, which must not be able to block a release.
+  if (process.env.GITHUB_ACTIONS === "true") return false;
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "wasmrt bump script" };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  for (const status of ["in_progress", "queued"]) {
+    const res = await fetch(`https://api.github.com/repos/synapticforge1/wasmrt/actions/runs?head_sha=${sha}&status=${status}&per_page=1`, {
+      headers,
+      signal: AbortSignal.timeout(30_000),
+    }).catch((e) => { console.log(`✗ GitHub: ${(e as Error).message}`); process.exit(1); });
+    if ((res.status === 403 || res.status === 429) && res.headers.get("x-ratelimit-remaining") === "0") {
+      const reset = new Date(Number(res.headers.get("x-ratelimit-reset")) * 1000).toISOString().slice(11, 16);
+      console.log(`✗ GitHub's API rate limit is used up (unauthenticated: 60 an hour); it resets at ${reset} UTC — run this again then, or set GITHUB_TOKEN`);
+      process.exit(1);
+    }
+    if (!res.ok) { console.log(`✗ GitHub's run list for ${sha}: HTTP ${res.status} — cannot tell whether a release is in flight`); process.exit(1); }
+    if (((await res.json()) as { total_count?: number }).total_count) return true;
+  }
+  return false;
+}
+
+/** Every tag above `released` with its state from crates.io (all three crates, all pages). A tag
+ *  whose release run is still in flight refuses: wait for it. `ownSha`: this commit, whose own run
+ *  is the one in flight during a CI re-run. */
+async function tagStates(released: V, ownSha?: string): Promise<{ states: Map<string, TagState>; at: Map<string, string> }> {
+  const at = originTags();
+  const above = [...at.keys()].map((t) => t.slice(1)).filter((t) => cmp(parse(t), released) > 0);
   const states = new Map<string, TagState>();
-  if (!above.length) return states;
+  if (!above.length) return { states, at };
   const listed = await Promise.all(CRATES.map(cratesVersions));
   for (const t of above) {
     const n = listed.filter((s) => s.has(t)).length;
-    states.set(t, n === 0 ? "burned" : n === CRATES.length ? "released" : "partial");
+    const state: TagState = n === 0 ? "burned" : n === CRATES.length ? "released" : "partial";
+    const sha = at.get(`v${t}`)!;
+    if (state !== "released" && sha !== ownSha && await runInFlight(sha)) {
+      console.log(`✗ v${t}'s release run (commit ${sha}) is still IN PROGRESS on GitHub — wait for it to finish, then run this again`);
+      process.exit(1);
+    }
+    states.set(t, state);
   }
-  return states;
+  return { states, at };
 }
 
 function floors(released: string): Floor {
@@ -191,7 +237,10 @@ if (import.meta.main) {
     if (!tag) { console.error("usage: bun scripts/bump.ts --verify-tag vX.Y.Z"); process.exit(2); }
     const v = parse(tag), have = parse(manifestVersion());
     if (cmp(v, have) !== 0) { console.log(`✗ tag ${tag} but Cargo.toml says ${show(have)}`); process.exit(1); }
-    const why = judge(parse(released), v, floors(released), await tagStates(parse(released)));
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+    const { states, at } = await tagStates(parse(released), head);
+    // Its own tag is expected only when it is on THIS commit (a CI re-run); elsewhere it is taken.
+    const why = judge(parse(released), v, floors(released), states, at.get(tag) === head);
     if (why) { console.log(`✗ ${tag} refused: ${why}`); process.exit(1); }
     console.log(`✓ ${tag} clears the floor since v${released}`);
     process.exit(0);
@@ -217,7 +266,7 @@ if (import.meta.main) {
   // partial or released-without-step-9 ones refused (versions.ts — the same answer `--verify-tag`
   // gives in the gate). If a release run is still in progress for a tagged version, it reads as
   // burned or partial here: wait for that run first.
-  const tags = await tagStates(rel);
+  const { states: tags } = await tagStates(rel);
   const n = nextVersion(rel, kind, tags);
   if ("refuse" in n) { console.log(`✗ bump ${kind} REFUSED: ${n.refuse}`); process.exit(1); }
   for (const b of n.skipped) console.log(`burned     v${show(b)} is tagged but on crates.io for none of the crates: skipped (record it in cmem/release.md)`);

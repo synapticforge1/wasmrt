@@ -85,21 +85,23 @@ function prose(lines: string[]): string[] {
     let l = raw;
     if (/^\s*```/.test(l)) { fence = !fence; out.push(""); continue; }
     if (fence) { out.push(""); continue; }
+    // Comment markers FOUND in a mask with inline code blanked, CUT from the original line, so code
+    // text stays — the same rule as release-record.ts (review rounds 2 and 3).
+    const mask = comment ? l : l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
     let kept = "";
-    // An inline code span is text, not markup (the same rule as release-record.ts).
-    if (!comment) l = l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
-    while (l.length) {
+    let i = 0;
+    while (i < l.length) {
       if (comment) {
-        const end = l.indexOf("-->");
-        if (end < 0) { l = ""; break; }
+        const end = mask.indexOf("-->", i);
+        if (end < 0) { i = l.length; break; }
         comment = false;
-        l = l.slice(end + 3);
+        i = end + 3;
       } else {
-        const start = l.indexOf("<!--");
-        if (start < 0) { kept += l; break; }
-        kept += l.slice(0, start);
+        const start = mask.indexOf("<!--", i);
+        if (start < 0) { kept += l.slice(i); break; }
+        kept += l.slice(i, start);
         comment = true;
-        l = l.slice(start + 4);
+        i = start + 4;
       }
     }
     out.push(kept);

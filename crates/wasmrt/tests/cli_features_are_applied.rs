@@ -73,7 +73,8 @@ fn summarize_judges_the_module_under_the_configured_features() {
         !text.contains("validation OK"),
         "a module that uses a disabled proposal must never be reported valid:\n{text}"
     );
-    assert!(text.contains("simd"), "the report must name the proposal:\n{text}");
+    // "proposal `simd`", not "simd": the fixture's own path holds "simd" (review round 3).
+    assert!(text.contains("proposal `simd`"), "the report must name the proposal:\n{text}");
 }
 
 #[test]

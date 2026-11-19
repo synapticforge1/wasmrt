@@ -66,6 +66,38 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
+**⏸ PAUSED 2026-11-12 (owner: "i need to pause here for the day") in the middle of releasing 2.0.2**
+(owner: "release", level patch; both reviews required first). Where it stands:
+- Pushed: `c920e1f` (H33/H34/H35), `30f69c8` (gate annotations), `46275c0` (round 1 fixes),
+  `99f5f1d` (round 2 fixes). CI `checks` GREEN on Linux for `46275c0` and `99f5f1d`. No tag, nothing
+  published; `origin/main` = `99f5f1d`.
+- Review round 3 (4 reviewers) is DONE and NOT empty; its fixes are **in the working tree,
+  UNCOMMITTED** — the next session continues them, it does not start over:
+  - done and tested (each fails on `99f5f1d`'s code): `versions.ts` refuses any partial/released
+    tag above the last release whatever the level, a target tagged elsewhere is "taken"
+    (`check-versions.ts` 23); `bump.ts` reads ORIGIN's tags (`ls-remote`), refuses a tagged version
+    whose run is in flight (skipped in CI; a rate limit refuses with its reset time); `prose()`
+    blanks code spans only to FIND comments (titles keep inline code; record-check 50, page 55, the
+    two copies identical); blockquotes nested, future review dates refused; `release.ts` explicit
+    diff prefixes (`diff.noprefix` rehearsed); `crates-io.ts` reports a persistent 5xx as such,
+    gunzip capped (50); four test files' `write_temp` get a per-process folder; two `contains("simd")`
+    asserts now match "proposal `simd`" (CLI tests green).
+  - still TO DO: `gate.ts` annotation keeps the line(s) after "panicked at" and after `^error`
+    (the panic message, `--> file:line`, the lint name); `architecture.md:151,204` promises a linked
+    freestanding wasm32 artifact with an allocator that does not exist — correct the record (the gate
+    proves a `no_std` library build only); stale counts in `testing.md` top (15 steps, 44/44/37) and
+    `releasing.md` ("Self-tests now 44 / 44 / 37"); the ledger rows for round 3 in `known-issues.md`
+    (R27+, with R1's "every written root gets the pid" marked 🔁 — four helpers did not), N-rows for:
+    tar pax/long-name overrides, a v2.0.1 carried test asserting no `7` over a temp path, the gate's
+    quadratic line buffer, `prev-tag-tests.ts` stack trace when `released.txt` is missing.
+  - then RE-RUN the burned-version end-to-end rehearsal (scratchpad `burned-e2e2.sh`; cases 1–2 were
+    blocked by GitHub's unauthenticated API rate limit, case 3 passed), the full gate in a fresh
+    clone, commit + push (a `checks`-only run), and brief **round 4** fresh on round 3's fixes.
+- When a round finds nothing: write the `### 2.0.2` entry in `release.md` with both review lines
+  (the closing clause), the CHANGELOG `## [2.0.2]` section, push the notes, `bun scripts/bump.ts patch`,
+  `bun scripts/release.ts`, watch CI tag → page → publish → read back; then the workspace ledger
+  answers for H33/H34/H35 with the commit ids.
+
 0. ✅ **The crates.io trusted publishers are set** (owner, 2026-11-12: "trusted publisher is already
    set"; not readable from here without a crates.io login — the next release's `publish` job is the
    first real OIDC exchange, and if it fails there: fix the setting, "Re-run failed jobs", no new

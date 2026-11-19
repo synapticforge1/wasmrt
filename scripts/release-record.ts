@@ -60,22 +60,25 @@ function prose(lines: string[]): string[] {
     let l = raw;
     if (/^\s*```/.test(l)) { fence = !fence; out.push(""); continue; }
     if (fence) { out.push(""); continue; }
+    // Comment markers are FOUND in a mask where inline code spans are blanked (a `<!--` inside
+    // backticks opens no comment — review round 2), and CUT from the original line, so code text
+    // itself stays (review round 3: blanking the text emptied page titles and hid text after the
+    // review clause). The mask keeps every position.
+    const mask = comment ? l : l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
     let kept = "";
-    // An inline code span is text, not markup: a `<!--` inside backticks opens no comment (review
-    // round 2: it hid both review lines). Spans are blanked to spaces so positions stay.
-    if (!comment) l = l.replace(/`[^`]*`/g, (s) => " ".repeat(s.length));
-    while (l.length) {
+    let i = 0;
+    while (i < l.length) {
       if (comment) {
-        const end = l.indexOf("-->");
-        if (end < 0) { l = ""; break; }
+        const end = mask.indexOf("-->", i);
+        if (end < 0) { i = l.length; break; }
         comment = false;
-        l = l.slice(end + 3);
+        i = end + 3;
       } else {
-        const start = l.indexOf("<!--");
-        if (start < 0) { kept += l; break; }
-        kept += l.slice(0, start);
+        const start = mask.indexOf("<!--", i);
+        if (start < 0) { kept += l.slice(i); break; }
+        kept += l.slice(i, start);
         comment = true;
-        l = l.slice(start + 4);
+        i = start + 4;
       }
     }
     out.push(kept);
@@ -128,7 +131,14 @@ const entry = lines.slice(start + 1, end);
 
 const CLAUSE = /Ended by an empty round: round ([1-9]\d*), (\d{4}-\d{2}-\d{2})\.$/;
 const REVIEW_LINE = /\*\*(Security|Hardening) review:\*\*/;
-const NESTED_ITEM = /^\s+(?:[-*+]|\d+[.)])\s/;
+// A nested list item or blockquote is not a continuation (review round 3: a `  > Ended by …` under
+// "round 2 is OWED" passed).
+const NESTED_ITEM = /^\s+(?:(?:[-*+]|\d+[.)])\s|>)/;
+
+/** A review cannot have ended after today (UTC; one day of slack for time zones). */
+function notFuture(s: string): boolean {
+  return Date.parse(`${s}T00:00:00Z`) <= Date.now() + 86_400_000;
+}
 function review(kind: "Security" | "Hardening"): string {
   // A `-`, `*`, `+` or numbered list marker is fine (review round 2: `+` and `1.` were refused).
   const re = new RegExp(`^\\s*(?:(?:[-*+]|\\d+[.)])\\s+)?\\*\\*${kind} review:\\*\\*\\s*(.*)$`);
@@ -145,9 +155,11 @@ function review(kind: "Security" | "Hardening"): string {
   text = text.replace(/\s+/g, " ").trim();
   const c = CLAUSE.exec(text);
   if (!c) {
-    fail(`the ${version} ${kind.toLowerCase()} review must END with "Ended by an empty round: round <N>, <YYYY-MM-DD>." (got "${text.slice(-120)}")`);
+    const quoted = /`Ended by an empty round: round \d+, \d{4}-\d{2}-\d{2}\.`$/.test(text);
+    fail(`the ${version} ${kind.toLowerCase()} review must END with "Ended by an empty round: round <N>, <YYYY-MM-DD>."${quoted ? " — written as plain text, not in backticks" : ""} (got "${text.slice(-120)}")`);
   }
   if (!realDate(c[2])) fail(`the ${version} ${kind.toLowerCase()} review's date ${c[2]} is not a real date`);
+  if (!notFuture(c[2])) fail(`the ${version} ${kind.toLowerCase()} review's date ${c[2]} is in the future`);
   return text;
 }
 const sec = review("Security");

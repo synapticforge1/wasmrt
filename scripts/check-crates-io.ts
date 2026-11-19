@@ -314,8 +314,8 @@ await run("readback: a non-octal tar size field → refused", { listed: ALL, sha
 await run("readback: a crate published from a DIRTY tree → refused", { listed: ALL, shape: { "wasmrt-core": "dirty" } }, ["readback"], {
   code: 1, out: "DIRTY tree",
 });
-await run("readback: the CDN answering 503 is retried, not fatal at once", { listed: ALL, dl503: ["wasmrt"] }, ["readback"], {
-  code: 1, out: "after 2 attempts",
+await run("readback: the CDN answering 503 is retried, not fatal at once — and reported AS a 503", { listed: ALL, dl503: ["wasmrt"] }, ["readback"], {
+  code: 1, out: "HTTP 503 from the .crate download",
 });
 await run("has: a version list whose next_page repeats → red, and it ends", { paging: "repeat" }, ["has"], {
   code: 1, out: "pagination did not end",

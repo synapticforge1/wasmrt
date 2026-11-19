@@ -17,7 +17,11 @@
 use std::process::{Command, Output};
 
 fn write_temp(name: &str, bytes: &[u8]) -> String {
-    let p = std::env::temp_dir().join(name);
+    // A folder per process: two test runs on one host (two sessions, a gate beside a release) must
+    // not truncate each other's fixtures (review round 3; the file name itself is unchanged).
+    let d = std::env::temp_dir().join(format!("wasmrt_tests_{}", std::process::id()));
+    std::fs::create_dir_all(&d).expect("scratch dir");
+    let p = d.join(name);
     std::fs::write(&p, bytes).expect("write fixture");
     p.to_str().unwrap().to_string()
 }

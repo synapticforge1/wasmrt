@@ -73,6 +73,7 @@ if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("WASMRT_HTTP_TIMEOUT_MS 
 const UA = "wasmrt release workflow (https://github.com/synapticforge1/wasmrt)";
 const TOKENS = `${registry}/api/v1/trusted_publishing/tokens`;
 const MAX_PAGES = 50;
+let lastDownload = "";
 
 /** One request under ONE time limit, request to last byte. Never logs headers or bodies. */
 async function call(method: string, url: string, init: { headers?: Record<string, string>; body?: string } = {}) {
@@ -127,8 +128,12 @@ async function packagedFrom(crate: string): Promise<string | null> {
   let bytes: Buffer;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA }, signal });
-    // Not served yet (404/403) or a transient CDN error (5xx): "not yet", which `readback` retries.
-    if (res.status === 404 || res.status === 403 || res.status >= 500) return null;
+    // Not served yet (404/403) or a transient CDN error (5xx): "not yet", which `readback` retries —
+    // keeping the status, so a 5xx that never clears is reported as an outage (review round 3).
+    if (res.status === 404 || res.status === 403 || res.status >= 500) {
+      lastDownload = `HTTP ${res.status} from the .crate download`;
+      return null;
+    }
     if (!res.ok) fail(`GET ${url}: HTTP ${res.status} — re-run when crates.io answers`);
     bytes = Buffer.from(await res.arrayBuffer());
   } catch (e) {
@@ -137,9 +142,10 @@ async function packagedFrom(crate: string): Promise<string | null> {
   }
   let tar: Buffer;
   try {
-    tar = gunzipSync(bytes);
-  } catch {
-    fail(`${crate} ${version}: the downloaded .crate is not gzip`);
+    // Capped (review round 3: a gzip bomb would exhaust memory); a real wasmrt .crate is < 2 MiB.
+    tar = gunzipSync(bytes, { maxOutputLength: 256 * 1024 * 1024 });
+  } catch (e) {
+    fail(`${crate} ${version}: the downloaded .crate is not gzip, or unpacks past 256 MiB (${(e as Error).message})`);
   }
   // Walk EVERY member (review round 2: the first of two vcs members won, while tar extraction keeps
   // the last), with strict octal sizes (parseInt stopped silently at a bad digit).
@@ -273,7 +279,7 @@ for (const c of CRATES) {
         served = true;
         break;
       }
-      last = "listed, .crate not served yet";
+      last = `listed, .crate not served yet (${lastDownload})`;
     } else last = `HTTP ${r.status}`;
     console.log(`${c}: attempt ${i}/${attempts}: ${last}`);
     if (i < attempts) await new Promise((resolve) => setTimeout(resolve, interval));

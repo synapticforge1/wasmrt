@@ -73,6 +73,12 @@ no("reviews: an impossible date in the clause", `${SUM}\n\n- **Security review:*
 run("reviews: an impossible date in the heading", ["reviews", "1.2.3"], { release: entry(`${SUM}\n\n${SEC}\n${HARD}\n`, "1.2.3", "### 1.2.3 — 2026-02-30 — x") }, {
   code: 1, out: "real date",
 });
+// Review round 3: code spans stay text; blockquotes, future dates.
+okHead("reviews: a heading whose line starts with inline code", "### 1.2.3 — 2026-11-12 — `release.yml`: CI tags");
+no("reviews: backticked text AFTER the clause", `${SUM}\n\n- **Security review:** one round. Ended by an empty round: round 1, 2026-11-12. \`round 2 OWED\`\n${HARD}\n`, "must END with");
+no("reviews: the clause in backticks: refused, and the message says why", `${SUM}\n\n- **Security review:** one round. \`Ended by an empty round: round 1, 2026-11-12.\`\n${HARD}\n`, "not in backticks");
+no("reviews: the clause in a nested blockquote under 'round 2 is OWED'", `${SUM}\n\n- **Security review:** round 2 is OWED.\n  > Ended by an empty round: round 1, 2026-11-12.\n${HARD}\n`, "must END with");
+no("reviews: a review that ended in the future", `${SUM}\n\n- **Security review:** one round. Ended by an empty round: round 1, 2099-01-01.\n${HARD}\n`, "in the future");
 no("reviews: no security review", `${SUM}\n\n${HARD}\n`, 'no "**Security review:**" line');
 no("reviews: no hardening review", `${SUM}\n\n${SEC}\n`, 'no "**Hardening review:**" line');
 for (const bad of [

@@ -111,7 +111,7 @@ fn features_with_an_equals_sign_is_the_same_flag() {
     let simd = std::env::temp_dir().join(format!("wasmrt_contract_simd_{}.wat", std::process::id()));
     std::fs::write(&simd, br#"(module (func (export "f") (result v128) (v128.const i32x4 1 2 3 4)))"#).unwrap();
     let (ok, text) = run(&["--features=mvp", &simd.to_string_lossy()]);
-    assert!(!ok && text.contains("simd"), "`--features=mvp` must refuse a SIMD module, naming it; got: {text}");
+    assert!(!ok && text.contains("proposal `simd`"), "`--features=mvp` must refuse a SIMD module, naming it; got: {text}");
 }
 
 // ---- v28 -------------------------------------------------------------------------------------

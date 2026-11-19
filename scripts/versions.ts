@@ -16,6 +16,9 @@ export type V = [number, number, number];
 export type Level = "patch" | "minor" | "major";
 export type TagState = "burned" | "partial" | "released";
 
+/** A version tag name as this project writes them: no leading zeros (`v2.0.02` is not a version). */
+export const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
 export const parse = (s: string): V => {
   const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(s.trim());
   if (!m) throw new Error(`not a MAJOR.MINOR.PATCH version: ${s}`);
@@ -45,6 +48,19 @@ export function nextVersion(
   tags: Map<string, TagState>,
   exclude?: V,
 ): { version: V; skipped: V[] } | { refuse: string } {
+  // ANY unfinished (partial) or unrecorded (released) tag above the last completed release refuses,
+  // whatever the level — not only one on this bump's own path (review round 3: a MINOR bump after a
+  // partly published 2.0.2 went to 2.1.0 and left 2.0.2 half-published for good).
+  for (const [t, s] of [...tags].sort((a, b) => cmp(parse(a[0]), parse(b[0])))) {
+    if (cmp(parse(t), released) <= 0) continue; // at or below the last completed release: settled
+    if (exclude && cmp(parse(t), exclude) === 0) continue;
+    if (s === "partial") {
+      return { refuse: `v${t} is tagged and PARTLY on crates.io: its release is unfinished — finish its run ("Re-run failed jobs"), never step over it` };
+    }
+    if (s === "released") {
+      return { refuse: `v${t} is tagged and on crates.io: a completed release whose surface/released.txt step was not run — run step 9 first: bun scripts/surface.ts --release-from v${t}` };
+    }
+  }
   let v = inc(released, level);
   const skipped: V[] = [];
   for (let guard = 0; ; guard++) {
@@ -70,11 +86,16 @@ export function nextVersion(
   return { version: v, skipped };
 }
 
-/** Is `target` the version a release after `released` gets? Returns its level, or the refusal. */
-export function verifyTarget(released: V, target: V, tags: Map<string, TagState>): { level: Level } | { refuse: string } {
+/** Is `target` the version a release after `released` gets? Returns its level, or the refusal.
+ *  `ownTagHere`: target's tag exists and is on THIS commit (a CI re-run) — only then is that tag
+ *  expected; a target whose tag is elsewhere is a burned or taken number (review round 3). */
+export function verifyTarget(released: V, target: V, tags: Map<string, TagState>, ownTagHere = false): { level: Level } | { refuse: string } {
   if (cmp(target, released) <= 0) return { refuse: `${show(target)} is not after the last release ${show(released)}` };
+  if (!ownTagHere && tags.has(show(target))) {
+    return { refuse: `v${show(target)} is already tagged on another commit (${tags.get(show(target))}): this number is taken — never reuse it` };
+  }
   const level = kindOf(released, target);
-  const next = nextVersion(released, level, tags, target);
+  const next = nextVersion(released, level, tags, ownTagHere ? target : undefined);
   if ("refuse" in next) return next;
   if (cmp(next.version, target) !== 0) {
     return { refuse: `a ${level} release after ${show(released)} is ${show(next.version)}${next.skipped.length ? ` (burned: ${next.skipped.map(show).join(", ")})` : ""}, not ${show(target)}` };

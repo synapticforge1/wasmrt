@@ -91,8 +91,11 @@ const SHAPES: Record<string, RegExp[]> = {
   "Cargo.lock": [/^version = "VER"$/],
 };
 for (const [file, want] of [["Cargo.toml", 2], ["Cargo.lock", 3]] as const) {
-  const diff = git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "-U1", "HEAD~1", "HEAD", "--", file).split(/\r?\n/);
-  const body = diff.filter((l) => !/^(diff --git|index |--- a\/|\+\+\+ b\/|@@ )/.test(l));
+  // Explicit prefixes (review round 3: `diff.noprefix` / `diff.srcPrefix` made a correct bump's file
+  // headers read as changed lines), and everything before the first hunk is header, whatever it says.
+  const diff = git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", "-U1", "HEAD~1", "HEAD", "--", file).split(/\r?\n/);
+  const firstHunk = diff.findIndex((l) => l.startsWith("@@ "));
+  const body = (firstHunk < 0 ? [] : diff.slice(firstHunk)).filter((l) => !l.startsWith("@@ "));
   const removed = body.filter((l) => l.startsWith("-")).map((l) => l.slice(1));
   const added = body.filter((l) => l.startsWith("+")).map((l) => l.slice(1));
   const shape = (v: string) => SHAPES[file].map((r) => new RegExp(r.source.replace("VER", esc(v))));

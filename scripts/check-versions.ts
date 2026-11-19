@@ -19,7 +19,7 @@ function check(name: string, ok: boolean, detail: string) {
 }
 const tags = (o: Record<string, TagState>) => new Map(Object.entries(o));
 const next = (rel: string, level: string, t: Record<string, TagState>) => nextVersion(parse(rel), level, tags(t));
-const verify = (rel: string, target: string, t: Record<string, TagState>) => verifyTarget(parse(rel), parse(target), tags(t));
+const verify = (rel: string, target: string, t: Record<string, TagState>, here = false) => verifyTarget(parse(rel), parse(target), tags(t), here);
 const is = (r: any, want: string) => "version" in r && show(r.version) === want;
 const refuses = (r: any, frag: string) => "refuse" in r && r.refuse.includes(frag);
 
@@ -39,7 +39,13 @@ check("tags BELOW released are irrelevant", is(next("2.0.1", "patch", { "1.9.0":
 check("verify 2.0.2 after 2.0.1", "level" in verify("2.0.1", "2.0.2", {}), JSON.stringify(verify("2.0.1", "2.0.2", {})));
 check("verify 2.0.3 after a burned 2.0.2 (the round-2 defect)", "level" in verify("2.0.1", "2.0.3", { "2.0.2": "burned" }), JSON.stringify(verify("2.0.1", "2.0.3", { "2.0.2": "burned" })));
 check("refuse 2.0.3 when 2.0.2 is NOT burned (skipping a version)", refuses(verify("2.0.1", "2.0.3", {}), "is 2.0.2"), JSON.stringify(verify("2.0.1", "2.0.3", {})));
-check("verify on the release's own tagged commit (a CI re-run): its own tag is expected", "level" in verify("2.0.1", "2.0.2", { "2.0.2": "partial" }), JSON.stringify(verify("2.0.1", "2.0.2", { "2.0.2": "partial" })));
+check("verify on the release's own tagged commit (a CI re-run): its own tag is expected", "level" in verify("2.0.1", "2.0.2", { "2.0.2": "partial" }, true), JSON.stringify(verify("2.0.1", "2.0.2", { "2.0.2": "partial" }, true)));
+// Review round 3.
+check("a MINOR after a partly published 2.0.2 refuses (never step over it)", refuses(next("2.0.1", "minor", { "2.0.2": "partial" }), "PARTLY"), JSON.stringify(next("2.0.1", "minor", { "2.0.2": "partial" })));
+check("a MAJOR after a published-but-unrecorded 2.0.2 refuses (run step 9)", refuses(next("2.0.1", "major", { "2.0.2": "released" }), "step 9"), "");
+check("verify refuses the gate too: 2.1.0 with 2.0.2 partial", refuses(verify("2.0.1", "2.1.0", { "2.0.2": "partial" }), "PARTLY"), JSON.stringify(verify("2.0.1", "2.1.0", { "2.0.2": "partial" })));
+check("verify 2.0.2 whose tag is on ANOTHER commit (burned): refused as taken", refuses(verify("2.0.1", "2.0.2", { "2.0.2": "burned" }), "taken"), JSON.stringify(verify("2.0.1", "2.0.2", { "2.0.2": "burned" })));
+check("a minor after a BURNED 2.0.2 is fine (2.1.0)", is(next("2.0.1", "minor", { "2.0.2": "burned" }), "2.1.0"), "");
 check("verify 2.1.1 after a burned 2.1.0", "level" in verify("2.0.1", "2.1.1", { "2.1.0": "burned" }), "");
 check("refuse a target not after released", refuses(verify("2.0.1", "2.0.1", {}), "not after"), "");
 check("refuse a target with lower components not reset (2.1.3)", refuses(verify("2.0.1", "2.1.3", {}), "is 2.1.0"), "");

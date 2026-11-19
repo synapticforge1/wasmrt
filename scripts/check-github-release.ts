@@ -295,6 +295,10 @@ const titled = await run("an inline comment in the heading stays out of the page
   WASMRT_CHANGELOG: CL3,
 });
 check("the title has no comment", titled[0]?.body?.name === "[1.2.3] — a title", JSON.stringify(titled[0]?.body?.name));
+// Review round 3: inline code is TEXT — the title keeps it (the CHANGELOG's [0.9.0] heading has this shape).
+writeFileSync(CL3, "## [1.2.3] — the `wasmrt.h` C ABI <!-- x -->\n\n- the change\n");
+const coded = await run("an inline-code span in the heading stays in the title", {}, { code: 0, posts: 1, out: "created" }, { WASMRT_CHANGELOG: CL3 });
+check("the title keeps its inline code", coded[0]?.body?.name === "[1.2.3] — the `wasmrt.h` C ABI", JSON.stringify(coded[0]?.body?.name));
 // 3. Create, read back, re-check.
 const made = await run("lightweight tag: created", {}, { code: 0, posts: 1, out: "created by github-actions[bot]" });
 const b = made[0]?.body;
