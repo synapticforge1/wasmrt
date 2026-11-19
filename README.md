@@ -151,6 +151,15 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 | 1.0.0 | **Pins:** `wasmrt wat` now writes `wasm-tools parse`'s bytes, so a `.wat` file's pin digest changes (`.wasm` digests do not) | re-run `wasmrt pin` over pinned `.wat` files |
 | 1.0.0 | **Rust API (`wasmrt-core`):** `interp::PAGE_SIZE` removed (pages have a per-memory size); `opcode::Op` is `#[repr(u16)]` with renumbered internal tags; `module::Code::body` (the raw bytes) replaced by `Code::ir` (the decoded instructions); `interp::InstanceId` carries its store and is no longer a tuple struct; new enum variants in `opcode::Imm`, `DecodeError` and `wat::Error` | match on the new variants; take a page size from the memory's type. The C ABI (`wasmrt.h`) only added: `abi_version()` is still 1 |
 
+## Privacy
+
+wasmrt collects nothing and makes no network requests: no telemetry, no update checks. The CLI
+writes only the files you name (`wat … -o <file>`, `pin … --db <file>`) and what a guest writes
+inside a directory you pass with `--dir`. It reads the pin database from its fixed paths
+(`%ProgramData%\…\pins` on Windows, `/etc/…/pins` elsewhere), reading the `ProgramData` variable on
+Windows to find it, and nothing else from the environment. A guest sees only the variables you pass
+with `--env`.
+
 ## License
 
 `SPDX-License-Identifier: MIT OR Apache-2.0`

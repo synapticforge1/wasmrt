@@ -45,9 +45,15 @@ for (const arg of process.argv.slice(2)) {
   else fail(`unknown argument "${arg}" — use --dry-run or nothing`, 2);
 }
 
-function run(cmd: string, args: string[]) {
-  const r = spawnSync(cmd, args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 26 });
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+// Every subprocess has a time limit (review H2, 2026-11-19): a stalled remote or a credential
+// prompt ends as a named error, not a hang. `spawnSync` reports a timeout as status null + `error`.
+const GIT_MS = 120_000; // fetch, ls-remote and the local git calls
+const PUSH_MS = 600_000;
+const GATE_MS = 3_600_000; // the full local gate, every suite included
+function run(cmd: string, args: string[], timeout = GIT_MS) {
+  const r = spawnSync(cmd, args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 26, timeout });
+  const why = r.error ? `${r.error.message}${(r.error as { code?: string }).code === "ETIMEDOUT" ? ` (time limit ${timeout / 1000} s)` : ""}\n` : "";
+  return { status: r.status, stdout: r.stdout ?? "", stderr: why + (r.stderr ?? "") };
 }
 function git(...args: string[]): string {
   const r = run("git", args);
@@ -129,15 +135,21 @@ if (remoteTag.status === 0) fail(`tag ${tag} exists on origin`);
 if (remoteTag.status !== 2) fail(`could not ask origin whether ${tag} exists (git ls-remote exit ${remoteTag.status})`);
 
 // ── crates.io: each crate's version LIST (never the version URL before it exists) ──
+// Every page, as bump.ts, crates-io.ts and github-release.ts read it (review B-h1, 2026-11-19).
 for (const c of CRATES) {
-  let listed: string[];
+  const listed: string[] = [];
   try {
-    const res = await fetch(`https://crates.io/api/v1/crates/${c}/versions`, {
-      headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    listed = ((await res.json()) as { versions: { num: string }[] }).versions.map((v) => v.num);
+    const base = `https://crates.io/api/v1/crates/${c}/versions`;
+    const seen = new Set<string>();
+    for (let url: string | null = base, page = 1; url; page++) {
+      if (seen.has(url) || page > 50) throw new Error("pagination did not end");
+      seen.add(url);
+      const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status} (page ${page})`);
+      const j = (await res.json()) as { versions: { num: string }[]; meta?: { next_page?: string | null } };
+      listed.push(...j.versions.map((v) => v.num));
+      url = j.meta?.next_page ? `${base}${j.meta.next_page}` : null;
+    }
   } catch (e) {
     fail(`could not read crates.io's version list for ${c}: ${(e as Error).message}`);
   }
@@ -146,8 +158,8 @@ for (const c of CRATES) {
 console.log(`guards: clean, main = origin/main + "bump to ${tag}", ${tag} absent here and on origin, crates.io without ${version}`);
 
 // ── the cold gate: CI's own list ──
-const g = spawnSync(process.execPath, ["scripts/gate.ts", "--release"], { cwd: repo, stdio: "inherit" });
-if (g.status !== 0) fail(`the gate failed (exit ${g.status})`);
+const g = spawnSync(process.execPath, ["scripts/gate.ts", "--release"], { cwd: repo, stdio: "inherit", timeout: GATE_MS });
+if (g.status !== 0) fail(`the gate failed (exit ${g.status}${g.error ? `, ${g.error.message}` : ""})`);
 const after = git("status", "--porcelain", "--untracked-files=all");
 if (after) fail(`the gate left the tree dirty:\n${after}`);
 
@@ -159,9 +171,9 @@ if (dryRun) {
 // ── ONE push of main, read back; no tag ──
 // An explicit refspec and --no-follow-tags: the user's git config (push.followTags, push.default)
 // must not add tags or other branches to this push (review round 1).
-const push = spawnSync("git", ["push", "--no-follow-tags", "origin", "refs/heads/main:refs/heads/main"], { cwd: repo, stdio: "inherit" });
+const push = spawnSync("git", ["push", "--no-follow-tags", "origin", "refs/heads/main:refs/heads/main"], { cwd: repo, stdio: "inherit", timeout: PUSH_MS });
 if (push.status !== 0) {
-  console.error(`release: git push origin main failed (exit ${push.status})`);
+  console.error(`release: git push origin main failed (exit ${push.status}${push.error ? `, ${push.error.message}` : ""}) — check origin/main before retrying`);
   process.exit(1);
 }
 const remoteMain = git("ls-remote", "origin", "refs/heads/main").split(/\s+/)[0];

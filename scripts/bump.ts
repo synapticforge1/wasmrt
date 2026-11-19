@@ -42,6 +42,38 @@ import { prevTagTests } from "./prev-tag-tests.ts";
 import { CURRENT, type Floor, floorOf, generate, generateFromRef, printDiff, readSnapshot, RELEASED, repo, tools } from "./surface.ts";
 import { cmp, nextVersion, parse, show, TAG, type TagState, type V, verifyTarget } from "./versions.ts";
 
+// Every subprocess has a time limit (review H2, 2026-11-19): a stalled remote or a credential
+// prompt ends as a named error, not a hang. A timeout comes back as status null + `error`.
+const GIT_MS = 120_000;
+const LONG_MS = 3_600_000; // cargo semver-checks and carry-forward build the released tag
+
+type Ran = { status: number | null; error?: Error; stdout?: string | null; stderr?: string | null };
+const said = (r: Ran) => `exit ${r.status}${r.error ? `, ${r.error.message}` : ""}):\n${r.stdout ?? ""}${r.stderr ?? ""}`;
+
+/** Writes `next` as `dir`/Cargo.toml, then runs the lockfile update and the commit. Failure
+ *  atomicity (review H1, 2026-11-19): until the commit exists, ANY failure puts Cargo.toml and
+ *  Cargo.lock back byte for byte, so a failed bump leaves the clean tree it started from. Returns
+ *  null on success, else the reason (the files already restored). Self-test: check-bump.ts. */
+export function commitBump(dir: string, next: string, update: () => Ran, commit: () => Ran): string | null {
+  const toml = join(dir, "Cargo.toml"), lock = join(dir, "Cargo.lock");
+  const before = { toml: readFileSync(toml), lock: readFileSync(lock) };
+  const undo = (why: string) => {
+    writeFileSync(toml, before.toml);
+    writeFileSync(lock, before.lock);
+    return `${why}\n  Cargo.toml and Cargo.lock are restored; nothing was committed.`;
+  };
+  try {
+    writeFileSync(toml, next);
+    const u = update();
+    if (u.status !== 0) return undo(`cargo update failed (${said(u)}`);
+    const c = commit();
+    if (c.status !== 0) return undo(`git commit failed (${said(c)}`);
+  } catch (e) {
+    return undo(`the bump threw: ${(e as Error).message}`);
+  }
+  return null;
+}
+
 const RANK: Record<Floor, number> = { patch: 0, minor: 1, major: 2 };
 const max = (a: Floor, b: Floor): Floor => (RANK[a] >= RANK[b] ? a : b);
 
@@ -85,7 +117,7 @@ function semverFloor(released: string): Floor {
   let floor: Floor = "patch";
   for (const c of ["wasmrt-core", "wasmrt-capi"]) {
     const r = spawnSync("cargo", ["semver-checks", "--color", "never", "--baseline-rev", `v${released}`, "-p", c],
-      { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 });
+      { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28, timeout: LONG_MS });
     const out = `${r.stdout}\n${r.stderr}`;
     const m = /Summary (?:semver requires new (major|minor) version|(no semver update required))/.exec(out);
     if (!m) throw new Error(`cargo semver-checks on ${c} gave no verdict (status ${r.status}):\n${out.slice(-2000)}`);
@@ -99,7 +131,7 @@ function semverFloor(released: string): Floor {
 
 function behaviourFloor(released: string): Floor {
   const r = spawnSync("bun", [join(repo, "scripts", "carry-forward.ts"), `v${released}`, "WORKTREE"],
-    { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 });
+    { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28, timeout: LONG_MS });
   const m = /carry-forward floor over .*: (patch|minor|major)/.exec(r.stdout);
   if (r.status !== 0 || !m) throw new Error(`carry-forward failed (status ${r.status}):\n${r.stdout.slice(-1500)}\n${r.stderr.slice(-1500)}`);
   const line = /== .* floor .*/.exec(r.stdout)?.[0] ?? "";
@@ -161,7 +193,7 @@ async function cratesVersions(crate: string): Promise<Set<string>> {
  *  local clone: a tag deleted on origin stays in a clone after `fetch --tags` (review round 3), and
  *  CI's fresh clone sees only origin's. Names with leading zeros are not versions (`TAG`). */
 function originTags(): Map<string, string> {
-  const r = spawnSync("git", ["ls-remote", "--tags", "origin"], { cwd: repo, encoding: "utf8" });
+  const r = spawnSync("git", ["ls-remote", "--tags", "origin"], { cwd: repo, encoding: "utf8", timeout: GIT_MS });
   if (r.status !== 0) { console.log(`✗ git ls-remote --tags origin failed — the tags decide the next version:\n${r.stderr}`); process.exit(1); }
   const at = new Map<string, string>();
   for (const line of r.stdout.split(/\r?\n/)) {
@@ -238,7 +270,7 @@ if (import.meta.main) {
     if (!tag) { console.error("usage: bun scripts/bump.ts --verify-tag vX.Y.Z"); process.exit(2); }
     const v = parse(tag), have = parse(manifestVersion());
     if (cmp(v, have) !== 0) { console.log(`✗ tag ${tag} but Cargo.toml says ${show(have)}`); process.exit(1); }
-    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8", timeout: GIT_MS }).stdout.trim();
     const { states, at } = await tagStates(parse(released), head);
     // Its own tag is expected only when it is on THIS commit (a CI re-run); elsewhere it is taken.
     const why = judge(parse(released), v, floors(released), states, at.get(tag) === head);
@@ -254,7 +286,7 @@ if (import.meta.main) {
   for (const a of argv.slice(1)) {
     if (a !== "--dry-run") { console.error(`unknown argument "${a}"`); process.exit(2); }
   }
-  const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8", timeout: GIT_MS });
   if (!dryRun) {
     const dirty = git("status", "--porcelain", "--untracked-files=all");
     if (dirty.status !== 0 || dirty.stdout.trim()) {
@@ -305,13 +337,12 @@ if (import.meta.main) {
     .replace(/(wasmrt-core = \{ path = "crates\/wasmrt-core", version = ")[^"]+(")/, `$1${show(target)}$2`);
   const moved = (next.match(new RegExp(`"${show(target).replace(/\./g, "\\.")}"`, "g")) ?? []).length;
   if (moved !== 2) { console.log(`✗ expected to rewrite 2 version strings in Cargo.toml, rewrote ${moved}; nothing written`); process.exit(1); }
-  writeFileSync(path, next);
-  const u = spawnSync("cargo", ["update", "--workspace", "--offline"], { cwd: repo, encoding: "utf8" });
-  if (u.status !== 0) { console.log(`✗ cargo update failed:\n${u.stderr}`); process.exit(1); }
   // U2: the bump is its own commit, made here, holding exactly the two version files.
   const msg = `bump to v${show(target)}`;
-  const c = git("commit", "-q", "-m", msg, "--", "Cargo.toml", "Cargo.lock");
-  if (c.status !== 0) { console.log(`✗ git commit failed:\n${c.stdout}${c.stderr}`); process.exit(1); }
+  const failed = commitBump(repo, next,
+    () => spawnSync("cargo", ["update", "--workspace", "--offline"], { cwd: repo, encoding: "utf8", timeout: GIT_MS }),
+    () => git("commit", "-q", "-m", msg, "--", "Cargo.toml", "Cargo.lock"));
+  if (failed) { console.log(`✗ ${failed}`); process.exit(1); }
   const files = git("show", "--name-only", "--format=", "HEAD").stdout.split(/\r?\n/).filter(Boolean).sort().join(",");
   if (files !== "Cargo.lock,Cargo.toml") { console.log(`✗ the bump commit holds ${files}, not Cargo.toml + Cargo.lock`); process.exit(1); }
   const left = git("status", "--porcelain", "--untracked-files=all").stdout.trim();

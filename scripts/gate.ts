@@ -62,6 +62,8 @@ const steps: Step[] = [
   ["privacy and credential scan (tree, untracked files, commits since the last release)", bun, ["scripts/privacy-gate.ts", "--commits", `${lastTag()}..HEAD`]],
   ["privacy scan self-test", bun, ["scripts/check-privacy-gate.ts"]],
   ["review gate self-test", bun, ["scripts/check-review-gate.ts"]],
+  ["bump self-test", bun, ["scripts/check-bump.ts"]],
+  ["licence copies in every crate", bun, ["scripts/licence-copies.ts"]],
   ["shared definitions", bun, ["scripts/definitions.ts", "--check"]],
   ["build (release)", "cargo", ["build", "--workspace", "--release", "--locked"]],
   ["tests", "cargo", ["test", "--workspace", "--locked"]],
