@@ -12,20 +12,26 @@ is **tier 3, the full matrix** (native by nature). Machine names stay in `local/
 | `win-arm64` | `pending` | `aarch64-pc-windows-gnullvm` | — (arm64 Mac, not yet) |
 | `mac-x64` | `pending` | `x86_64-apple-darwin` | — (Intel Mac, not yet) |
 | `mac-arm64` | `pending` | `aarch64-apple-darwin` | — (arm64 Mac, not yet) |
-| `linux-x64` | `pending` | `x86_64-unknown-linux-gnu` | — (dev machine's WSL can run it: Ubuntu only) |
+| `linux-x64` | `tested` | `x86_64-unknown-linux-gnu` | dev machine's WSL (Ubuntu 26.04.1 LTS), first 2026-11-19 |
 | `linux-arm64` | `pending` | `aarch64-unknown-linux-gnu` | — (arm64 Mac, not yet) |
 
 `tested`, not `shipped`: wasmrt publishes SOURCE crates to crates.io (`wasmrt-core`, `wasmrt-capi`,
 `wasmrt`); the Release page carries no binary. A user builds on their own platform.
 
 `linux-x64` was exercised by CI's Linux `checks` (Ubuntu runner) up to 2026-11-12; CI tests nothing
-since H37 (e), so until it is run here (WSL) for a release it is `pending` for that release.
+since H37 (e), so it is run here (WSL) for each release. 🔁 First run 2026-11-19, for 2.0.2 at
+`76ca5a0` (owner: "you can add rust in wsl"): rustup in WSL Ubuntu with CI's dated nightly
+(`nightly-2026-11-04`, rustc `708c94ef0`, the Windows run's compiler), `cargo-public-api` 0.52.0 (the
+surface step needs it — the first gate attempt stopped there without it), the spec suite through a
+symlink to the wasmtk checkout. A fresh clone in the WSL home, ~900 MB once built — removed after the
+run. One test is `#[cfg(windows)]` (`a_drive_without_a_separator_is_drive_relative`), so Linux counts
+one fewer: 607 / 0 / 1 against Windows' 608 / 0 / 1.
 
-**Second axis — distros (`linux-x64`).** None run for a release yet.
+**Second axis — distros (`linux-x64`).**
 
 | Distro and version | libc | Status | Tested on |
 | --- | --- | --- | --- |
-| Ubuntu (WSL) | glibc | `pending` | dev machine |
+| Ubuntu 26.04.1 LTS (WSL) | glibc | `tested` 2026-11-19 (2.0.2 review) | dev machine |
 
 **Second axis — wasm targets** (the dual-target contract, `architecture.md`): `wasmrt-core` builds
 for `wasm32-unknown-unknown` (`no_std`, `--no-default-features`) and `wasm32-wasip1`; `gate.ts`

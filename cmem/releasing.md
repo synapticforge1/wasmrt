@@ -388,10 +388,16 @@ approval binaryang does not have:
 
 | setting | what | state |
 | --- | --- | --- |
-| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | to set |
-| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | to set |
-| environment `release` | Required reviewer: the owner; deployment branches: `main` only. `release.yml`'s `publish` job names it, so the publish waits for one approval (tag and page do not: a stolen credential could make those directly) | to set |
-| crates.io trusted publisher | per crate (all three): repository, `release.yml`, set (owner, 2026-11-19); **environment: `release`** — add it. 🔒 This is what holds: a stolen push credential can delete the workflow's `environment:` line in the same push, but not forge the token's environment claim (re-review R-S1) | environment to add |
+| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | set (owner, 2026-11-19) |
+| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | set (owner, 2026-11-19) |
+| environment | 🔒 **None** (owner, 2026-11-19: "I am not creating a release environment on github. My release environment is here."). The release's gate is the owner's machine: `release.ts` runs the full local gate and the review gate, then pushes `main` | — |
+| crates.io trusted publisher | per crate (all three): repository, `release.yml`, no environment; set (owner, 2026-11-19) | set |
+
+**The accepted risk (review S1, owner's decision).** With no environment, a push of `main` carrying a
+new version is published by CI without a further approval, so the push credential is the release
+credential: whoever can push `main` can publish. The rulesets keep a pushed history and the tags from
+being rewritten or deleted; they do not stop a new push. *(A "require signed commits" rule on `main`
+would make a stolen push token alone insufficient — not adopted; the commits are not signed today.)*
 
 Unchecked by the review (the public API does not show them): collaborators, deploy keys, webhooks and
 apps, secret scanning with push protection, alerts, Actions permissions.

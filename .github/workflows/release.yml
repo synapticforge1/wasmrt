@@ -19,8 +19,7 @@ name: release
 #             back. A tag made with GITHUB_TOKEN starts no workflow run, so the next jobs run here.
 #   release - contents: write, NO checkout. The GitHub Release page FROM that tag (H32's order), titled
 #             and filled from the CHANGELOG section — BEFORE the publish, by the owner's order.
-#   publish - environment `release` (waits for the owner's approval; crates.io's trusted publisher
-#             accepts only that environment). id-token: write + contents: read, LAST. crates.io trusted publishing (owner's D2: no
+#   publish - id-token: write + contents: read, LAST. crates.io trusted publishing (owner's D2: no
 #             stored token): skip every crate crates.io already lists; GitHub OIDC -> a short-lived
 #             crates.io token; wasmrt-core, wasmrt-capi, wasmrt in that order with
 #             `cargo publish --no-verify` (nothing built: the local gate built and dry-ran this
@@ -183,14 +182,6 @@ jobs:
 
   publish:
     needs: [checks, release]
-    # The owner's approval (review S1 + re-review R-S1, 2026-11-19). The `release` environment
-    # requires the owner as reviewer, AND each crate's crates.io trusted publisher names the
-    # environment `release`: the OIDC token carries the environment claim only when this job runs
-    # in it, after the approval. A stolen push credential can edit this file in the same push, so
-    # the line alone protects nothing — the trusted publisher's environment is what holds. Tag and
-    # page come before the approval: a stolen credential could make those directly anyway; the
-    # publish is the step that cannot be taken back (cmem/releasing.md § Repository settings).
-    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
