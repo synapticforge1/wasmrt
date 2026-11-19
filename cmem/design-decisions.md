@@ -40,7 +40,7 @@ joining Cloudflare. The runtime gets about a year of maintenance releases, so de
 around 2027-10 (an inferred date). binaryang started moving to Bun on 2026-10-12. wasmrt's own
 exposure was small: only the gate scripts ran on Deno, and they already used `node:` builtins.
 
-🆕 **WORKSPACE AMENDMENTS, 2026-10-22 (letter H15, `../cmem/working-rules.md` § Tooling rule 1),
+🆕 **WORKSPACE AMENDMENTS, 2026-10-22 (letter H15, `../workspace/cmem/working-rules.md` § Tooling rule 1),
 recorded here 2026-10-23.**
 * **A committed script uses the repo language's own scripting mechanism, else TypeScript on Bun.**
   A mechanism that has to **build an executable** to run the script does not count. So **Rust →
@@ -67,7 +67,7 @@ recorded here 2026-10-23.**
   must still assert that each match applied exactly once and read back what it changed (workspace
   Tooling rule 4). Language is not the safeguard; the assertion is.
 
-🆕 **WORKSPACE AMENDMENTS, 2026-11-08 / 11-09 (letters H30, H31, H32; `../cmem/working-rules.md`
+🆕 **WORKSPACE AMENDMENTS, 2026-11-08 / 11-09 (letters H30, H31, H32; `../workspace/cmem/working-rules.md`
 § Tooling rules 9 and 10), recorded here 2026-11-09.**
 * 🔒 **No `gh`, in CI too (owner, 2026-11-08: "just checking the repo is easier"; "yes change
   those").** Read what GitHub holds with `git ls-remote origin`, `git fetch`, or crates.io's public
@@ -217,7 +217,7 @@ is public. Only the gitignored `cmem/local/` is private.*
 **The path test is "is it MACHINE-SPECIFIC?", not "is it absolute?"** (owner, 2026-10-23):
 
 * **Not public:** anything that records the owner's own machine layout — a user profile
-  (`C:\Users\<name>\…`), the drive and folder the project tree sits in, other drives, scoop or
+  (`<drive>:\Users\<name>\…`), the drive and folder the project tree sits in, other drives, scoop or
   AppData installs, scratchpad or session ids. 🆕 **A bare drive LETTER counts** when it says where
   something lives on this machine ("the build drive is `X:`"), and so do the volume's health query
   and the names of tools installed on it (owner, 2026-10-24: the second history rewrite removed

@@ -421,6 +421,9 @@ pub fn errno_for(e: &std::io::Error) -> i32 {
     }
 }
 
+// platform: win-x64 win-arm64 linux-x64 linux-arm64 mac-x64 mac-arm64 — raw OS error codes, two
+// spellings: Windows' `ERROR_*`, and the Unix errno values. ⚠️ 39 is Linux's ENOTEMPTY; macOS's is
+// 66, so `is_notempty` misses it there (open issue I8, cmem/platforms.md § mac).
 #[cfg(windows)]
 fn is_notdir(c: i32) -> bool {
     c == 267 // ERROR_DIRECTORY
@@ -1494,6 +1497,8 @@ pub fn path_symlink(
 /// `target_is_dir` is only consulted on Windows, which must be told at creation time which
 /// kind of link it is making.
 fn make_symlink(target: &Path, link: &Path, target_is_dir: bool) -> Result<(), i32> {
+    // platform: win-x64 win-arm64 — symlink_dir / symlink_file, and creation needs privilege
+    // (Developer Mode or admin); every other ID — one `symlink` (cmem/platforms.md).
     #[cfg(unix)]
     {
         let _ = target_is_dir;

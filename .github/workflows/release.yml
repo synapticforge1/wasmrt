@@ -5,14 +5,16 @@ name: release
 # to the registry". `scripts/release.ts` pushes `main` only — nobody pushes a tag. Every push of
 # `main` runs this workflow; it is a RELEASE when Cargo.toml's version has no tag yet ("new"), or has
 # one on this very commit ("rerun": finish what a failed run left). Otherwise ("none") only `checks`
-# runs.
+# runs, and does nothing more.
 #
-#   checks  - contents: read, NO secret, a clone without credentials. The whole gate on the pushed
-#             commit — `bun scripts/gate.ts`, the SAME list `scripts/release.ts` runs locally: eol,
-#             definitions, build, tests, clippy, surface, C ABI, the release scripts' self-tests, the
-#             previous release's tests against this tree, `cargo publish --workspace --dry-run`; for a
-#             release (`--release`) also the floor since the last release, the CHANGELOG section and
-#             cmem/release.md's entry with both required reviews. All third-party code runs here.
+# 🔒 CI ONLY PUBLISHES (workspace review standard, letter H37 (e); owner, 2026-11-17: "We want the CI
+# to verify the version, then tag, create the release page and publish, and skip any version already
+# published"). Every gate, the test suites included, runs LOCALLY — `scripts/release.ts` runs
+# `bun scripts/gate.ts --release` (build, tests, lints, the privacy scan, the publish dry run, the
+# review's result) on the commit it pushes — and is not repeated here.
+#
+#   checks  - contents: read, NO secret, a clone without credentials. Reads the version and decides
+#             whether this push is a release (`github-release.ts state`). Builds and tests nothing.
 #   tag     - contents: write, NO checkout. CI's annotated tag vX.Y.Z on this commit (REST API), read
 #             back. A tag made with GITHUB_TOKEN starts no workflow run, so the next jobs run here.
 #   release - contents: write, NO checkout. The GitHub Release page FROM that tag (H32's order), titled
@@ -20,15 +22,16 @@ name: release
 #   publish - id-token: write + contents: read, LAST. crates.io trusted publishing (owner's D2: no
 #             stored token): skip every crate crates.io already lists; GitHub OIDC -> a short-lived
 #             crates.io token; wasmrt-core, wasmrt-capi, wasmrt in that order with
-#             `cargo publish --no-verify` (nothing built: `checks` built and dry-ran this commit);
-#             revoke the token; read all three back, FATAL.
+#             `cargo publish --no-verify` (nothing built: the local gate built and dry-ran this
+#             commit before release.ts pushed it); revoke the token; read all three back, FATAL.
 #
 # Every step is `run:`; there is no `uses:`. Pinned: Rust as a DATED nightly through the runner's
 # rustup (over TLS, each component checked against the channel manifest's sha256 — the manifest's
-# signature is not enforced), and refused unless rustc reports the expected commit, which is the pin; cargo-public-api and cargo-semver-checks by version, --locked; Bun by version AND sha256
-# (Bun's SHASUMS256.txt; move BUN_VERSION and BUN_SHA256 together — workspace Tooling rule 10). The
-# dated nightly is CI's pin only: the local rust-toolchain.toml still floats, and whether to pin it
-# there is T11's question (it moves the binary sizes; cmem/open-work.md). Every request has a time
+# signature is not enforced), and refused unless rustc reports the expected commit, which is the pin;
+# Bun by version AND sha256 (Bun's SHASUMS256.txt; move BUN_VERSION and BUN_SHA256 together —
+# workspace Tooling rule 10). The dated nightly packages the crates only: the local
+# rust-toolchain.toml still floats, and whether to pin it there is T11's question (it moves the binary
+# sizes; cmem/open-work.md). Every request has a time
 # limit (best-practices 7.21). A failed job is fixed by "Re-run failed jobs": each job skips what is
 # done; never a new or moved tag (U12).
 
@@ -49,22 +52,20 @@ concurrency:
 env:
   RUST_TOOLCHAIN: nightly-2026-11-04
   RUSTC_COMMIT: 708c94ef0
-  PUBLIC_API_VERSION: "0.52.0"
-  SEMVER_CHECKS_VERSION: "0.51.0"
   BUN_VERSION: "1.4.4"
   BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c
 
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
       state: ${{ steps.state.outputs.state }}
       version: ${{ steps.version.outputs.version }}
     steps:
-      # Full history and tags: the floor and the previous release's tests compare with earlier tags.
+      # Full history and tags: `state` compares the version with every earlier tag.
       - name: Checkout (no credentials)
         run: |
           git clone -q --no-checkout "https://github.com/$GITHUB_REPOSITORY" .
@@ -107,28 +108,6 @@ jobs:
           CRATES: wasmrt-core,wasmrt-capi,wasmrt
           GITHUB_TOKEN: ${{ github.token }} # contents: read — only lifts the API rate limit
         run: bun scripts/github-release.ts state
-
-      - name: Install Rust (a dated nightly, pinned and checked)
-        run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy \
-            --target wasm32-unknown-unknown --target wasm32-wasip1 --target x86_64-pc-windows-gnu
-          echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >> "$GITHUB_ENV"
-          v=$(RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" rustc -V)
-          echo "$v"
-          case "$v" in *"($RUSTC_COMMIT "*) ;; *) echo "::error::$RUST_TOOLCHAIN is '$v', not rustc $RUSTC_COMMIT"; exit 1 ;; esac
-
-      - name: Install the surface tool (pinned)
-        run: cargo install --locked "cargo-public-api@$PUBLIC_API_VERSION"
-
-      - name: Install the semver tool (pinned; a release only)
-        if: steps.state.outputs.state != 'none'
-        run: cargo install --locked "cargo-semver-checks@$SEMVER_CHECKS_VERSION"
-
-      - name: The gate (scripts/gate.ts — the list release.ts runs locally)
-        env:
-          STATE: ${{ steps.state.outputs.state }}
-        run: |
-          if [ "$STATE" = none ]; then bun scripts/gate.ts; else bun scripts/gate.ts --release; fi
 
   tag:
     needs: checks

@@ -6,8 +6,8 @@
 //   bun scripts/release.ts                    then: the guards, the cold gate, ONE push of `main`
 //   bun scripts/release.ts --dry-run          every guard and the gate, nothing pushed
 //
-// It makes and pushes NO tag, ever (no `git tag`, no `-f`): the `release` workflow runs `checks` on
-// the pushed commit and only when green, for an untagged version, CI tags it, makes the Release page
+// It makes and pushes NO tag, ever (no `git tag`, no `-f`): for an untagged version, the `release`
+// workflow (which tests nothing — H37 (e): CI only publishes) tags the pushed commit, makes the Release page
 // from the tag, then publishes the three crates to crates.io through trusted publishing and reads
 // them back (`.github/workflows/release.yml`). A published tag never moves.
 //
@@ -18,8 +18,9 @@
 //     already merged and pushed; the bump is its own commit);
 //   - the tag `vX.Y.Z` absent here and on `origin`;
 //   - crates.io lists X.Y.Z for none of the three crates (read from each crate's version LIST);
-//   - the cold gate: `bun scripts/gate.ts --release` — the SAME list CI's `checks` job runs, which
-//     includes the CHANGELOG section and cmem/release.md's entry with both required reviews (H35).
+//   - the cold gate: `bun scripts/gate.ts --release` — the ONLY run of the gate a release gets (CI
+//     repeats none of it), which includes the CHANGELOG section and cmem/release.md's entry with their
+//     Tested on lines, and the review set's result (`review-gate.ts`, H37 (d)).
 // Then `git push origin main` (never forced) and a read-back: `origin/main` = HEAD, still no tag.
 //
 // Adapted from universalWasmLoader-rs `scripts/release.ts` (read 2026-11-12). `node:` builtins and

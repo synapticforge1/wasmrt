@@ -6,7 +6,7 @@
 //   bun scripts/definitions.ts fetch <tag> <commit>   re-pin: download the source from GitHub
 //
 // The SOURCE is binaryang's `src/definitions/{opcodes,features,verdicts}.json` (D1 instructions,
-// D2 features, D3 verdicts; `../cmem/divergences.md`, "The shared definitions"). It is vendored at
+// D2 features, D3 verdicts; `../workspace/cmem/divergences.md`, "The shared definitions"). It is vendored at
 // a PUBLISHED tag in `definitions/binaryang/`, so a clone builds and checks without binaryang
 // present, and `definitions/binaryang/PIN.json` records where it came from.
 //

@@ -7,25 +7,25 @@ H33, release-process.md § 5 U11). How a release RUNS is `releasing.md` (the che
 what each one WAS is here. Moved here on 2026-11-12 from `releasing.md` § Status, § 1.0.0, § 0.9.0
 and § Previous, with every claim as it was written; `CHANGELOG.md` stays the public note per version.
 
-**Each entry, from the next release on** (checked by `bun scripts/release-record.ts reviews X.Y.Z`,
-in `release.ts` and in CI's `gate.ts --release`, BEFORE CI may tag):
+**Each entry, from the next release on** (checked by `bun scripts/release-record.ts entry X.Y.Z`
+in `gate.ts --release`, which `release.ts` runs locally BEFORE it pushes; 🔁 since 2026-11-19, H37):
 
 - the heading `### X.Y.Z — YYYY-MM-DD — <one line>` (an em dash, en dash or hyphen; a real date);
 - a summary of what changed (prose, at least one line);
-- 🔒 `- **Security review:** …` and `- **Hardening review:** …` — each run to its EMPTY round on
-  everything since the last release, each line ENDING with the fixed clause
-  `Ended by an empty round: round <N>, <YYYY-MM-DD>.`; written BEFORE the bump (owner, 2026-11-12:
-  "security and hardening reviews should be required before every release"; workspace letter H35,
-  `review-process.md`). *(A fixed sentence because review round 1, 2026-11-12, showed a phrase search
-  passing "did not end with an empty round".)* Text inside ``` fences or `<!-- -->` does not count;
-  the free text before the clause may say anything ("none pending", "S3 not run"); the line may wrap
-  onto indented lines, but the clause must close the review's OWN line — not a nested sub-bullet;
-  the date is `YYYY-MM-DD` and real;
+- 🔒 one `Tested on: <OS and version> (<platform ID>)` line per platform the full suite ran on (the
+  distro named for Linux), and — unless all six IDs are listed — `Other platforms: not yet tested.`
+  (owner, 2026-11-19; `platforms.md`). The same lines open the CHANGELOG section, which the Release
+  page is made from (`release-record.ts notes` checks them there too);
+- "Platforms verified": one result line per platform — version, commit, date, platform ID, suite
+  counts (`review-process.md` § 12 of the workspace standard);
 - after CI: the run id, the tag's commit, the Release page's author, the three crates read back from
   crates.io, and what was checked as a user (U10: `cargo install wasmrt --version X.Y.Z` in a
   scratch folder, then `wasmrt --version`).
 
-Releases before 2026-11-12 predate the review requirement and record no reviews.
+The review is no longer recorded here: its result is the `Review complete: <commit>` line of the
+gitignored `review-issues.md`, read by `review-gate.ts` (H37 (d)). *(2026-11-12 to 11-19, H35: each
+entry needed `**Security review:**` and `**Hardening review:**` lines ending "Ended by an empty round:
+round N, date."; no release was made under that rule.)* Releases before 2026-11-12 record no reviews.
 
 ## Release History
 

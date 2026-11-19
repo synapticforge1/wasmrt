@@ -1,30 +1,31 @@
 // release-record.ts — what a release must have WRITTEN before it may be tagged (workspace letters
-// H33 and H35; release-process.md § 5, U1 and U11; review-process.md § 0 and § 6).
+// H33 and H37; release-process.md § 5, U1 and U11; workspace platforms.md, the "Tested on" rule).
 //
-//   bun scripts/release-record.ts notes   X.Y.Z   CHANGELOG.md has a non-empty `## [X.Y.Z]` section
-//   bun scripts/release-record.ts reviews X.Y.Z   cmem/release.md § "Release History" has a
-//                                                 `### X.Y.Z — YYYY-MM-DD — …` entry with a summary
-//                                                 and BOTH required reviews, each ended by an empty round
+//   bun scripts/release-record.ts notes X.Y.Z   CHANGELOG.md has a non-empty `## [X.Y.Z]` section
+//                                               with its Tested on lines
+//   bun scripts/release-record.ts entry X.Y.Z   cmem/release.md § "Release History" has a
+//                                               `### X.Y.Z — YYYY-MM-DD — …` entry with a summary
+//                                               and its Tested on lines
+//
+// 🔒 Tested on (owner, 2026-11-19; letter H37): every release carries one line per platform actually
+// run — `Tested on: <OS and version> (<platform ID>)`, the ID one of win-x64, win-arm64, mac-x64,
+// mac-arm64, linux-x64, linux-arm64 — on the Release page (made from the CHANGELOG section), in the
+// release.md entry and in the README, and claims nothing for the others: unless all six are listed,
+// a line saying "other platforms: not yet tested". A Tested on line may be a list item.
+//
+// The reviews are no longer checked here: H37 (d) replaced H35's two record paragraphs with
+// `scripts/review-gate.ts`, which reads the review's result in the gitignored issues file.
 //
 // `notes` exists because the Release page is made FROM the CHANGELOG section AFTER CI has tagged: a
 // missing section found then cannot be fixed without a new version (a published tag never moves), so
-// it is checked before the tag — by `gate.ts --release` in CI and by `release.ts` locally.
+// it is checked before the tag — by `gate.ts --release`, which `release.ts` runs before it pushes.
 // `github-release.ts page` applies the SAME rule (`sectionFor`, kept identical there because CI fetches
 // that one file alone): the heading is exactly `## [X.Y.Z]` followed by a space or the line's end, so
 // `## [1.2.3]-rc.1` is not 1.2.3's; the body runs to the next `## [`; lines inside ``` fences and
 // `<!-- … -->` comments do not count as body, and a heading inside a fence is not a heading.
 //
-// `reviews`: 🔒 owner, 2026-11-12: "security and hardening reviews should be required before every
-// release". The entry must carry ONE line starting `**Security review:**` and ONE starting
-// `**Hardening review:**` (a list bullet before it is fine; it may wrap onto indented lines), and each
-// must END with the fixed clause
-//
-//     Ended by an empty round: round <N>, <YYYY-MM-DD>.
-//
-// A fixed sentence, not a phrase search: a search for "empty round" passed "did not end with an empty
-// round" and "no empty round reached" (review round 1, 2026-11-12, two reviewers independently). The
-// entry also needs a summary — at least one line of prose that is not a review line (U11). Fenced code
-// and HTML comments are ignored everywhere in the entry.
+// `entry` needs a summary — at least one line of prose that is not a Tested on line (U11). Fenced
+// code and HTML comments are ignored everywhere, in both files.
 //
 // Paths can be overridden for the self-test: WASMRT_CHANGELOG, WASMRT_RELEASE_MD.
 // `node:` builtins only. Self-test: `bun scripts/check-release-record.ts`.
@@ -39,7 +40,7 @@ function fail(msg: string): never {
   console.error(`release-record: ${msg}`);
   process.exit(1);
 }
-if (!["notes", "reviews"].includes(command ?? "")) fail(`the first argument must be notes | reviews (got "${command ?? ""}")`);
+if (!["notes", "entry"].includes(command ?? "")) fail(`the first argument must be notes | entry (got "${command ?? ""}")`);
 if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) fail(`the second argument must be X.Y.Z (got "${version ?? ""}")`);
 if (process.argv.length > 4) fail(`unexpected arguments: ${process.argv.slice(4).join(" ")}`);
 
@@ -95,6 +96,28 @@ function realDate(s: string): boolean {
   return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
 }
 
+const PLATFORMS = ["win-x64", "win-arm64", "mac-x64", "mac-arm64", "linux-x64", "linux-arm64"];
+const TESTED_ON = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:\*\*)?Tested on:(?:\*\*)?\s+(\S.*?)\s+\(`?([\w.-]+)`?\)\s*\.?\s*$/;
+
+/** The platform IDs the Tested on lines name; fails on a malformed or unknown one, on none, or on a
+ *  partial list without "other platforms: not yet tested". */
+function testedOn(lines: string[], where: string): string[] {
+  const ids: string[] = [];
+  for (const l of lines) {
+    if (!/Tested on:/.test(l)) continue;
+    const m = TESTED_ON.exec(l);
+    if (!m) fail(`${where}: a Tested on line must read "Tested on: <OS and version> (<platform ID>)" (got "${l.trim()}")`);
+    if (!PLATFORMS.includes(m[2])) fail(`${where}: "${m[2]}" is not a platform ID (${PLATFORMS.join(", ")})`);
+    if (ids.includes(m[2])) fail(`${where}: ${m[2]} has two Tested on lines`);
+    ids.push(m[2]);
+  }
+  if (ids.length === 0) fail(`${where} has no "Tested on: <OS and version> (<platform ID>)" line (owner, 2026-11-19)`);
+  if (ids.length < PLATFORMS.length && !lines.some((l) => /other platforms: not yet tested/i.test(l))) {
+    fail(`${where} names ${ids.join(", ")} only, and does not say "other platforms: not yet tested"`);
+  }
+  return ids;
+}
+
 if (command === "notes") {
   const path = process.env.WASMRT_CHANGELOG || join(repo, "CHANGELOG.md");
   const lines = prose(read(path).split("\n"));
@@ -105,11 +128,12 @@ if (command === "notes") {
   if (end < 0) end = lines.length;
   const body = lines.slice(start + 1, end).join("\n").trim();
   if (!body) fail(`the CHANGELOG section "## [${version}]" is empty: the Release page would be refused after CI tags`);
-  console.log(`CHANGELOG ## [${version}]: ${body.length} characters — the Release page can be made`);
+  const ids = testedOn(lines.slice(start + 1, end), `the CHANGELOG section "## [${version}]"`);
+  console.log(`CHANGELOG ## [${version}]: ${body.length} characters, tested on ${ids.join(", ")} — the Release page can be made`);
   process.exit(0);
 }
 
-// reviews
+// entry
 const path = process.env.WASMRT_RELEASE_MD || join(repo, "cmem", "release.md");
 const lines = prose(read(path).split("\n"));
 const history = lines.findIndex((l) => /^## Release History\s*$/.test(l));
@@ -129,41 +153,7 @@ let end = lines.findIndex((l, i) => i > start && /^#{2,3} /.test(l));
 if (end < 0 || end > stop) end = stop;
 const entry = lines.slice(start + 1, end);
 
-const CLAUSE = /Ended by an empty round: round ([1-9]\d*), (\d{4}-\d{2}-\d{2})\.$/;
-const REVIEW_LINE = /\*\*(Security|Hardening) review:\*\*/;
-// A nested list item or blockquote is not a continuation (review round 3: a `  > Ended by …` under
-// "round 2 is OWED" passed).
-const NESTED_ITEM = /^\s+(?:(?:[-*+]|\d+[.)])\s|>)/;
-
-/** A review cannot have ended after today (UTC; one day of slack for time zones). */
-function notFuture(s: string): boolean {
-  return Date.parse(`${s}T00:00:00Z`) <= Date.now() + 86_400_000;
-}
-function review(kind: "Security" | "Hardening"): string {
-  // A `-`, `*`, `+` or numbered list marker is fine (review round 2: `+` and `1.` were refused).
-  const re = new RegExp(`^\\s*(?:(?:[-*+]|\\d+[.)])\\s+)?\\*\\*${kind} review:\\*\\*\\s*(.*)$`);
-  const at = entry.map((l, i) => (re.test(l) ? i : -1)).filter((i) => i >= 0);
-  if (at.length === 0) fail(`the ${version} entry has no "**${kind} review:**" line (required before every release, H35)`);
-  if (at.length > 1) fail(`the ${version} entry has ${at.length} "**${kind} review:**" lines; write one`);
-  // The record may wrap: take the line and its indented continuation lines (spaces or a tab) — but
-  // a NESTED list item is not a continuation: the clause must close the review's own line, not hide
-  // in a sub-bullet under "round 2 is owed" (review round 2).
-  let text = re.exec(entry[at[0]])![1];
-  for (let i = at[0] + 1; i < entry.length && /^(\s{2,}|\t)\S/.test(entry[i]) && !NESTED_ITEM.test(entry[i]) && !REVIEW_LINE.test(entry[i]); i++) {
-    text += ` ${entry[i].trim()}`;
-  }
-  text = text.replace(/\s+/g, " ").trim();
-  const c = CLAUSE.exec(text);
-  if (!c) {
-    const quoted = /`Ended by an empty round: round \d+, \d{4}-\d{2}-\d{2}\.`$/.test(text);
-    fail(`the ${version} ${kind.toLowerCase()} review must END with "Ended by an empty round: round <N>, <YYYY-MM-DD>."${quoted ? " — written as plain text, not in backticks" : ""} (got "${text.slice(-120)}")`);
-  }
-  if (!realDate(c[2])) fail(`the ${version} ${kind.toLowerCase()} review's date ${c[2]} is not a real date`);
-  if (!notFuture(c[2])) fail(`the ${version} ${kind.toLowerCase()} review's date ${c[2]} is in the future`);
-  return text;
-}
-const sec = review("Security");
-const hard = review("Hardening");
-const summary = entry.filter((l) => l.trim() && !REVIEW_LINE.test(l) && !/^(\s{2,}|\t)\S/.test(l));
+const ids = testedOn(entry, `the ${version} entry`);
+const summary = entry.filter((l) => l.trim() && !/Tested on:|other platforms: not yet tested/i.test(l) && !/^(\s{2,}|\t)\S/.test(l));
 if (summary.length === 0) fail(`the ${version} entry has no summary of what changed (U11)`);
-console.log(`cmem/release.md ${version}: summary (${summary.length} lines); security review — ${CLAUSE.exec(sec)![0]}; hardening review — ${CLAUSE.exec(hard)![0]}`);
+console.log(`cmem/release.md ${version}: summary (${summary.length} lines); tested on ${ids.join(", ")}`);

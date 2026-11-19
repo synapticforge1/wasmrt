@@ -29,6 +29,7 @@ fn run(args: &[&str]) -> Output {
 
 /// Symlink creation needs privilege on Windows (Developer Mode or admin). Where it is
 /// unavailable the escape cannot be staged, so the test says so rather than passing quietly.
+// platform: win-x64 win-arm64 — symlinks need privilege (cmem/platforms.md)
 fn symlink_file(target: &std::path::Path, link: &std::path::Path) -> bool {
     #[cfg(windows)]
     {

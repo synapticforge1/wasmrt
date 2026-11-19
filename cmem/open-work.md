@@ -66,37 +66,28 @@ stays in the topic file named.
 
 ## Open, in the order they unblock each other
 
-**⏸ PAUSED 2026-11-12 (owner: "i need to pause here for the day") in the middle of releasing 2.0.2**
-(owner: "release", level patch; both reviews required first). Where it stands:
-- Pushed: `c920e1f` (H33/H34/H35), `30f69c8` (gate annotations), `46275c0` (round 1 fixes),
-  `99f5f1d` (round 2 fixes). CI `checks` GREEN on Linux for `46275c0` and `99f5f1d`. No tag, nothing
-  published; `origin/main` = `99f5f1d`.
-- Review round 3 (4 reviewers) is DONE and NOT empty; its fixes are **in the working tree,
-  UNCOMMITTED** — the next session continues them, it does not start over:
-  - done and tested (each fails on `99f5f1d`'s code): `versions.ts` refuses any partial/released
-    tag above the last release whatever the level, a target tagged elsewhere is "taken"
-    (`check-versions.ts` 23); `bump.ts` reads ORIGIN's tags (`ls-remote`), refuses a tagged version
-    whose run is in flight (skipped in CI; a rate limit refuses with its reset time); `prose()`
-    blanks code spans only to FIND comments (titles keep inline code; record-check 50, page 55, the
-    two copies identical); blockquotes nested, future review dates refused; `release.ts` explicit
-    diff prefixes (`diff.noprefix` rehearsed); `crates-io.ts` reports a persistent 5xx as such,
-    gunzip capped (50); four test files' `write_temp` get a per-process folder; two `contains("simd")`
-    asserts now match "proposal `simd`" (CLI tests green).
-  - still TO DO: `gate.ts` annotation keeps the line(s) after "panicked at" and after `^error`
-    (the panic message, `--> file:line`, the lint name); `architecture.md:151,204` promises a linked
-    freestanding wasm32 artifact with an allocator that does not exist — correct the record (the gate
-    proves a `no_std` library build only); stale counts in `testing.md` top (15 steps, 44/44/37) and
-    `releasing.md` ("Self-tests now 44 / 44 / 37"); the ledger rows for round 3 in `known-issues.md`
-    (R27+, with R1's "every written root gets the pid" marked 🔁 — four helpers did not), N-rows for:
-    tar pax/long-name overrides, a v2.0.1 carried test asserting no `7` over a temp path, the gate's
-    quadratic line buffer, `prev-tag-tests.ts` stack trace when `released.txt` is missing.
-  - then RE-RUN the burned-version end-to-end rehearsal (scratchpad `burned-e2e2.sh`; cases 1–2 were
-    blocked by GitHub's unauthenticated API rate limit, case 3 passed), the full gate in a fresh
-    clone, commit + push (a `checks`-only run), and brief **round 4** fresh on round 3's fixes.
-- When a round finds nothing: write the `### 2.0.2` entry in `release.md` with both review lines
-  (the closing clause), the CHANGELOG `## [2.0.2]` section, push the notes, `bun scripts/bump.ts patch`,
-  `bun scripts/release.ts`, watch CI tag → page → publish → read back; then the workspace ledger
-  answers for H33/H34/H35 with the commit ids.
+**🔁 2.0.2 RESTARTED under the H37 review standard (owner, 2026-11-19: "option B").** The H35 rounds
+1–3 (2026-11-12; `known-issues.md` R1–R26; round 3's fixes are `b0a29b9`) stop; 2.0.2 is reviewed
+from the start under the five-class standard. Nothing was tagged or published; Cargo.toml says 2.0.1;
+`origin/main` = `b0a29b9`. Round 3's unfinished items and the open ledger entries are now I1–I8 in
+the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitted:
+- **H37 adoption (a)–(g):** `review-process.md` rewritten; `review-issues.md` gitignored, the new
+  `privacy-gate.ts` refuses it tracked; open issues moved; `review-gate.ts` replaces H35's record
+  check (`release-record.ts reviews` → `entry`, with Tested on lines); `release.yml` `checks` no
+  longer installs or runs anything; the seven review words in INDEX; `platforms.md` and every
+  platform-specific setting tagged with its ID. New self-tests 33 / 25 / 40, each inverted by mutants.
+  Plus H42's pointers (`../workspace/cmem/`).
+- **Gate on the uncommitted adoption tree, 2026-11-19 (Windows, `win-x64`):** 18 of 19 steps green
+  (cargo test all green, v2.0.1's tests 70 / 0, self-tests 33 / 25 / 55 / 50 / 40 / 23, C ABI,
+  surface, both clippys); step 19, the publish dry run, refused the DIRTY tree by design — with
+  `--allow-dirty` it packages all three crates (exit 0). Re-run on the committed tree.
+- **Next:** the owner's "commit"; the gate again on the clean tree; then the first review — basic, hardening,
+  licensing, security, privacy, one agent each, over `v2.0.1..` (gate scripts and review records
+  excluded, § 10) — triage, fixes per class, re-review until empty; the full suite per platform
+  that has a machine (`win-x64`; `linux-x64` under WSL if run); then the `### 2.0.2` entry and
+  CHANGELOG section with their Tested on lines, `bump.ts patch`, `release.ts`.
+- ⚠️ **The changed `release.yml` must be rehearsed before it lands** (best-practices 7.22;
+  `releasing.md` § Tooling), and it lands BEFORE 2.0.2's bump, never mid-release.
 
 0. ✅ **The crates.io trusted publishers are set** (owner, 2026-11-12: "trusted publisher is already
    set"; not readable from here without a crates.io login — the next release's `publish` job is the

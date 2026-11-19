@@ -4,7 +4,19 @@
 plus the size and speed numbers that decide inclusion. Detail:
 `docs/port/06-build-docs-licensing.md`; the test tree layout is in `tests/README.md`.
 
-## 🆕 2026-11-12 — ONE gate list, run by CI and by `release.ts` (workspace letter H33)
+## 🆕 2026-11-19 — the gate runs LOCALLY only; CI tests nothing (workspace letter H37 (e))
+
+🔒 "Every gate, the test suites included, runs locally and is not repeated on GitHub — CI only
+publishes" (owner, 2026-11-17). `bun scripts/gate.ts` is run by hand and by `release.ts`; CI's
+`checks` job now only reads the version and asks `github-release.ts state`. **New steps:**
+`privacy-gate.ts --commits <last tag>..HEAD` (tree, untracked files, commit messages; masked
+output), its self-test `check-privacy-gate.ts` (33), and `check-review-gate.ts` (25); `--release` now
+checks `release-record.ts notes` + `entry` (the Tested on lines; self-test 40) and `review-gate.ts`
+(the review's result) instead of H35's two review paragraphs. The CI annotation code is gone with
+CI's run. Linux is no longer exercised by CI: `platforms.md`. Step and test counts in the 2026-11-12
+section below are that day's. *Gate run on the adoption tree: see `open-work.md` § State.*
+
+## 2026-11-12 — ONE gate list, run by CI and by `release.ts` (workspace letter H33) — 🔁 superseded 2026-11-19 above
 
 **`bun scripts/gate.ts`** is the gate, and CI's `checks` job runs that same file on every push of
 `main` (`.github/workflows/release.yml`), so the local gate IS CI's gate. In order: eol,

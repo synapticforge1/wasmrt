@@ -123,7 +123,7 @@ per the release flow not on my machine" — superseded it.)*
 ## Per-release checklist (binding — do all, in order)
 
 🔒 **The shape is the workspace's uniform one** (owner, 2026-11-10/12; letters H33 and H35;
-`../cmem/release-process.md` § 5, slots U1–U12): **the review → the notes, merged → the bump, its own
+`../workspace/cmem/release-process.md` § 5, slots U1–U12): **the review → the notes, merged → the bump, its own
 commit → `release.ts` pushes `main` → CI checks, tags, makes the page, publishes, reads back.** The
 owner's word "release" starts it and gives the level (patch / minor / major — ask when it was not
 given). Nobody tags or publishes by hand. Each release is recorded in [release.md](release.md).
@@ -190,10 +190,11 @@ given). Nobody tags or publishes by hand. Each release is recorded in [release.m
    Any intended surface change has already been re-baselined in its own commit (rule 5).
 6. **Release (U4)** — `bun scripts/release.ts` (try `--dry-run` first). Guards: clean tree, on `main`
    = `origin/main` + exactly the bump commit, the tag absent here and on origin, crates.io without
-   the version on all three crates; then the cold gate `bun scripts/gate.ts --release` — the SAME list
-   CI's `checks` job runs (set `CC=gcc` on this host for the C-ABI gate). Then ONE `git push origin
-   main`, read back with `ls-remote`. **It makes no tag.**
-7. **CI (U5–U8), one run of `.github/workflows/release.yml`:** `checks` (the gate, `--release`) →
+   the version on all three crates; then the cold gate `bun scripts/gate.ts --release` — the ONLY
+   run of the gate (🔁 2026-11-19, H37 (e): CI tests nothing), including the review's result
+   (`review-gate.ts`). Then ONE `git push origin main`, read back with `ls-remote`. **It makes no tag.**
+7. **CI (U5–U8), one run of `.github/workflows/release.yml`:** `checks` (the version, and
+   "is this a release?" — 🔁 no gate since 2026-11-19) →
    `tag` (CI's annotated `vX.Y.Z` on that commit, read back) → `release` (the page from the tag,
    CHANGELOG title and body) → `publish` (trusted publishing; wasmrt-core → wasmrt-capi → wasmrt,
    each skipped if crates.io lists it FROM THIS COMMIT — `.cargo_vcs_info.json` inside the `.crate`;
@@ -265,6 +266,14 @@ whether you meant to or not.
 `zig-out`.)*
 
 ## Tooling
+
+- 🆕 **2026-11-19 — CI only publishes (workspace letter H37 (e)).** `checks` lost the toolchain
+  install, `cargo-public-api` / `cargo-semver-checks` and the gate; it keeps the credential-free
+  clone, the version read, Bun (pinned by sha256) and `github-release.ts state`. `tag`, `release`
+  and `publish` are unchanged; `publish` still installs the pinned nightly to package. Rehearsal of
+  the changed workflow (best-practices 7.22): ⏳ not yet run — it must run before this lands on
+  `main` (a scratch repository on GitHub, or the first `none` push, with the owner's word). The
+  bullet below describes the 2026-11-12 shape.
 
 - 🆕 **`.github/workflows/release.yml` — the owner's order, in CI (2026-11-12; workspace letter H33,
   decisions D1 and D2).** It runs on every push of `main` (no longer on a tag), with top-level

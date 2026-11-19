@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 // bump.ts — the ONLY way wasmrt's version moves, and it refuses a bump below the floor
-// (workspace letter H6; `../cmem/layout-and-packaging.md` § "The compatibility gate"; `cmem/releasing.md`).
+// (workspace letter H6; `../workspace/cmem/layout-and-packaging.md` § "The compatibility gate"; `cmem/releasing.md`).
 //
 //   bun scripts/bump.ts patch|minor|major [--dry-run]   compute the floor, refuse or apply the bump
-//   bun scripts/bump.ts --verify-tag vX.Y.Z              `gate.ts --release` (CI's `checks` and
-//                                                       `release.ts`): the manifest says X.Y.Z, and
+//   bun scripts/bump.ts --verify-tag vX.Y.Z              `gate.ts --release` (run by `release.ts`,
+//                                                       locally): the manifest says X.Y.Z, and
 //                                                       X.Y.Z clears the floor since the last release
 //
 // The floor is the HIGHEST of three, each printed with what set it:
@@ -25,8 +25,9 @@
 // `bun scripts/surface.ts --release-from vX.Y.Z` records it, in its own commit.
 //
 // 🔒 The workspace's uniform release shape (letter H33, release-process.md § 5; owner, 2026-11-10):
-//   U1  the level is an ARGUMENT, never a default — and before it, a security and a hardening review,
-//       each ended by an empty round, recorded in cmem/release.md (H35; `release.ts` checks it);
+//   U1  the level is an ARGUMENT, never a default — and before it, the review set (five classes, one
+//       loop, ended by an empty re-review; H37), its result in cmem/review-issues.md (`release.ts`
+//       checks it through `gate.ts --release` → `review-gate.ts`);
 //   U2  the bump is ITS OWN commit, made here: `bump to vX.Y.Z`, Cargo.toml + Cargo.lock only, on top
 //       of the release notes already merged into `main`;
 //   U3  a real bump refuses a dirty tree (untracked files count), and for a patch or a minor runs the

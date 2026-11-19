@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // surface.ts — wasmrt's PUBLIC SURFACE, generated from the sources, and the FLOOR it sets on a bump
-// (workspace letter H6; `../cmem/layout-and-packaging.md` § "The compatibility gate").
+// (workspace letter H6; `../workspace/cmem/layout-and-packaging.md` § "The compatibility gate").
 //
 //   bun scripts/surface.ts                      print the floor: surface/released.txt → this tree
 //   bun scripts/surface.ts --check              exit 1 unless surface/current.txt equals this tree
@@ -45,7 +45,7 @@ function run(cmd: string, args: string[], env: Record<string, string> = {}, cwd 
 export function tools(): string {
   const api = run("cargo", ["public-api", "--version"]).trim();
   // The ACTIVE toolchain, which is what `cargo public-api` runs (measured 2026-11-12: it follows
-  // RUSTUP_TOOLCHAIN): locally rust-toolchain.toml's `nightly`; in CI the dated pin of release.yml.
+  // RUSTUP_TOOLCHAIN): rust-toolchain.toml's `nightly` (the surface is checked locally only; CI tests nothing, H37 (e)).
   const rustc = run("rustc", ["-V"]).trim();
   return `${api}; ${rustc}`;
 }

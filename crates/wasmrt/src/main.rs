@@ -251,6 +251,7 @@ fn split_preopen(spec: &str) -> (String, String) {
 /// Measured against wazmrt before it was written (2026-10-23), case by case: `data`, `data:/m`,
 /// `data::/m`, `data/../data`, `~/x`, `C:` and `C:Users` refused; `./data`, `.\data`, `.`, `..`,
 /// `..\sib`, `/`, absolute `C:\…` and `C:/…` forms, `x:/`, `X:\` and `\\localhost\c$` accepted.
+// platform: win-x64 win-arm64 — `.\`, drive and UNC forms are paths here only (cmem/platforms.md)
 fn check_host_path(host: &str) -> Result<(), String> {
     let b = host.as_bytes();
     let relative = host == "."
@@ -400,6 +401,8 @@ fn lime1() -> Features {
 /// with no error, the worst class this project tracks. The per-runtime paths stay readable as a
 /// fallback, and the SIBLING's path is checked purely so a swap cannot disarm in silence.
 fn db_paths() -> (Vec<String>, String) {
+    // platform: win-x64 win-arm64 — `%ProgramData%\…\pins`; every other ID — `/etc/…/pins`
+    // (cmem/platforms.md; the shared path is a contract surface, interop.md §3.3).
     #[cfg(windows)]
     {
         let base = std::env::var("ProgramData").unwrap_or_else(|_| String::from("C:\\ProgramData"));

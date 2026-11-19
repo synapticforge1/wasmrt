@@ -139,6 +139,7 @@ impl ChaCha20Rng {
 /// One function per platform, selected by `cfg`: a single body with `#[cfg]` blocks left a
 /// `return` that only Linux saw as needless, so `clippy -D warnings` failed on Linux CI alone
 /// (review round 1, 2026-11-12) — each platform's body must read correctly on its own.
+// platform: linux-x64 linux-arm64 mac-x64 mac-arm64 — `/dev/urandom` (cmem/platforms.md)
 #[cfg(all(feature = "std", unix))]
 fn os_entropy(dst: &mut [u8]) -> Option<()> {
     use std::io::Read;
@@ -151,6 +152,7 @@ fn os_entropy(dst: &mut [u8]) -> Option<()> {
 /// seeded from the OS CSPRNG (`BCryptGenRandom` on Windows) and is re-keyed per instance. Hashing a
 /// counter under a fresh key per 8 bytes gives an OS-seeded, non-predictable fill without a
 /// dependency or `unsafe`.
+// platform: win-x64 win-arm64 — `BCryptGenRandom` through `RandomState` (cmem/platforms.md)
 #[cfg(all(feature = "std", not(unix)))]
 fn os_entropy(dst: &mut [u8]) -> Option<()> {
     use std::collections::hash_map::RandomState;

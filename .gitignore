@@ -9,3 +9,7 @@
 
 # Tool settings record machine paths and are never tracked (workspace rule, Records).
 /.claude/settings.local.json
+
+# Review issues: open findings never reach GitHub (workspace review standard, letter H37 (b));
+# scripts/privacy-gate.ts refuses it tracked.
+/cmem/review-issues.md

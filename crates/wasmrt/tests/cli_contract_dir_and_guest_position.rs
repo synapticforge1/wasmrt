@@ -77,6 +77,7 @@ fn spelled_relative_and_rooted_paths_pass_the_grammar() {
     assert!(ok, "--dir .:/ is the documented example and must run; got: {text}");
 }
 
+// platform: win-x64 win-arm64 — a drive without a separator exists only there
 #[cfg(windows)]
 #[test]
 fn a_drive_without_a_separator_is_drive_relative() {

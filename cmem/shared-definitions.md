@@ -5,7 +5,7 @@ before quoting one.
 
 ## What it is
 
-The workspace decided (owner, 2026-09-20; `../cmem/divergences.md`, "The shared definitions") that the
+The workspace decided (owner, 2026-09-20; `../workspace/cmem/divergences.md`, "The shared definitions") that the
 instruction table (**D1**), the feature list (**D2**) and the verdict vocabulary (**D3**) have ONE
 source, in binaryang, and that every other repo keeps a **generated** copy, checked by a gate that
 regenerates it and diffs.

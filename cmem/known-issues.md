@@ -1,5 +1,9 @@
 # Known Issues
 
+🔒 **Since 2026-11-19 (workspace review standard, letter H37 (c)) OPEN issues and review findings live
+in the gitignored `cmem/review-issues.md`, not here.** The entries that were open on that day moved
+there as I1–I4 (each marked below); rows already fixed stay. This file keeps the FIXED record.
+
 ## 🔎 2026-11-12 — review round 2 for 2.0.2: round 1's fixes reviewed cold
 
 Four fresh reviewers over `c920e1f..46275c0` (security: the GitHub state machine; crates.io and the
@@ -82,12 +86,8 @@ sub-feature, which D2 does not have. Tables and element segments share the gate 
 | ⚠️ | **A contract surface changed before the sibling moved.** wazmrt still has the 2.1.0 rule, so the two differ on exactly these classes until it adopts | relayed (`open-work.md`, "To relay") |
 | ⚠️ | **S1: 24 accepted → refused**, all in these classes | re-baselined in its own commit (`788bee5`); README Breaking Changes and CHANGELOG [1.0.0] |
 
-🟡 **OPEN, observed 2026-10-24 (S3 at the 1.0.0 release): the overlong `call_indirect` refusal
-reports a different OFFSET from wasm-tools.** `1_fib-rs.wasm` under `all,-reference-types`: wasmrt
-says `offset 598 (function 6)`, wasm-tools `zero byte expected (at offset 0x25c)` = 604, the
-table-index byte. The verdict agrees; the diagnostic offset does not, though offsets matched
-wasmtime byte-for-byte when that was measured (2026-08-10, type errors). Unmeasured whether other
-encoding refusals differ the same way.
+➡️ **Moved 2026-11-19 to `review-issues.md` as I1** (observed 2026-10-24): the overlong
+`call_indirect` refusal reports a different OFFSET from wasm-tools.
 
 🎓 **Probe trap:** `wasm-tools validate --features -all,…` is a clap USAGE error (`-a` read as a
 flag, rc 2). The first run of this probe counted every rc ≠ 0 as "refuse" and reported 136
@@ -117,7 +117,7 @@ differed before, 0 after**; and 31 of 31 spellings give the same exit status on 
 | 🔴 | **25: a float→int truncation out of range, or of infinity, reported "invalid conversion to integer"**; the spec says "integer overflow" (only NaN is an invalid conversion). The doc comment on `Trap::InvalidConversionToInt` stated the misreading, and the unit test asserted it | ✅ **FIXED**: out of range and infinity → `Trap::IntOverflow`. The unit test now pins all three; `the_two_traps_the_old_scoring_hid`; inverted |
 | 🔴 | **29: `call_indirect` / `return_call_indirect` past the end of the table reported "out of bounds table access"**; the spec says "undefined element" (wasmtime: "undefined element: out of bounds table access"). The repo's own `tests/table64-operands.wast` and a unit test had encoded wasmrt's message | ✅ **FIXED**: a new `Trap::UndefinedTableElement` ("undefined element"); a table ACCESS past the end stays "out of bounds table access". wasmtime 50 passes the updated script, and fails it with a wrong message (so it compares). Inverted. ⚠️ Rust API: a new variant on the exhaustive `Trap` (README Breaking Changes) |
 | ✅ | Spec suite under the strict runner: **64,603 / 0 / 0** over 288 files, S2 0 regressed: every trap assertion now passes for the right reason | — |
-| 🟡 | **`wast::features_for_script` keys on the word `testsuite` in the PATH**: run from inside the suite directory (`wasmrt wast proposals/threads/imports.wast`) a proposal file gets every feature, and `threads/imports.wast` shows 3 extra "multiple memories" failures. Not a defect in the corpus run (its paths contain `testsuite`), but the result depends on the working directory | OPEN, observed 2026-10-24 |
+| ➡️ | `wast::features_for_script` keys on the word `testsuite` in the PATH | moved 2026-11-19 to `review-issues.md` as I2 |
 
 ## 🤝 2026-10-24 — contract v35: a WASI guest no longer inherits the host environment
 
@@ -134,8 +134,8 @@ Measured on wasmrt HEAD, wazmrt 2.0.0 and wasm-tools 1.262. Detail: `roadmap.md`
 | --- | --- | --- |
 | 🟡 | **A feature refusal printed "invalid module" twice** (`invalid module: invalid module: uses the disabled proposal …`): the CLI prefixed a `ValidateError` whose Display already starts with the phrase. Wording only; the verdict and rc 1 were right | ✅ **FIXED** in the CLI (`invalidity_report`); the core's Display is public surface and unchanged. Pinned and inverted (`a_feature_refusal_says_invalid_module_once`) |
 | 🟡 | **`--help` printed the wrapped lines of a flag description at column 0**: a `\` line continuation strips the next line's leading spaces | ✅ **FIXED**: the spaces sit before the backslash. Descriptions are not part of the surface, so `surface/` did not move |
-| 🟠 | **`call_ref` under `--features all,-function-references` gets THREE answers**: wasmrt refuses the CONFIGURATION ("gc requires function-references", rc 1), wazmrt accepts the MODULE (rc 0), wasm-tools refuses the MODULE (rc 1). `(table i64 …)` under `all,-memory64` (all three refuse) and `return_call_ref` under `all,-tail-call` (all three accept) agree | OPEN — v33 says the D2 migration settles the semantics, but **D2 has no dependency or preset rules** (not at the v1.14.0 pin, not at binaryang v1.17.0). Reported to the workspace. wasmrt keeps its refusal until the row is rewritten |
-| 🟠 | **D1 gates `return_call_ref` under `tailCall`**; wasm-tools and both runtimes need function-references only. v33 makes D1's `feature` column the meaning, so read literally it would make both runtimes refuse what wasm-tools accepts | OPEN upstream — wasmrt keeps its gating (`definitions_check.rs` KNOWN, with the measurement) until D1 changes |
+| ➡️ | `call_ref` under `--features all,-function-references` gets three answers | moved 2026-11-19 to `review-issues.md` as I3 (probably stale since v37: re-measure) |
+| ➡️ | D1 gates `return_call_ref` under `tailCall` | moved 2026-11-19 to `review-issues.md` as I4 (open upstream) |
 
 ## 🔁 2026-10-23, late night — letter H23 (behaviour carry-forward) found a regression since 0.9.0
 

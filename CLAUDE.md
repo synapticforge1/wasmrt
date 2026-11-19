@@ -1,9 +1,10 @@
 # wasmrt
 
-> **At session start, and before each new work item, read `../cmem/workspace-correspondence.md`**
-> for every open row addressed to wasmrt or touching what you will change, then the letter it points
-> to in `../cmem/handoffs.md` (🔒 owner, 2026-10-26). Answer in the row's "full text" cell; only the
-> row's creator closes it. Nothing is ever written into this repo from outside (owner, 2026-09-20).
+> **At session start, and before each new work item, read `../workspace/cmem/workspace-correspondence.md`**
+> (one line per open item), then `../workspace/cmem/letters/<ID>.md` for every item addressed to
+> wasmrt or touching what you will change (🔒 owner, 2026-10-26; letters H41, H42). Answer by one
+> bullet under the item's `## Answers`; only its creator closes it. Nothing is ever written into this
+> repo from outside (owner, 2026-09-20).
 
 A fast, small, idiomatic-**Rust** WebAssembly runtime, built to replace wasmtime under the owner's
 `universalWasmLoader-*` projects. It began as a port of the Zig runtime `wazmrt`; 🔒 **since
@@ -29,10 +30,11 @@ the review stages T9–T12, each numbered by the bump gate. Detail: `cmem/open-w
   BEFORE shipping a change to a contract surface.
 - **"Look for code issues"**, **"evaluate a reference project"** — `cmem/INDEX.md`.
 - **A release** — the checklist in [`cmem/releasing.md`](cmem/releasing.md) (workspace letters H33,
-  H35): 🔒 a security review and a hardening review to their empty rounds, recorded in
-  [`cmem/release.md`](cmem/release.md); the notes and memory merged into `main` first; then
-  `bun scripts/bump.ts <level>` (the bump commit) and `bun scripts/release.ts` (pushes `main` only).
-  **CI tags, makes the page and publishes to crates.io** — nobody tags or publishes by hand.
+  H37): 🔒 a complete "review" (five classes, one loop, `Review complete:` in the gitignored
+  `cmem/review-issues.md`); the notes and memory merged into `main` first; then
+  `bun scripts/bump.ts <level>` (the bump commit) and `bun scripts/release.ts` (runs every gate
+  LOCALLY, then pushes `main` only). **CI only publishes: it verifies the version, tags, makes the
+  page and publishes to crates.io** — nobody tags or publishes by hand.
 
 ## Rules that bite in the first five minutes (full text: `cmem/design-decisions.md`)
 
