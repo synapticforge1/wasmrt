@@ -388,8 +388,8 @@ approval binaryang does not have:
 
 | setting | what | state |
 | --- | --- | --- |
-| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | set (owner, 2026-11-19) |
-| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | set (owner, 2026-11-19) |
+| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | set (owner, 2026-11-19): 27687060, `~DEFAULT_BRANCH`, active — read back with a THIRD rule, `update` (restrict updates), which refuses `release.ts`'s push of `main` unless the pusher is a bypass actor (not visible to the public API); owner to decide |
+| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | set (owner, 2026-11-19): 27687102, tag, `refs/tags/v*`, active; update, deletion, force push (read back) |
 | environment | 🔒 **None** (owner, 2026-11-19: "I am not creating a release environment on github. My release environment is here."). The release's gate is the owner's machine: `release.ts` runs the full local gate and the review gate, then pushes `main` | — |
 | crates.io trusted publisher | per crate (all three): repository, `release.yml`, no environment; set (owner, 2026-11-19) | set |
 
