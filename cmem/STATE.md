@@ -9,6 +9,7 @@ Updated: 2026-11-20, at the end of the session
 ## Now
 - Memory moved to the guide's layout (letter H38): STATE, a router INDEX, working-rules, the archive
 - Scratch and cache rule recorded (letter H43); caches listed in `cmem/local/`
+- Workspace letters answered 2026-11-20 (H10, H19, H33, H37, H38, H41–H43, C30, C49); C5 closed
 
 ## Review
 - Run for: none in progress (2.0.2's completed; `Review complete:` in `review-issues.md`)
@@ -23,7 +24,6 @@ Updated: 2026-11-20, at the end of the session
 
 ## Waiting on owner
 - Who owns `interop.md` (wazmrt holds the pen today; memory guide: "name one owner")
-- Whether wasmrt may close its own item C5 (only its creator closes it)
 
 ## Read next
 - open-work.md: the open list
