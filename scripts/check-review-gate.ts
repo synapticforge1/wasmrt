@@ -31,6 +31,14 @@ const ver = "@@ -1 +1 @@\n-version = \"2.0.1\"\n+version = \"2.0.2\"\n";
 check("the bump's Cargo.toml passes", unreviewed(m({ "Cargo.toml": ver })).length === 0);
 check("the bump's Cargo.lock passes", unreviewed(m({ "Cargo.lock": ver })).length === 0);
 check("a dependency added to Cargo.toml is unreviewed", unreviewed(m({ "Cargo.toml": "@@ -5 +5,2 @@\n+foo = \"1\"\n" })).length === 1);
+// The real bump's Cargo.toml diff (2026-11-19), the internal pin included: it must pass.
+const pin = (v: string, p = "crates/wasmrt-core") => `wasmrt-core = { path = "${p}", version = "${v}" }`;
+const realBump = `@@ -11 +11 @@\n-version = "2.0.1"\n+version = "2.0.2"\n@@ -20 +20 @@\n-${pin("2.0.1")}\n+${pin("2.0.2")}\n`;
+check("the real bump (version + internal pin) passes", unreviewed(m({ "Cargo.toml": realBump })).length === 0);
+check("the pin with a changed path is unreviewed", unreviewed(m({ "Cargo.toml": `@@ -20 +20 @@\n-${pin("2.0.1")}\n+${pin("2.0.2", "../evil")}\n` })).length === 1);
+check("a new dependency carrying a version is unreviewed", unreviewed(m({ "Cargo.toml": `@@ -20 +20,2 @@\n+evil = { version = "1.0.0" }\n` })).length === 1);
+check("a removed dependency is unreviewed", unreviewed(m({ "Cargo.lock": `@@ -20,2 +20 @@\n-version = "1.0.0"\n` })).length === 1);
+check("a version swapped for a different key is unreviewed", unreviewed(m({ "Cargo.toml": `@@ -11 +11 @@\n-version = "2.0.1"\n+rust-version = "2.0.2"\n` })).length === 1);
 check("a profile change in Cargo.toml is unreviewed", unreviewed(m({ "Cargo.toml": "@@ -9 +9 @@\n-opt-level = \"z\"\n+opt-level = 3\n" })).length === 1);
 check("CHANGELOG passes", unreviewed(m({ "CHANGELOG.md": "@@ +1 @@\n+anything\n" })).length === 0);
 check("cmem notes pass", unreviewed(m({ "cmem/release.md": "+x\n" })).length === 0);

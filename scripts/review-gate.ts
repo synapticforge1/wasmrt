@@ -40,7 +40,18 @@ function onlyLines(diff: string, ok: (line: string) => boolean): boolean {
   return diff.split("\n").filter((l) => /^[-+](?![-+]{2} )/.test(l)).every((l) => ok(l.slice(1)));
 }
 
-const VERSION_LINE = /^version\s*=\s*"\d+\.\d+\.\d+"\s*$/;
+/** Whether a manifest or lockfile diff changes version numbers only: every changed line carries
+ *  `version = "x.y.z"`, and the removed and added lines pair up once the numbers are blanked — so the
+ *  bump's internal pin `wasmrt-core = { path = …, version = "x.y.z" }` passes (2026-11-19: the first
+ *  real bump was refused on it), while a changed path, a new dependency or any other edit does not. */
+function versionsOnly(diff: string): boolean {
+  const changed = diff.split("\n").filter((l) => /^[-+](?![-+]{2} )/.test(l));
+  const blank = (l: string) => l.slice(1).replace(/"\d+\.\d+\.\d+"/g, '"V"').trimEnd();
+  if (!changed.every((l) => /\bversion\s*=\s*"\d+\.\d+\.\d+"/.test(l))) return false;
+  const removed = changed.filter((l) => l[0] === "-").map(blank).sort();
+  const added = changed.filter((l) => l[0] === "+").map(blank).sort();
+  return removed.length === added.length && removed.every((l, i) => l === added[i]);
+}
 const README_LINE = (l: string) => /Tested on:/.test(l) || /\b\d+\.\d+\.\d+\b/.test(l) || l.trim() === "";
 
 /** The changed paths the review did not read, given each path's `git diff -U0` text. */
@@ -49,7 +60,7 @@ export function unreviewed(changed: ReadonlyMap<string, string>): string[] {
   for (const [path, diff] of changed) {
     if (path === ISSUES_FILE) out.push(path);
     else if (path === "CHANGELOG.md" || path.startsWith("cmem/")) continue;
-    else if (path === "Cargo.toml" || path === "Cargo.lock") { if (!onlyLines(diff, (l) => VERSION_LINE.test(l))) out.push(path); }
+    else if (path === "Cargo.toml" || path === "Cargo.lock") { if (!versionsOnly(diff)) out.push(path); }
     else if (path === "README.md") { if (!onlyLines(diff, README_LINE)) out.push(path); }
     else out.push(path);
   }
