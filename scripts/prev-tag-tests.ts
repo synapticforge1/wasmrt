@@ -137,7 +137,21 @@ export function prevTagTests(tag: string): { green: boolean; summary: string; fa
     const failures = green ? "" : out.split("\n").filter((l) => /FAILED|panicked|^error(\[|:)/.test(l)).slice(0, 40).join("\n");
     return { green, summary: `${passed} passed, ${failed} failed in ${suites} test binaries (exit ${r.status})`, failures };
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    removeScratch(scratch);
+  }
+}
+
+/** Removes the scratch folder, retrying a transient Windows lock (`EBUSY` / `EPERM` from a virus
+ *  scan of fresh test binaries), and never lets a failed cleanup replace the tests' result: it warns
+ *  with the path instead (I9, 2026-11-19 — the 2.0.2 release's second attempt failed here, AFTER its
+ *  tests had run, and left 189 MB behind). Exported for the self-test. */
+export function removeScratch(dir: string, rm: typeof rmSync = rmSync): boolean {
+  try {
+    rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+    return true;
+  } catch (e) {
+    console.log(`⚠ could not remove ${dir} (${(e as Error).message}); the result above stands — remove it by hand`);
+    return false;
   }
 }
 

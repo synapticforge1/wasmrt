@@ -63,6 +63,7 @@ const steps: Step[] = [
   ["privacy scan self-test", bun, ["scripts/check-privacy-gate.ts"]],
   ["review gate self-test", bun, ["scripts/check-review-gate.ts"]],
   ["bump self-test", bun, ["scripts/check-bump.ts"]],
+  ["previous-tests cleanup self-test", bun, ["scripts/check-prev-tag-tests.ts"]],
   ["licence copies in every crate", bun, ["scripts/licence-copies.ts"]],
   ["shared definitions", bun, ["scripts/definitions.ts", "--check"]],
   ["build (release)", "cargo", ["build", "--workspace", "--release", "--locked"]],
