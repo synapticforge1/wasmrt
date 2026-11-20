@@ -1,6 +1,6 @@
 //! `wasi` — WASI **preview 1** host imports. **Requires `std`** (real OS clocks and I/O).
 //!
-//! Ported at **T7** (`cmem/roadmap.md`). This layer covers the non-filesystem surface:
+//! Ported at **T7** (`cmem/archive/roadmap-to-2.0.2.md`). This layer covers the non-filesystem surface:
 //! stdio, `args_*`, `environ_*`, clocks, `random_get`, `proc_exit`, plus the calls a libc
 //! start-up probes (`fd_prestat_*`, `fd_fdstat_get`). The sandboxed filesystem lands next,
 //! on the **zero-dep handle-stack resolver** (owner decision, 2026-08-04). **Invariant when

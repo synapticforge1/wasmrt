@@ -240,10 +240,10 @@ past the finding: **the cause was not traced, so it is recorded as an observatio
 `cmem/local/environment.md`.)*
 
 ⚠️⚠️ **FINDING A REAL DEFECT AT A LAYER IS NOT EVIDENCE THAT IT CAUSES YOUR SYMPTOM.** wazmrt's build
-failure on the development volume was blamed on failing hardware (a burst of disk-error log entries —
+failure on an exFAT volume was blamed on failing hardware (a burst of disk-error log entries —
 **all from a week earlier; the timestamps were never read**), then on antivirus (refuted: the agent
-blamed was not the one running), then on a genuinely damaged volume that a health query reported as
-needing repair. **The repair worked, and the build failed exactly as before.** Each of the three found
+blamed was not the one running), then on a genuine volume fault that the OS's own health check found.
+**Fixing that fault worked, and the build failed exactly as before.** Each of the three found
 something real and stopped there, *because a confirmed defect feels like an answer*.
 
 **What finally worked was varying ONE THING AT A TIME** rather than reasoning about which layer looked

@@ -10,7 +10,7 @@
 //!
 //! The module tree below mirrors `wazmrt/src/` so each unit can be oracle-diffed against
 //! its Zig counterpart. Modules were populated **bottom-up, parity-gated** per
-//! `cmem/roadmap.md` (T1 types+reader → T2 opcode → T3 decode → T4 validate → T5 interp →
+//! `cmem/archive/roadmap-to-2.0.2.md` (T1 types+reader → T2 opcode → T3 decode → T4 validate → T5 interp →
 //! T6 text → T7 wasi → T8 features+linker, for the C ABI).
 //!
 //! **Complete as of 1.0.0**, including [`pin`], the SHA-256 module allow-list, which the CLI checks

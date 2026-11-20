@@ -6,7 +6,7 @@
 > (core resolved imports positionally), the store-attached WASI config (WASI is per-module), and the
 > promise of trap backtrace text (there are none yet). `wasmrt_config_set_tail_call` was dropped
 > outright: that proposal is unimplemented, so the toggle would have gated nothing. Kept for the
-> design history only. See `cmem/loaders.md` and `cmem/roadmap.md` (T8).
+> design history only. See `cmem/loaders.md` and `cmem/archive/roadmap-to-2.0.2.md` (T8).
 
  * wasmrt.h — DRAFT PROPOSAL (v0, for review; not yet in the repo).
  *

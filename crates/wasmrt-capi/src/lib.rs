@@ -1,6 +1,6 @@
 //! `wasmrt-capi` — the public **`wasmrt.h`** C ABI over `wasmrt-core`.
 //!
-//! **Designed, not transliterated** (T8, `cmem/roadmap.md`): a lean `wasmrt_*` surface,
+//! **Designed, not transliterated** (T8, `cmem/archive/roadmap-to-2.0.2.md`): a lean `wasmrt_*` surface,
 //! wasmtime-*shaped* but under our own names, built on lightweight checked handles rather
 //! than the wasm-c-api refcounted object model — which is `wazmrt`'s single highest-risk
 //! file, six memory-safety invariants and a lifecycle fuzz to hold them up.

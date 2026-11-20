@@ -101,7 +101,7 @@ fn features_with_an_equals_sign_is_the_same_flag() {
     let m = fixture();
     // ⚠️ Not `all,-simd`: wasmrt refuses that CONFIGURATION ("relaxed-simd requires simd"), which
     // contract v30 says it must not ("no configuration is refused — only modules"). That is v30's
-    // work item, recorded in `cmem/roadmap.md` (H1); this test is about the `=` spelling only.
+    // work item, recorded in `cmem/archive/roadmap-to-2.0.2.md` (H1); this test is about the `=` spelling only.
     let (ok, text) = run(&["--features=all,-wide-arithmetic", &m]);
     assert!(ok, "`--features=<list>` before the path must apply; got: {text}");
     let (ok, text) = run(&["wasi", "--features=mvp", &m]);

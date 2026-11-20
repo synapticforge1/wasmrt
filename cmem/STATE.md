@@ -12,8 +12,8 @@ Updated: 2026-11-20, at the end of the session
 - Workspace letters answered 2026-11-20 (H10, H19, H33, H37, H38, H41–H43, C30, C49); C5 closed
 
 ## Review
-- Run for: none in progress (2.0.2's completed; `Review complete:` in `review-issues.md`)
-- Position: —
+- Run for: the changes since v2.0.2 (owner: "review", 2026-11-20)
+- Position: full suite (re-review 2 empty)
 - Open issues: basic 7, hardening 2, licensing 0, security 0, privacy 0
 - Platforms passed: win-x64, linux-x64 (for 2.0.2)
 

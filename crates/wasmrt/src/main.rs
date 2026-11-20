@@ -1,6 +1,6 @@
 //! `wasmrt` — the command-line interface.
 //!
-//! Grows across the roadmap (`cmem/roadmap.md`). Today it summarizes + type-checks a module,
+//! Grows across the roadmap (`cmem/archive/roadmap-to-2.0.2.md`). Today it summarizes + type-checks a module,
 //! calls an export, runs a WASI preview-1 program, assembles `.wat`, and runs `.wast` scripts.
 
 // The CLI carries no `unsafe` either; `forbid` keeps it that way (`cmem/design-decisions.md`).

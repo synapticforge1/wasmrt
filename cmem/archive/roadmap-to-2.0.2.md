@@ -3290,9 +3290,9 @@ diff the OUTPUT counts, not exit codes (`testing.md`). `[ ]` = not started.
   - `symlink resolver fuzz: no adversarial topology reaches outside the preopen`
 
   ⚠️⚠️ **CORRECTED — the cause is exFAT, not privilege, and the properties ARE verified.** Developer
-  Mode is already enabled here; the Zig error is `INVALID_DEVICE_REQUEST`, not access-denied.
+  Mode is not the cause; the Zig error is `INVALID_DEVICE_REQUEST`, not access-denied.
   `std.testing.tmpDir` puts its scratch under `.zig-cache/tmp` **relative to the CWD**, and the
-  **development volume is exFAT** — no reparse points (machine specifics: `cmem/local/`). **From an
+  **volume was exFAT** — no reparse points (machine specifics: `cmem/local/`). **From an
   NTFS cwd: `zig build test` is 493/493 with ZERO skips and `zig build test-security` is 3/3
   green.** So "489/493, 4 skipped", carried in the freeze record since 2026-07-27, is an
   **environment artifact, not a code property**. Same root cause as `zig build`'s "error:
@@ -3317,7 +3317,7 @@ diff the OUTPUT counts, not exit codes (`testing.md`). `[ ]` = not started.
   ✅ **Action, now known:** run the oracle suite from an **NTFS** working directory, and use
   `zig build test-security` — the gate added 2026-08-10 that makes a skip a FAILURE, so an unverified
   sandbox is red rather than averaged into a green summary. wasmrt's own sandbox tests were never
-  affected: `Scratch::new` uses `std::env::temp_dir()`, which is on C: (NTFS), so they have been
+  affected: `Scratch::new` uses `std::env::temp_dir()`, which is on an NTFS volume, so they have been
   running all along. wasmrt's own
   sandbox tests should get the same treatment — its resolver is the one place the port knowingly
   diverges (`std` has no dir-relative open, `security-model.md`).

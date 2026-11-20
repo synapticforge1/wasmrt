@@ -63,7 +63,7 @@ repeatedly timed a **cache hit**: Deno read 3.4 µs that way, against 24–26 µ
 
 🔒 **Owner, 2026-10-23: Bun is the JS baseline, and the long-run target is wasmtime** — the end-to-end
 crossover and the steady Mops/s against `wasmtime run -C cache=n` are the gauges every T11 step reports
-(`../cmem/roadmap.md`, "T11 direction").
+(`../cmem/archive/roadmap-to-2.0.2.md`, "T11 direction").
 
 What this shows, without overreading it:
 
@@ -111,7 +111,7 @@ Two regimes, reported separately — never conflated:
 - Canonical workload: `sum(n)` over a tight `loop`/`br_if` (see wazmrt bench).
 - Later: also measure SHA-256 (pin verify; `pin` was built 2026-09-19 and has not been benchmarked).
 - **Per-artifact binary size is measured** (T9b, 2026-08-07) — the numbers are in
-  `../cmem/roadmap.md` (T9b) and `../cmem/vision.md`. The wasm3/WAMR comparison is
+  `../cmem/archive/roadmap-to-2.0.2.md` (T9b) and `../cmem/vision.md`. The wasm3/WAMR comparison is
   still outstanding: it needs those binaries present, not an estimate.
 - **T11 (the optimization review) is no longer blocked** — both baselines it required
   now exist, so every proposal there can be stated as a delta.
