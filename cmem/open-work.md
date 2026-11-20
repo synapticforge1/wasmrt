@@ -46,7 +46,7 @@ stays in the topic file named.
   2,401** over wazmrt's corpus and **0 of 6,860** over wasmrt's; wazmrt ⇄ binaryang 2.2.0 0 of 6,860
   over wasmrt's. Release lockstep ended at v33.
 * History was rewritten twice (2026-10-23 paths, 2026-10-24 drive letters). An old commit id is looked
-  up in `history-map-2026-10-23.md`, then `history-map-2026-10-24.md`.
+  up in `archive/history-map-2026-10-23.md`, then `archive/history-map-2026-10-24.md`.
 * Workspace letters closed on wasmrt's side: H1, H2, H6, H8, H10 (steps 1 and 2), H13, H15, H16, H18, H19,
   H20, H21, H22, H23 (carry-forward), H24 (the rule 5.2 re-copy, cited as "H23" until the workspace
   renumbered it). H25: nothing addressed to wasmrt. **Answered 2026-10-27** (the workspace verifies
@@ -109,7 +109,7 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
    `2.0.0` for the `exact`-type correction): each release after `2.0.0` is whatever `bump.ts` says. *(The ladder had pre-assigned `1.0.1`–`1.0.4`.)* T11 decides the contest: the CLI's 3.4 ms on
    the 48 KB module, in-process cold start, the unattributed ~5% loop regression, **the CLI's +31%
    since 0.9.0 (≈33 KiB of it attributed)**, the interpreter ladder, rsxtk on wasmtime vs wasmrt, the
-   cdylib size gap, and the rlib (what rsxtk links) never measured. Record: `roadmap.md` (T9–T12),
+   cdylib size gap, and the rlib (what rsxtk links) never measured. Record: `archive/roadmap-to-2.0.2.md` (T9–T12),
    `vision.md`, `bench/README.md`, `CHANGELOG.md` [1.0.0] "Size and speed".
 
 ## To relay — wasmrt cannot write there

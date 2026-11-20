@@ -10,10 +10,12 @@ Until now this file assumed every consumer arrives through `wasmrt.h`. That is n
 distinction is **load-bearing for the size and speed work** — the two surfaces have different levers, so
 a win in one can be invisible in the other (`vision.md`).
 
-| consumer | links | surface | notes |
-| --- | --- | --- | --- |
-| **`rsxtk`** | `wasmrt-core` **rlib** | **native Rust API** — no C ABI, no cdylib, no FFI | 🆕 **Takes wasmrt BY DEFAULT** (owner). Rust-to-Rust, so calls are direct and the C ABI is not in the path at all. |
-| **`wasmtk`**, **`universalWasmLoader-*`** | `wasmrt_capi` cdylib / staticlib | **`wasmrt.h`** (75 functions, counted 2026-10-24; below) | wasmrt is an **entrant competing for inclusion** here, judged on smallest + fastest binary — not a foregone conclusion. |
+- consumer: **`rsxtk`** — links: `wasmrt-core` **rlib** · surface: **native Rust API** — no C ABI, no cdylib, no
+  FFI · notes: 🆕 **Takes wasmrt BY DEFAULT** (owner). Rust-to-Rust, so calls are direct and the C ABI is not in the
+  path at all.
+- consumer: **`wasmtk`**, **`universalWasmLoader-*`** — links: `wasmrt_capi` cdylib / staticlib · surface:
+  **`wasmrt.h`** (75 functions, counted 2026-10-24; below) · notes: wasmrt is an **entrant competing for inclusion**
+  here, judged on smallest + fastest binary — not a foregone conclusion.
 
 ⚠️ **What this changes for optimization work:** for rsxtk the number that matters is *what LTO leaves in
 rsxtk's final binary* — cross-crate dead-code elimination, generic bloat, and whether unused subsystems
@@ -110,7 +112,7 @@ model). The union wasmrt.h must expose:
 - Reactor `_initialize` once post-instantiate.
 - Export invoke by name: typed args, **0 or 1 result** (typed fast path for `cabi_realloc`/`cabi_post`/
   `__malloc`).
-- **Raw linear-memory `data` + `data_size`** — the loaders marshal by hand, including **from inside a
+- Raw linear-memory `data` + `data_size` — the loaders marshal by hand, including **from inside a
   host callback via a Caller/`caller_export_get("memory")` handle.**
 - Exported global read; traps/errors with messages.
 

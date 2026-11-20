@@ -54,7 +54,7 @@ Released stage by stage to crates.io ([releasing.md](releasing.md); the public n
 
 **Unreleased since v0.9.0:** T9 hardening (the correctness punch-list, tail calls, `pin` and the
 execution bound), T13 the conformance clear-out (the corpus at zero failed / skipped / unrun), and
-the 2026-10 workspace letters. Per-pass records: [roadmap.md](roadmap.md); defects:
+the 2026-10 workspace letters. Per-pass records: [roadmap.md](archive/roadmap-to-2.0.2.md); defects:
 [known-issues.md](known-issues.md).
 
 *Until 2026-10-24 this section was a status narrative dated 2026-08-11, several of whose claims had

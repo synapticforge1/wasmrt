@@ -1,0 +1,132 @@
+# Divergences — the port's intentional differences
+
+What wasmrt does differently from its Zig origin on purpose, T0–T6. Last verified: 2026-11-20. Split out on 2026-11-20 (memory guide, letter H38); the
+sections below are moved verbatim.
+
+## Port notes / intentional divergences (T0–T6)
+
+- **Owned `Vec`/`String` data model instead of wazmrt's arena** (`module.rs` T3, `interp.rs` T5). Frees
+  on drop — no `deinit`, no allocator-error threading. `Instance` **owns** its `Module` (the retain-invariant,
+  free). Observable behavior identical; an idiomatic-Rust internal choice.
+- **Interpreter borrow split** (`interp.rs`, T5): immutable `module`/`func_bodies` are threaded separately
+  from `&mut globals`, so a recursive `call` reborrows cleanly — no `RefCell`, no self-referential borrow.
+- **Two slices were split core-first, exotic-later** because they're a correctness promise AND their
+  exotic tests needed the WAT assembler (T6): **T4 validate** (core language first; SIMD/atomics/GC-objects/EH
+  typing landed in v0.7.0) and **T5 interp** (integer v0.6.0 → float v0.6.1 → linear memory v0.6.2 → tables/reftypes
+  v0.6.3 → GC v0.6.4 → SIMD v0.6.5 → threads/memory64/EH in later 0.6.x). Deferred ops in both **reject loudly** (`UnsupportedValidation` / `UnsupportedInstruction`),
+  never silent-accept — so a verdict/result is always trustworthy.
+- **The interpreter value slot is 128-bit (`Value = u128`)** since the SIMD slice (`interp.rs`, T5 slice 6
+  / v0.6.5). wazmrt stores a `v128` as **two `u64` slots** and carries width tables (`slotWidth`,
+  `local_map`/`local_w`, `drop_select_w`, slot-counted arity) to size `drop`/`select` — an explicit
+  "stack-desync hazard if missed." wasmrt instead widens the slot so a `v128` is **one** slot: the whole
+  engine stays "one slot per value" (select/drop/arity/locals/call-marshaling never reason about width),
+  eliminating that hazard class. Cost: every slot is 16 bytes (runtime memory, not binary size — the
+  "small" ethos is about binary size). Scalars/refs live in the low 64 bits, so the `NULL_REF` (`u64::MAX`)
+  / `I31_TAG` (`1<<63`) sentinel invariants are unchanged. Observable behavior identical → parity holds.
+  A `const _: () = assert!(I31_TAG == 1u128 << 63)` guards the sentinel placement.
+- **Atomics execute with single-threaded semantics** (`interp.rs exec_atomic`, v0.6.7). The `0xFE` family
+  runs, but the engine has one thread: every atomic access is trivially atomic, `atomic.fence` is a no-op,
+  `memory.atomic.wait*` never blocks (value mismatch → 1 "not equal", match → 2 "timed out" since nothing
+  can `notify`), and `notify` wakes 0. This is a **conforming** implementation for a single-threaded host,
+  and matches the frozen oracle — genuine parallel execution is out of scope for the interpreter. Atomics
+  add two stricter-than-normal traps: `UnalignedAtomic` (the effective address must be naturally aligned
+  to the access width) and `ExpectedSharedMemory` (`wait*` requires a `shared` memory). The `shared` flag
+  is decoded (limits bit 1) and now threaded onto the runtime `Memory`.
+- **A DEBUG build can overflow the native stack before the 512-frame recursion cap fires**
+  (found 2026-08-03 while building the `.wast` runner, via `assert_exhaustion` on a self-recursive
+  function). `MAX_CALL_DEPTH = 512` matches the frozen oracle exactly, and **release builds are fine** —
+  the guard fires and yields `CallStackExhausted` as it should. But the interpreter recurses on the host
+  stack (`call_function` → `run` → `call_function`), and an un-inlined debug `run` frame is large enough
+  that 512 of them can exhaust a default 8 MB thread stack first, aborting the process.
+  **Deliberately NOT "fixed" by lowering the cap** — that would diverge from the oracle on legal
+  deeply-recursive programs, and the release profile (what ships) behaves correctly. The runner's own
+  test spawns a 32 MB-stack thread. **✅ ADDRESSED at T8 (2026-08-06) — the first of the two options:**
+  the depth limit is now per-store configuration (`ResourceLimits::max_call_depth`, exposed as
+  `wasmrt_config_set_max_call_depth`), so an embedder linking the debug `cdylib` can lower it without the
+  shipped default drifting from the oracle. **The default remains 512.** Shrinking the per-frame
+  footprint stays available if it ever becomes the better answer.
+- **`delegate` is rejected, inherited from the oracle** (`interp.rs throw_exception`, v0.6.9). `delegate l`
+  re-raises an exception "at label `l`", routing that can SKIP handlers an ordinary outward unwind would
+  run. wazmrt does not implement that label arithmetic (no reference impl remained to verify it against)
+  and its **validator rejects `delegate` outright**; its interpreter traps loudly as the defense for the
+  unvalidated run path. wasmrt matches exactly: reaching a delegating `try` while unwinding yields
+  `UnsupportedInstruction` rather than silently mis-routing. Every other legacy construct
+  (`try`/`catch`/`catch_all`/`rethrow`) is fully supported. **As of v0.7.0 the validator AND the assembler
+  reject it too**, so all three agree and no module can validate yet mis-route.
+- **EH has two structurally different unwind paths, and conflating them is the bug to avoid** (v0.6.9).
+  A `try_table` clause branches **out of** the try_table to its target label (label popped); a legacy
+  `catch` runs **inside** the try, whose label stays live so `rethrow` can name it. Two consequences are
+  load-bearing: (1) a `throw` from inside a legacy handler must propagate OUTWARD — the `caught.is_some()`
+  skip in `throw_exception` — or the idiom `catch (e) { throw e; }` re-matches its own handler forever;
+  (2) `rethrow` pops its try BEFORE re-raising, so the same handler cannot catch it again.
+- **Exceptions are not garbage-collected.** `catch_ref`/`catch_all_ref` box an exception into
+  `Store.exn_store` so it can be an `exnref` value; the box lives until the invocation ends, bounded by
+  `MAX_EXN_BOXES` (`ExnStoreExhausted` past that) — the same no-collector treatment as the GC heap. An
+  ordinary `throw`/`catch` round-trip never boxes, so a throwing loop does not grow the store. EH state
+  (`pending_exn` + `exn_store`) resets per invocation, so nothing leaks between calls.
+- **memory64 needed no new engine code either** (v0.6.8) — the second "already worked, now proven" slice.
+  The 64-bit plumbing was built generically in the linear-memory slice (0.6.2): the `is64` limits flag,
+  `u64` `memarg` offsets, `mem_addr_ty` per-memory address typing in the validator, and the interpreter's
+  `pop_mem(is64)`. v0.6.8's deliverable is the 18 conformance vectors + the flipped use-case cell. Three
+  facts worth not drifting on: (1) **tables stay 32-bit-indexed** — the memory64 proposal's 64-bit *table*
+  extension is out of scope because the frozen oracle rejects an `i64` table type as `MalformedFlag`
+  (`module.rs read_table_type`), and wasmrt matches; (2) a `memarg` static offset above `u32` is legal
+  only on a 64-bit memory (`validate.rs check_mem_offset`) — a decode-time `u64` read, a validate-time
+  rule; (3) **`memory.copy` between a 64-bit and a 32-bit memory takes an `i32` count** (the narrower of
+  the two index types) while each address keeps its own — the one place the two widths meet.
+- **A memory64 memory may declare far more than the instance will back.** The declared minimum is checked
+  against the per-instance budget (`DEFAULT_MAX_MEMORY_BYTES`, 1 GiB) at instantiation, so a module
+  declaring e.g. 2^40 pages fails with `MemoryLimitExceeded` rather than attempting the allocation; the
+  size computation is overflow-checked before the budget test. Validation separately caps the *declared*
+  limits at the type ceiling (2^48 pages for a 64-bit memory, 2^16 for a 32-bit one). Guests that assume
+  a genuinely huge memory will not run until the budget is made configurable (a T8/T9 concern).
+- **Multi-memory needed no new engine code** (v0.6.6). The memory-index plumbing was built generically in
+  the linear-memory slice (0.6.2) — `Vec<Memory>`, `memarg` memory index, `require_memory` in validate,
+  cross-memory `memory.copy`, flag-`0x02` data segments, per-memory instantiation. v0.6.6's deliverable is
+  the conformance vectors that prove it (distinct routing, active data → mem1, cross-mem copy) + the flipped
+  use-case cell — an honest "already worked, now tested" release, not new implementation.
+- **SIMD is complete, incl. relaxed SIMD** (`interp.rs exec_simd`, v0.6.5) — the deferral is gone. Relaxed
+  ops each take **one fixed deterministic choice** (matching the frozen oracle): `relaxed_trunc` →
+  saturating (`trunc_sat`), `relaxed_madd`/`nmadd` → double-rounding (`a*b` then `±c`), `relaxed_laneselect`
+  → full bitselect, `relaxed_min`/`max` → the `@min`/`@max` (fmin/fmax) choice, `relaxed_dot` → signed with
+  saturation. Also **WasmGC `v128` fields now execute** (the 0.6.4 `field_is_v128` reject guard is removed —
+  a field is one `Value`), and `v128.const` is valid in constant expressions (`v128` globals).
+- **WasmGC executes over a `Store`-owned managed heap** (`interp.rs`, T5 slice 5 / v0.6.4):
+  `gc_heap: Vec<HeapObject>` grown per allocation, bounded by a per-run object budget — no collector yet
+  (objects live until the store drops; fine for the run-to-completion interpreter). The load-bearing
+  **slot-encoding order is honored: `NULL_REF` (`u64::MAX`) is checked BEFORE `I31_TAG` (`1<<63`)** so a
+  null ref never reads as an `i31`. `v128` struct/array fields were deferred here and **landed in v0.6.5**
+  (SIMD slice). Still **deferred, reject loudly**: GC allocation inside constant expressions
+  (`struct.new`/`array.new`/`ref.i31` in a global initializer) traps `UnsupportedInstruction` rather than
+  silently mis-execute. (Non-GC `v128.const` in const-exprs IS supported as of v0.6.5.)
+- **`sqrt` is `std`-gated** (`interp.rs`, T5 float): uses the platform math lib with the default `std`
+  feature; a freestanding `no_std` build traps on `sqrt` alone. The one no_std float gap — revisit with a
+  software sqrt (or `libm`, if the zero-dep stance relaxes) when the freestanding-wasm target is finished.
+- **Rust `f as int` == wasm saturating truncation** (`interp.rs`, T5 float): NaN→0 + saturate-to-min/max
+  matches `trunc_sat_*` exactly, so those 8 ops are one-liners. Noted so nobody "fixes" it into a manual
+  clamp.
+- **`interp` runs import-free modules only for now** (`ImportsUnsupported`). Host imports (which WASI
+  needs) fold in during the 0.6.x execution slices.
+- **Raw single-byte `0xC5`–`0xCC` accepted as saturating-truncation ops** (`opcode.rs`, T2), mirroring the
+  wazmrt oracle (canonical encoding is `0xFC 0x00`–`0x07`). Kept for parity; re-examine against the spec
+  suite at T6.
+- **Deferred, tracked** (land with their consumer): only `decode_body_tracked` byte-offsets for trap
+  backtraces remains (T8). The `fc`/`gc` reverse maps landed with the assembler and the SIMD/atomic
+  natural-align tables with the validation arms, both in v0.7.0; `natural_align_log2` landed at T4.
+- No real wasmrt *bugs* logged yet. Each release is parity-gated (ported oracle vectors) + clippy-clean.
+
+## Inherited from wazmrt — relevant to the port
+
+- **#17 (final-component TOCTOU) + #18 (Zig std Windows crash) + #23 (Zig std Windows `Io` gaps)** —
+  all **Zig-0.16-std-specific**. wazmrt's Windows `openFile(.follow_symlinks=false)` crashes the host,
+  forcing a stat-then-open-with-follow that leaves a narrow final-component TOCTOU on `path_open`, and
+  `setTimestamps`/`hardLink` path-forms are unavailable on Windows. **wasmrt should implement the CLEAN
+  version** (atomic no-follow open via std / `cap-std` / `openat2(RESOLVE_BENEATH)`), closing #17's
+  residual and dodging #18/#23 — same behavior, better mechanism. See `security-model.md`.
+- **wasm-c-api refcount object model** — wazmrt's single highest-risk file (`wasm_c_api.zig`, 6
+  memory-safety invariants, a lifecycle fuzz). wasmrt **avoids it** by designing `wasmrt.h` around
+  lightweight `{id}` handles instead of refcounted objects (`design-decisions.md`). Still fuzz instance/
+  memory lifetimes under Miri (`testing.md`).
+- **wazmrt deferred C-ABI residuals** (shared-mutable imported globals; externref via `wasm_table_get`)
+  — likely moot: none of the loaders need them (`docs/port/08`).
+

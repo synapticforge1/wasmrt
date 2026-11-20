@@ -28,19 +28,25 @@ records which commits the port was developed against.
 | **wasm3**, **WAMR** | the small-interpreter bar wasmrt aims to beat on size | ⬜ **never compared** — needs their binaries, not estimates |
 | **wasmtime** | the feature-parity target and the runtime being replaced | partially: used as the correctness reference; **not** size/speed compared |
 
-| Project | License (SPDX) | Why it's interesting for wasmrt |
-|---|---|---|
-| **wasmtime** | Apache-2.0 WITH LLVM-exception | **The feature-parity target** — "run what wasmtime runs" (criterion (a)) — and the runtime wasmrt **replaces** under the loaders. Its `wasmtime_*` C API **shaped** `wasmrt.h` (shipped at T8 / v0.9.0): store/context/linker/typed-val model, caller-based host callbacks. **Shape only — no code, no symbols, no headers were taken**; the names are ours and the handle model deliberately differs (checked value handles, not refcounted objects). **Three shape-borrows to date** — the header (T8), the **shared store** (T7b), and the **engine-level type registry** for cross-module type identity (T9h, approved 2026-08-08). See the 🔒 *"wasmtime's SHAPE, our code"* rule in [design-decisions.md](design-decisions.md); the **Component Ledger stays empty** because no code is adopted, and each borrow visibly diverges where wasmrt's constraints differ. |
-| **wasm3** | MIT | The canonical smallest-interpreter size benchmark (criterion (c)). |
-| **WAMR** | Apache-2.0 WITH LLVM-exception | "Production small runtime" size/perf comparison. |
-| **wasmi** | Apache-2.0 OR MIT | A Rust register-machine interpreter — reference for the Option A→B ladder. |
-| **wasmer** | MIT | Another wasm-c-api implementer. |
-| **wazero** | Apache-2.0 | The Go loader's current runtime (replaced in Phase 3). |
-| **wain** | MIT | Small Rust interpreter — implementation reference. |
-| **wai** | MIT | Interpreter reference. |
-| **rust-wasm** | ISC | Interpreter reference. |
-| **wasm-c-api** | Apache-2.0 | The standard `wasm.h`. **Not adopted** — wasmrt ships its own `wasmrt.h` (see `loaders.md`). |
-| **Chicory** | Apache-2.0 | The JVM loader's current runtime (replaced in Phase 3). |
+- Project: **wasmtime** — License (SPDX): Apache-2.0 WITH LLVM-exception · Why it's interesting for wasmrt:
+  **The feature-parity target** — "run what wasmtime runs" (criterion (a)) — and the runtime wasmrt **replaces**
+  under the loaders. Its `wasmtime_*` C API **shaped** `wasmrt.h` (shipped at T8 / v0.9.0):
+  store/context/linker/typed-val model, caller-based host callbacks. **Shape only — no code, no symbols, no headers
+  were taken**; the names are ours and the handle model deliberately differs (checked value handles, not refcounted
+  objects). **Three shape-borrows to date** — the header (T8), the **shared store** (T7b), and the **engine-level
+  type registry** for cross-module type identity (T9h, approved 2026-08-08). See the 🔒 *"wasmtime's SHAPE, our
+  code"* rule in [design-decisions.md](design-decisions.md); the **Component Ledger stays empty** because no code is
+  adopted, and each borrow visibly diverges where wasmrt's constraints differ.
+- Project: **wasm3** — License (SPDX): MIT · Why it's interesting for wasmrt: The canonical smallest-interpreter size benchmark (criterion (c)).
+- Project: **WAMR** — License (SPDX): Apache-2.0 WITH LLVM-exception · Why it's interesting for wasmrt: "Production small runtime" size/perf comparison.
+- Project: **wasmi** — License (SPDX): Apache-2.0 OR MIT · Why it's interesting for wasmrt: A Rust register-machine interpreter — reference for the Option A→B ladder.
+- Project: **wasmer** — License (SPDX): MIT · Why it's interesting for wasmrt: Another wasm-c-api implementer.
+- Project: **wazero** — License (SPDX): Apache-2.0 · Why it's interesting for wasmrt: The Go loader's current runtime (replaced in Phase 3).
+- Project: **wain** — License (SPDX): MIT · Why it's interesting for wasmrt: Small Rust interpreter — implementation reference.
+- Project: **wai** — License (SPDX): MIT · Why it's interesting for wasmrt: Interpreter reference.
+- Project: **rust-wasm** — License (SPDX): ISC · Why it's interesting for wasmrt: Interpreter reference.
+- Project: **wasm-c-api** — License (SPDX): Apache-2.0 · Why it's interesting for wasmrt: The standard `wasm.h`. **Not adopted** — wasmrt ships its own `wasmrt.h` (see `loaders.md`).
+- Project: **Chicory** — License (SPDX): Apache-2.0 · Why it's interesting for wasmrt: The JVM loader's current runtime (replaced in Phase 3).
 
 **Two distinct relationships to keep straight:**
 - **Behavioral target / replace:** wasmtime (parity + drop-in under the loaders); wazero, Chicory, host

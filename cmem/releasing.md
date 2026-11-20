@@ -4,101 +4,6 @@ How wasmrt is versioned and published so others can follow progress. Decisions l
 **2026-07-27**. Public-facing trackers: `ROADMAP.md` + `CHANGELOG.md` (repo root — NOT project memory,
 but this file defines the process that keeps them current).
 
-## Versioning = port-progress ladder (owner decision)
-
-The destination is fixed and known: **a complete runtime, small and fast enough to be chosen.** The
-version number measures how far wasmrt has climbed toward it and reflects what genuinely runs and passes
-its gate — never inflated to signal the effort's maturity (that story is told by `ROADMAP.md`'s use-case
-matrix + a fast cadence).
-
-*Through T9 the destination was phrased as "the completed, frozen `wazmrt` oracle". **Retired 2026-08-11
-(owner)** — see the 1.0 entry below.*
-
-- **`0.x`** — in progress; each release lands one gated stage.
-- **`1.0.0`** — 🆕 **RE-CUT 2026-08-19 (owner): the CONFORMANCE CLEAR-OUT.** The spec corpus driven to
-  **zero failures, zero skips, zero unrun files**, an **empty baseline**, and **zero deliberate spec
-  deviations**. This is a specific deliverable, not a summary of the phases before it — and it brings the
-  proposals the corpus contains into scope (custom-descriptors/`exact`, table64, wide-arithmetic,
-  custom-page-sizes, custom-annotations, memory64-imports, legacy `delegate`). WASI p2/p3 and the
-  component model stay out. Task **T13** in `roadmap.md`.
-- **After `1.0.0`** — **`2.0.0`** (owner, 2026-10-24: the `exact`-type correction is major by the
-  gate), then the four review phases, in this order: T9 hardening, T10 bug hunt + code hygiene, T11
-  optimization review, T12 security review, **each numbered by the gate** *(they were pre-assigned
-  `1.0.1`–`1.0.4` until 2026-10-24)*. ⚠️ **The API stability promise starts at `1.0.0`**, so the C ABI and `wasmrt-core`
-  surfaces freeze when the clear-out ships — a proposal added at 1.0.0 may add a `wasmrt_feature_t`
-  value, which is additive and keeps `abi_version() == 1`; anything that is not additive must land
-  BEFORE 1.0.0 or wait for 2.0.
-- *(Superseded: `1.0.0` previously meant "complete on wasmrt's own terms — every in-scope proposal
-  implemented, conformance at its achievable ceiling, C ABI stable, size/speed measured and defended".
-  That reading made 1.0 a judgement call; the clear-out makes it a number.)* 🔒 **The wazmrt oracle was retired as the 1.0 criterion on
-  2026-08-11 (owner)** — the two runtimes now compete independently for inclusion in wasmtk and the
-  universalWasmLoader-\* runtimes, so parity with a competitor is neither the goal nor a meaningful gate.
-- Pre-1.0 the public API (both `wasmrt-core` and `wasmrt.h`) is **unstable** — breaking changes bump the
-  minor (`0.y`), which is the SemVer compatibility unit below 1.0. Expect frequent `0.y` bumps until T8.
-
-🔒 **THE NUMBER IS SemVer 2.0.0, AND A GATE SETS ITS FLOOR (workspace letter H6, adopted 2026-10-24).**
-`bun scripts/bump.ts patch|minor|major` is the only way the version moves. It computes the FLOOR since
-the last release from three diffs and refuses a bump below it, printing what set it:
-
-| diff | tool | shows |
-| --- | --- | --- |
-| surface | `bun scripts/surface.ts` (`surface/released.txt` → the tree) | the Rust `pub` API of `wasmrt-core` and `wasmrt-capi` (`cargo public-api -s`), `wasmrt.h` (prototypes without parameter names, typedefs, struct bodies, `#define`s, enum members WITH ordinals), and `--help`'s usage shapes and flag spellings |
-| semver | `cargo semver-checks --baseline-rev <last tag>` | Rust breaks a line diff calls additions: a variant added to an exhaustive enum, a field added to a constructible struct, a lost auto trait |
-| behaviour | `bun scripts/carry-forward.ts <last tag> WORKTREE` (S1, step 1c) | a module the release ACCEPTED that the tree refuses |
-
-Anything removed, changed, retyped or "accepting less" (even when correct) → **major**; only additions →
-**minor**; nothing → **patch**. **Pre-1.0 (rule 6), a minor may carry a major floor**, but the README's
-`### ⚠️ Breaking Changes` table must have a `_next release_` row, or the bump is refused. A bump resets
-the lower components. **The surface files obey two rules:** `surface/current.txt` must equal the
-sources (`bun scripts/surface.ts --check`), and an intended change is re-baselined with `--update` **in
-its own commit, with the reason, never in the bump commit** (rule 5); after the release commit is
-tagged, `bun scripts/surface.ts --release-from vX.Y.Z` records it as `surface/released.txt`, again its
-own commit. Tools: `cargo-public-api` 0.52.0 and `cargo-semver-checks` 0.51.0 (installed with
-`cargo binstall`), on the nightly toolchain. ⚠️ rustdoc output moves with the nightly, so each surface
-file records its tools; when they differ, `bump.ts` regenerates the released surface from the tag
-itself rather than trust the file.
-
-✅ **Inverted 2026-10-24.** The C/CLI readers on 17 mutations: a removed prototype, a retyped parameter,
-a struct field added, two enum members swapped, `WASMRT_ABI_VERSION` 1 → 2, a renamed or removed flag
-and a changed usage shape each give MAJOR; an added prototype, an appended enum member and an added
-flag give minor; a renamed parameter (also inside a callback type), re-indentation, a changed comment
-and a reworded description give nothing. End to end: an unrecorded header change fails `--check` and
-the bump; `bump patch` from 0.9.0 is refused (floor MAJOR: 54 surface lines removed or changed, 8
-semver lints, 6 accepted → refused); `bump minor` is refused without the Breaking Changes row and
-allowed with it (0.9.0 → 0.10.0); `--verify-tag` refuses a tag the manifest does not carry and a
-re-tag of the last release; an argument that is not a bump kind is refused (exit 2).
-
-⚠️ **What the gate cannot see, said plainly:**
-- **Exit codes and parseable output** beyond `--help`'s syntax: the `interop.md` contract rows carry
-  those, and the CLI tests pin them.
-- **Rule 3's "previous tag's tests against the new source"**: 🆕 **wired 2026-11-12** —
-  `scripts/prev-tag-tests.ts` (the last release's `crates/*/tests/` and `tests/` over this tree; run by
-  `bump.ts` for a patch or a minor, and by every `gate.ts`, which skips it when the version is a major
-  past that release). Unit tests live inside `src/` and are not carried. The behaviour equivalent
-  (step 1c, S1–S3) stays. *(Until 2026-11-12 this line said "not wired".)* **Consumers' suites**:
-  rsxtk is the named consumer and does not link wasmrt yet.
-- **Behaviour the S1 corpus does not contain** (§4.13): S3 over wasmtk's corpus is the wide net.
-
-*(Retired 2026-10-24 by H6: the cadence rule that "the patch component stays a single digit" — a
-`0.y.z` line ran `z = 0…9` and the release after `0.y.9` was `0.(y+1).0`. Under SemVer the number says
-what changed, not how many slices a line has held, so `0.y.10` is legal and a gate decides the
-component. The rule is why the 0.6 line closed at v0.6.9 and the next release was 0.7.0.)*
-
-**Stage → version map** (the ladder lives in `ROADMAP.md`; the port tasks in `roadmap.md`) — *shifted by
-one from 0.8 onward when the 0.6 line filled up; T6 and the T4 completion then shipped together in 0.7.0*:
-0.1 T0 scaffold · 0.2 T1 types+reader · 0.3 T2 opcode · 0.4 T3 decode · 0.5 T4 validate (core) ·
-0.6.x T5 interp (patch per feature slice, 0.6.0–0.6.9) · **0.7 T6 text toolchain + T4 completion (the deferred SIMD/atomics/GC/EH typing arms)** ·
-0.8 T7 wasi+cli · 0.9 T8 C-ABI · 🆕 **1.0.0 T13 conformance clear-out** · **2.0.0 the `exact`-type correction** · then T9 hardening · T10 bug hunt + code hygiene · T11 optimization review · T12 security review, numbered by the gate.
-
-🆕 **RE-CUT 2026-08-19 (owner).** The `0.10`–`0.13` rungs are gone: T9–T12 became the `1.0.x` line and a
-new task, **T13 — the conformance clear-out — takes `1.0.0` and runs FIRST**. ⚠️ **T-numbers are
-identifiers, not an order** (they are cited across every `cmem/` file), so the order is **T13 → T9 → T10
-→ T11 → T12** while the names stay put. ⚠️ **Under SemVer (above) these numbers are a PLAN, not a
-promise**: if a stage's diff sets a minor or major floor, the gate overrides the ladder and the map
-shifts. (The next release from 0.9.0 has a MAJOR floor, which `1.0.0` satisfies.)
-
-*(T10, T11 and T12 added by the owner 2026-08-06.)*
-
 ## Crates & names (owner decision: CLI takes the bare `wasmrt` name)
 
 Three crates, **one shared version** (`workspace.package.version`), released together:
@@ -175,7 +80,8 @@ given). Nobody tags or publishes by hand. Each release is recorded in [release.m
    `cmem/INDEX.md`'s Files table:
    - [release.md](release.md) — **this version's entry**: the summary and the two review lines (step
      0); the run's read-backs are added after step 7.
-   - `cmem/roadmap.md` — mark the task/slice DONE with its per-slice record.
+   - `ROADMAP.md` — the version's row. 🔁 2026-11-20: was "`cmem/roadmap.md` — mark the task/slice DONE with
+     its per-slice record"; that file is archived, and the record is `release.md`.
    - `cmem/architecture.md` — advance the "realized so far" snapshot to the new version.
    - `cmem/testing.md` — bump the unit-test count + note what the new slice's tests cover.
    - `cmem/known-issues.md` — log any new intentional divergences / deferrals from the slice.
@@ -267,98 +173,11 @@ whether you meant to or not.
 `KERNEL32`. ⚠️ Do not ship `wazmrt.pdb` — 3.6 MB of debug symbols, and the largest file in its
 `zig-out`.)*
 
-## Tooling
+## Tooling — moved
 
-- 🆕 **2026-11-19 — CI only publishes (workspace letter H37 (e)).** `checks` lost the toolchain
-  install, `cargo-public-api` / `cargo-semver-checks` and the gate; it keeps the credential-free
-  clone, the version read, Bun (pinned by sha256) and `github-release.ts state`. `tag`, `release`
-  and `publish` are unchanged; `publish` still installs the pinned nightly to package. Rehearsal of
-  the changed workflow (best-practices 7.22): ✅ the first `none` push (owner: "push", 2026-11-19),
-  commit `80891c6`, run 44642273945: `checks` green in all four steps, `tag` / `release` / `publish` skipped. The
-  bullet below describes the 2026-11-12 shape.
-
-- 🆕 **`.github/workflows/release.yml` — the owner's order, in CI (2026-11-12; workspace letter H33,
-  decisions D1 and D2).** It runs on every push of `main` (no longer on a tag), with top-level
-  `permissions: {}` and **no `uses:`** at all. `checks` (`contents: read`, a credential-free clone) asks
-  `github-release.ts state` whether this push is a release (`new`: the version has no tag; `rerun`: its
-  tag is on this commit; `none`: elsewhere), installs the toolchain and runs **`bun scripts/gate.ts`**
-  (`--release` unless `none`) — the same list `release.ts` runs locally. Only for a release: `tag`
-  (`contents: write`, no checkout) makes CI's annotated tag; `release` (`contents: write`, no checkout)
-  makes the page from it; `publish` (`id-token: write`, `contents: read`) runs `scripts/crates-io.ts`:
-  `has` → `token` (GitHub OIDC → a short-lived crates.io token) → `publish` (core, capi, CLI, each
-  skipped if listed; `--no-verify`, nothing built) → `revoke` (always) → `readback` (all three, not
-  yanked, FATAL). **Pins (U9):** Rust `nightly-2026-11-04`, refused unless `rustc -V` names
-  `708c94ef0` (the nightly 2.0.1 was built on; CI's pin only — the local `rust-toolchain.toml` still
-  floats, a T11 question); `cargo-public-api` 0.52.0 and `cargo-semver-checks` 0.51.0 `--locked`; Bun
-  1.4.4 by sha256 (checked against Bun's `SHASUMS256.txt` 2026-11-12). Concurrency: one group per
-  commit, never cancelled. **Measured `cargo public-api` follows `RUSTUP_TOOLCHAIN`** (2026-11-12: it
-  built with the 2026-10-21 nightly when told to), so `surface.ts` now names the ACTIVE toolchain
-  (`rustc -V`, identical locally to the old `rustup run nightly`).
-  - 🔒 **Branch scope (owner, 2026-11-12, on review finding N1: "we will keep the current setup"):**
-    the trusted publisher names the repository and `release.yml`, not a branch or an environment;
-    what limits publishing to `main` is the workflow's `main`-only trigger and who can push.
-  - 🔑 **Owner setting — SET (owner, 2026-11-12: "trusted publisher is already set"):** on crates.io, a **trusted publisher** on
-    EACH of `wasmrt-core`, `wasmrt-capi` and `wasmrt` — repository `synapticforge1/wasmrt`, workflow
-    `release.yml`, no environment. Then the workstation's `cargo login` token can be revoked. Without
-    it, `publish` fails at `token` with "is a trusted publisher … configured" AFTER the tag and page:
-    set it, then "Re-run failed jobs" (no new version needed).
-  - **Rehearsed 2026-11-12 (best-practices 7.22), in a scratch clone behind a scratch bare origin:**
-    the whole gate (12 steps; 606 / 0 / 1 tests) green; `bump.ts patch` refused a dirty tree, then
-    floor PATCH ×3, v2.0.1's tests 70 / 0, the `bump to v2.0.2` commit (two files); `release.ts
-    --dry-run` passed every guard and `gate.ts --release` (15 steps), pushed nothing; refusals shown
-    for an extra commit, an untracked file, a CR (the gate stops at `eol`) and a missing entry.
-    `cargo publish --workspace --dry-run` at an UNPUBLISHED 2.0.2 packages all three (per-crate
-    `-p wasmrt-capi --dry-run` cannot: it resolves core from crates.io — hence the workspace form in
-    `checks` and the per-crate form, as 2.0.1 ran it, in `publish`). The scripts against the REAL
-    APIs, read-only: crates.io `has`/`readback` on 2.0.1 (listed, served) and 2.0.2 (missing ×3);
-    GitHub `state` new / rerun / none, `tag` and `page --dry-run` on v2.0.1 (found, nothing written).
-    The workflow's own shell (version, toolchain check, tag peel) 7 / 7 with negatives. **Not
-    rehearsable here:** the OIDC exchange (needs a runner and the owner's setting) and the Linux
-    `checks` run — the first push of this change measures the latter with `state=none`, before any
-    release depends on it.
-  - 🔁 **Review round 1 (2026-11-12) changed this flow** — `known-issues.md` R1–R15: `state` checks
-    what a tag claims (R4), crates are matched by provenance (R5), the review clause is fixed (R3),
-    per-version concurrency (R11), time limits (R14). Self-tests now 44 / 44 / 37; the numbers just
-    below are the first version's.
-  - **Self-tests (each inverted by mutants, 2026-11-12):** `check-github-release.ts` 34 checks (+ `state`
-    and `tag`; 8 mutants caught), `check-crates-io.ts` 36 (mock registry + OIDC + a fake cargo; 11
-    mutants — one survived first, the exchange's status check, until a case gave an error status a
-    token), `check-release-record.ts` 22 (9 mutants — two survived first, the version prefix and the
-    later-section guard, until cases aimed at them). `prev-tag-tests.ts` inverted by a committed mutant
-    (guest exit codes ignored → RED, 6 failures) with HEAD's copy of the catching test deleted, proving
-    the TAG's tests ran; control green 70 / 0.
-- **The release page (2026-11-09; workspace letters H30 and H32): no `gh`.** Until then the page was
-  made by `gh release create --verify-tag`. Now `scripts/github-release.ts` (Bun, `fetch`, REST API)
-  makes it, keeping H32's order: (0) the CHANGELOG has a non-empty `## [X.Y.Z]` section, checked before
-  any request; (1) the tag exists on GitHub and peels, with annotated tags followed, to `GITHUB_SHA`
-  (`POST /releases` would otherwise CREATE a missing tag); (2) a page already there means done, with no
-  write, so a re-run is safe; (3) POST, then read the page back (the tag, not a draft) and peel the tag
-  again. Each request has a 30 s limit, body included. The page is the same as before: the CHANGELOG
-  heading as the title and the section as the body. No generated notes, and no
-  `generate_release_notes`, which is the one place wasmrt departs from H32's recipe: the CHANGELOG is
-  the release note. *(Jobs until 2026-11-12: `compatibility-gate` then `github-release`, on a tag push;
-  now the page is `github-release.ts page` in the `release` job above, keyed on `VERSION`.)* **The
-  self-test** (as of 2026-11-09; 34 checks since 2026-11-12) is `bun scripts/check-github-release.ts`: a
-  `node:http` mock API, 17 checks. Missing, other-commit or annotated-other tags are refused with no POST; a
-  CHANGELOG with no section or an empty one is refused with no request at all; the cases also cover an
-  existing page, a lightweight and an annotated create (with the POST body checked), POST 422, a
-  read-back draft, a tag moved after the POST, a dry run, no token, a non-`vX.Y.Z` tag, an unknown
-  argument and a stalled API. **Inverted 2026-11-09** by six one-line mutants, each caught only by its
-  own case or cases. They removed the sha check, the existing-page stop, the time limit, the
-  empty-section refusal, the draft read-back check and the re-peel. **Real GitHub, read-only
-  `--dry-run`, 2026-11-09:** `v2.0.0` at `1715139` peels and finds its page (exit 0, no write); the same
-  tag given `v1.0.0`'s commit is refused. ✅ **Measured on GitHub Actions by 2.0.1** (run 42724412211):
-  the page's `author.login` is `github-actions[bot]` (§ Status). Owner, 2026-11-09: only new tags get pages; nothing is backfilled.
-- 🏢 **The org move does not touch publishing (workspace letter H20, recorded 2026-10-23).** H20 exists
-  because a registry's trusted-publishing (OIDC) policy is locked to the GitHub owner and repository
-  **IDs**, and the move to `synapticforge1` changed the owner ID (nuget.org refused loader-dotnet's
-  next publish). Through 2.0.1 wasmrt published with the owner's **API token**, with no OIDC policy,
-  so nothing is pinned to the old ID. **CI publishing through crates.io trusted publishing is adopted
-  (2026-11-12): create the trusted publisher under `synapticforge1/wasmrt`, never the old owner.**
-  crates.io shows the corrected `repository` field (`synapticforge1/wasmrt`, fixed 2026-10-23) from
-  the next publish.
-- *(Retired 2026-11-12: the `cargo-release` / `release-plz` suggestions of 2026-07-27 — the release
-  is now `bump.ts` + `release.ts` + the workflow above.)*
+The release tooling (the scripts, the workflow, how each got its shape): [releasing-tooling.md](releasing-tooling.md),
+moved there verbatim on 2026-11-20 (letter H38); references to "releasing.md § Tooling" mean that file.
+The version ladder: [versioning.md](versioning.md).
 
 ## 🔒 The "reflect a shipped stage" trigger (binding on every agent)
 
@@ -388,12 +207,18 @@ Review S1 (2026-11-19): nothing stood between a push of `main` and a crates.io p
 unprotected, no rulesets, no environment). As for binaryang (its `main` ruleset 27683565), plus the
 approval binaryang does not have:
 
-| setting | what | state |
-| --- | --- | --- |
-| ruleset `main` | Branch ruleset, target `main`: restrict deletions; block force pushes | set (owner, 2026-11-19): 27687060, `~DEFAULT_BRANCH`, active — read back with a THIRD rule, `update` (restrict updates), which refuses `release.ts`'s push of `main` unless the pusher is a bypass actor (not visible to the public API); owner to decide |
-| ruleset `v*` | **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict creations": CI creates the tag | set (owner, 2026-11-19): 27687102, tag, `refs/tags/v*`, active; update, deletion, force push (read back) |
-| environment | 🔒 **None** (owner, 2026-11-19: "I am not creating a release environment on github. My release environment is here."). The release's gate is the owner's machine: `release.ts` runs the full local gate and the review gate, then pushes `main` | — |
-| crates.io trusted publisher | per crate (all three): repository, `release.yml`, no environment; set (owner, 2026-11-19) | set |
+- setting: ruleset `main` — what: Branch ruleset, target `main`: restrict deletions; block force pushes · state:
+  set (owner, 2026-11-19): 27687060, `~DEFAULT_BRANCH`, active — read back with a THIRD rule, `update` (restrict
+  updates), which refuses `release.ts`'s push of `main` unless the pusher is a bypass actor (not visible to the
+  public API); owner to decide
+- setting: ruleset `v*` — what: **Tag** ruleset (not branch: binaryang's was made as a branch ruleset by
+  mistake), target `refs/tags/v*`: restrict updates, restrict deletions, block force pushes. NOT "restrict
+  creations": CI creates the tag · state: set (owner, 2026-11-19): 27687102, tag, `refs/tags/v*`, active; update,
+  deletion, force push (read back)
+- **setting: environment** — what: 🔒 **None** (owner, 2026-11-19: "I am not creating a release environment on
+  github. My release environment is here."). The release's gate is the owner's machine: `release.ts` runs the full
+  local gate and the review gate, then pushes `main`
+- **setting: crates.io trusted publisher** — what: per crate (all three): repository, `release.yml`, no environment; set (owner, 2026-11-19) · state: set
 
 **The accepted risk (review S1, owner's decision).** With no environment, a push of `main` carrying a
 new version is published by CI without a further approval, so the push credential is the release

@@ -10,14 +10,14 @@ instruction table (**D1**), the feature list (**D2**) and the verdict vocabulary
 source, in binaryang, and that every other repo keeps a **generated** copy, checked by a gate that
 regenerates it and diffs.
 
-| piece | where | what it does |
-| --- | --- | --- |
-| the source, vendored | `definitions/binaryang/{opcodes,features,verdicts}.json` | binaryang's `src/definitions/*.json` at a **published tag** |
-| the pin | `definitions/binaryang/PIN.json` | repo, tag, commit, and each file's git blob id and content sha256 |
-| the generator | `scripts/definitions.ts` | verifies the source, writes the copy; `--check` regenerates and diffs; `fetch <tag> <commit>` re-pins |
-| the copy | `crates/wasmrt-core/src/definitions.rs` | GENERATED. **Hand-editing it is a DEFECT** (H10) |
-| the cross-check | `crates/wasmrt-core/src/definitions_check.rs` | holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test` |
-| 🆕 the SHIPPED tables | `crates/wasmrt-core/src/tables.rs` | GENERATED (H10 step 2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables, the `0xFB`/`0xFC` dispatch (`fb_op`, `fc_op`, `prefixed`). Compiled into every binary |
+- **piece: the source, vendored** — where: `definitions/binaryang/{opcodes,features,verdicts}.json` · what it does: binaryang's `src/definitions/*.json` at a **published tag**
+- **piece: the pin** — where: `definitions/binaryang/PIN.json` · what it does: repo, tag, commit, and each file's git blob id and content sha256
+- **piece: the generator** — where: `scripts/definitions.ts` · what it does: verifies the source, writes the copy; `--check` regenerates and diffs; `fetch <tag> <commit>` re-pins
+- **piece: the copy** — where: `crates/wasmrt-core/src/definitions.rs` · what it does: GENERATED. **Hand-editing it is a DEFECT** (H10)
+- **piece: the cross-check** — where: `crates/wasmrt-core/src/definitions_check.rs` · what it does: holds wasmrt's tables (and the `.wast` runner's verdicts, D3) to the copy; runs in `cargo test`
+- **piece: 🆕 the SHIPPED tables** — where: `crates/wasmrt-core/src/tables.rs` · what it does: GENERATED (H10 step
+  2, 2026-10-24): `op_feature` (exhaustive over `Op`), the relaxed-SIMD set, the `0xFD`/`0xFE` mnemonic tables, the
+  `0xFB`/`0xFC` dispatch (`fb_op`, `fc_op`, `prefixed`). Compiled into every binary
 
 ✅ **D2's TYPE and ENCODING rules are held in `cargo test` (since the 2.2.0 re-pin, 2026-10-24).**
 The generator emits `TYPE_RULES` / `ENCODING_RULES`; `definitions_check` maps each rule's subject
@@ -148,12 +148,18 @@ This is the fifth time the X3 shape has turned up, and again a sweep found it, n
 
 **Classified (in `KNOWN`):**
 
-| key | what | class |
-| --- | --- | --- |
-| `15` `return_call_ref` | D1 gates it under tail-call. **wasm-tools 1.262 needs function-references ONLY** (accepted with tail-call off; refused with function-references off), and wasmrt does exactly that | **binaryang's D1 differs from wasm-tools**; reported upstream |
-| `1c`, `fb 15`, `fb 17`, `fb 24` | D1 names the second `select` opcode `select`, and the nullable casts `ref.test null` etc. wasmrt uses an internal `select.t` sentinel, and one mnemonic with the nullability in the immediate | naming of the two TABLES; bytes and text forms agree |
-| D2 `sat-float-to-int` | wasmrt's `--features` accepts `saturating-float-to-int` and `nontrapping-float-to-int-conversions`, not binaryang's spelling | vocabulary gap on a **contract surface** (`interop.md` §2.2) — coordinate before adding an alias. The gating itself agrees (`D2_ALIASES`) |
-| D2 `mutable-globals`, `annotations`, `code-metadata`, `compact-imports` | no wasmrt flag. The first two are always on; code metadata is not implemented; compact imports: binaryang `implemented:false` too, and whether wasmrt decodes the form is UNMEASURED | FEATURE |
+- key: `15` `return_call_ref` — what: D1 gates it under tail-call. **wasm-tools 1.262 needs function-references
+  ONLY** (accepted with tail-call off; refused with function-references off), and wasmrt does exactly that · class:
+  **binaryang's D1 differs from wasm-tools**; reported upstream
+- key: `1c`, `fb 15`, `fb 17`, `fb 24` — what: D1 names the second `select` opcode `select`, and the nullable
+  casts `ref.test null` etc. wasmrt uses an internal `select.t` sentinel, and one mnemonic with the nullability in
+  the immediate · class: naming of the two TABLES; bytes and text forms agree
+- key: D2 `sat-float-to-int` — what: wasmrt's `--features` accepts `saturating-float-to-int` and
+  `nontrapping-float-to-int-conversions`, not binaryang's spelling · class: vocabulary gap on a **contract surface**
+  (`interop.md` §2.2) — coordinate before adding an alias. The gating itself agrees (`D2_ALIASES`)
+- key: D2 `mutable-globals`, `annotations`, `code-metadata`, `compact-imports` — what: no wasmrt flag. The first
+  two are always on; code metadata is not implemented; compact imports: binaryang `implemented:false` too, and
+  whether wasmrt decodes the form is UNMEASURED · class: FEATURE
 
 ✅ **D3 (verdicts) is CHECKED since 2026-10-24**, both ways: every D3 message is in the `.wast`
 runner's `wast::TRAP_VERDICTS` and classifies to the verdict D3's key names, and the table holds
@@ -170,11 +176,22 @@ commit; **not rebuilt**, so as not to write into its tree). binaryang used `bun 
 wasm-validate`, through one-time harnesses that read the fixtures out of the committed scripts. Both
 trees were checked unchanged afterwards. wasmrt itself passes all three.
 
-| sweep | wazmrt 1.0.3 | binaryang (`main` at the time) |
-| --- | --- | --- |
-| feature-gate (22 rows) | **3 accept with the proposal off**: `(table i64 …)` with memory64 off (and there is no separate `table64` flag); `call_ref` with function-references off **while GC is on** (refused once GC is off too, so GC implies function-references there). ⚠️ *Corrected the same day:* this first said "a dependency rule the contract does not state". That was read from wasmrt's copy, which is still at **v10**. wazmrt's **v30** (2026-09-21) makes `--features` take wasm-tools' vocabulary *with wasm-tools' meanings*, each dependency enforced on the module, and wasm-tools refuses this module. So the binary **appears to breach v30**, unless it predates v30 (both are dated 2026-09-21; unverified); the table-initializer form even with function-references AND GC off | **3 accept**: multi-value, reference-types and the table-initializer form, even with a plain `--disable-…` (flag order verified not to be the cause) |
-| index-type (23 × 2, and past 2^32) | PASSED | not run: no interpreter, and the typing half would need a new harness |
-| differential fuzz (300 + 1,200) | **refuse-valid 12**: all `ConstantExpressionRequired`, and a probe isolates **operand-stack depth > 8** (depth 8 accepted, 9 refused; wasm-tools and wasmrt accept to 64). That is wasmrt's day-6 defect; that all 12 are this cause is probable, not verified per case. **accept-invalid 3**: element-segment flags `0x41`, `0x4b`, `0x0d` (the spec allows 0–7) reported "validation: OK". A minimal flags-`8` module IS refused, so the mechanism is unverified | refuse-valid 0; **accept-invalid 2** ("func 0 failed to validate"; "invalid value type" at `0x3b`) |
+- **sweep: feature-gate (22 rows)** — wazmrt 1.0.3: **3 accept with the proposal off**: `(table i64 …)` with
+  memory64 off (and there is no separate `table64` flag); `call_ref` with function-references off **while GC is on**
+  (refused once GC is off too, so GC implies function-references there). ⚠️ *Corrected the same day:* this first
+  said "a dependency rule the contract does not state". That was read from wasmrt's copy, which is still at **v10**.
+  wazmrt's **v30** (2026-09-21) makes `--features` take wasm-tools' vocabulary *with wasm-tools' meanings*, each
+  dependency enforced on the module, and wasm-tools refuses this module. So the binary **appears to breach v30**,
+  unless it predates v30 (both are dated 2026-09-21; unverified); the table-initializer form even with
+  function-references AND GC off · binaryang (`main` at the time): **3 accept**: multi-value, reference-types and
+  the table-initializer form, even with a plain `--disable-…` (flag order verified not to be the cause)
+- **sweep: index-type (23 × 2, and past 2^32)** — wazmrt 1.0.3: PASSED · binaryang (`main` at the time): not run: no interpreter, and the typing half would need a new harness
+- **sweep: differential fuzz (300 + 1,200)** — wazmrt 1.0.3: **refuse-valid 12**: all `ConstantExpressionRequired`,
+  and a probe isolates **operand-stack depth > 8** (depth 8 accepted, 9 refused; wasm-tools and wasmrt accept to
+  64). That is wasmrt's day-6 defect; that all 12 are this cause is probable, not verified per case.
+  **accept-invalid 3**: element-segment flags `0x41`, `0x4b`, `0x0d` (the spec allows 0–7) reported "validation:
+  OK". A minimal flags-`8` module IS refused, so the mechanism is unverified · binaryang (`main` at the time):
+  refuse-valid 0; **accept-invalid 2** ("func 0 failed to validate"; "invalid value type" at `0x3b`)
 
 **I8, `(@custom "name" …)`**: with no identifiers in the module, wasm-tools, wasmrt, wazmrt and
 binaryang all emit one `name` section, the annotation. **With identifiers too (`$m`, `$f`), wasm-tools

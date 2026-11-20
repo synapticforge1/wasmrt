@@ -14,7 +14,7 @@
 #
 # Correctness is now anchored on external references that were always the harder test anyway: the
 # official spec testsuite (62,498 adjudicated assertions), wasmtime's observable behaviour, and the
-# wasmtk WASI corpus. See cmem/design-decisions.md and cmem/roadmap.md.
+# wasmtk WASI corpus. See cmem/design-decisions.md and cmem/archive/roadmap-to-2.0.2.md.
 
 BASELINE_HEAD=83ee9e0d62813c811db4c9d93993f5fb13799fa6
 BASELINE_SUBJ=83ee9e0 2026-08-10 18:20:09 -0400 docs: the wasm-c-api payoff was falsified — record where the intent slipped

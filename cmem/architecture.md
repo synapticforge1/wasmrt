@@ -110,7 +110,7 @@ borrow split (recursive `call` reborrows cleanly, no `RefCell`); and the **128-b
 _(Earlier snapshot, superseded:)_ Through T3 / v0.4.0: the workspace + all three crates exist; `wasmrt-core` has
 `types`, `reader`, `opcode` (the shared IR + `decode_body`), and `module` (full binary decode)
 implemented and parity-tested. `validate` / `interp` / text / `wasi` / `pin` are still stubs, filled in
-bottom-up per `roadmap.md`. One idiomatic divergence worth noting: the decoder uses **owned `Vec`/`String`
+bottom-up per `archive/roadmap-to-2.0.2.md`. One idiomatic divergence worth noting: the decoder uses **owned `Vec`/`String`
 data** rather than wazmrt's arena (frees on drop; no `deinit`).
 
 ## Crates

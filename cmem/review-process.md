@@ -18,7 +18,7 @@ workspace file is the process and this one is the facts.
 `review-gate.ts` step refuses unless `review-issues.md` says `Review complete: <commit>` and nothing a
 review reads has changed since. A reviewing agent never commits, pushes or releases. wasmrt's ladder
 maps on: T9 hardening → "hardening review", T10 bug hunt → "basic review", T12 security → "security
-review", T11 (optimization, the contest's measurement) → "efficiency review" (`roadmap.md`).
+review", T11 (optimization, the contest's measurement) → "efficiency review" (`archive/roadmap-to-2.0.2.md`).
 
 ## 2. Private data a reviewer never reads
 

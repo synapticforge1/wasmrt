@@ -184,4 +184,4 @@ the records.
   publish; the rhythm was implement → **full-doc prep** → owner publishes. **v0.6.4 onward ran under
   the pre-publish doc-sync gate, and each v0.6.4+ GitHub release was created automatically by the
   tag-triggered `.github/workflows/release.yml`.** Per-version detail: `CHANGELOG.md` and
-  `roadmap.md`.
+  `archive/roadmap-to-2.0.2.md`.

@@ -17,10 +17,15 @@ following its head would mean adopting a competitor's design choices — the opp
 marshalling. That makes **two distinct artifacts to optimize, with different levers**, and conflating
 them will produce work that helps neither:
 
-| consumer | artifact | what "small and fast" means there |
-| --- | --- | --- |
-| **rsxtk** (default, native) | `wasmrt-core` **rlib** | what LTO leaves in *rsxtk's* final binary — dead-code elimination across the crate boundary, generic bloat, and whether unused subsystems (WAT assembler, `.wast` runner, WASI) actually drop out. Calls are direct: **no FFI cost to shave**. rsxtk already builds `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, so those levers are live. |
-| **wasmtk**, **universalWasmLoader-\*** | `wasmrt_capi` **cdylib** + `wasmrt.h` | the shipped **522.0 KiB** on disk (534,528 B at 1.0.0, measured 2026-10-24; was 493.5 KiB in 2026-08), plus per-call FFI overhead at the C boundary. Nothing is dead-code-eliminated here — every exported symbol is reachable by definition. |
+- consumer: **rsxtk** (default, native) — artifact: `wasmrt-core` **rlib** · what "small and fast" means there:
+  what LTO leaves in *rsxtk's* final binary — dead-code elimination across the crate boundary, generic bloat, and
+  whether unused subsystems (WAT assembler, `.wast` runner, WASI) actually drop out. Calls are direct: **no FFI cost
+  to shave**. rsxtk already builds `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, so those
+  levers are live.
+- consumer: **wasmtk**, **universalWasmLoader-\*** — artifact: `wasmrt_capi` **cdylib** + `wasmrt.h` · what
+  "small and fast" means there: the shipped **522.0 KiB** on disk (534,528 B at 1.0.0, measured 2026-10-24; was
+  493.5 KiB in 2026-08), plus per-call FFI overhead at the C boundary. Nothing is dead-code-eliminated here — every
+  exported symbol is reachable by definition.
 
 The practical consequence: a size win in the cdylib may be invisible to rsxtk, and an rlib win may not
 show up in the cdylib at all. **Measure the artifact the consumer actually links.**
@@ -100,11 +105,39 @@ and the wasmtk WASI corpus. Those were always the harder test; the oracle was sc
 Recorded because the axes above are the *destination* and are easy to read as a status claim.
 **All three now carry a measurement** — that changed at T9; before it, two were assertions.
 
-| Axis | Standing | Gap |
-| --- | --- | --- |
-| **Canonical** | **99.7%** of the official spec testsuite (**63,333 / 172 / 1,024** over 284 files, 2026-08-19 — was 62,238 / 378 / 2,038; ⚠️ the denominator grew to 63,505 as skips became verdicts, so the rate understates the move); the `.wat` corpus figure is ⚠️ UNVERIFIED since its denominator moved (`testing.md`, 2026-08-19), and every CLI command that takes a module accepts `.wat` directly; **every proposal in the scope list now runs, tail calls included** — ✅ **CORRECTED THEN FIXED 2026-08-19: six in-scope WasmGC ARRAY instructions were MISSING and now ship** (+197 passes, −213 skips) (`array.new_data`/`new_elem`/`init_data`/`init_elem`/`fill`/`copy`; `any.convert_extern` is a **documented deliberate** deferral, not an oversight) — no `Op`, no interpreter arm. They produced only SKIPS, never failures, so no conformance number could show them. See `known-issues.md` | ✅ **T9f landed 2026-08-14, so there is no unimplemented scope item and 1.0 is not blocked on a feature.** ⚠️ It landed with a warning attached: `return_call_ref` had shipped for releases as a FAKE tail call — correct results, native stack growing per hop — while its conformance file read 40/7. **A high conformance score can coexist with an absent feature** (`best-practices.md` §3.10). What remains on this axis is not scope but **172 failures + 1,024 skips**, now scoped as **F1–F7 / S1–S7** in `roadmap.md`: 114 of the failures are untargeted proposals, the largest in-scope class is **accept-invalid (32)**, and **91% of the skips are cascades** behind seven roots — the biggest being the externref/anyref bridge at ~181 assertions. ✅ table64 is DONE. |
-| **Fast** | ✅ **MEASURED 2026-08-07.** Cold start **4.48 ms** for a 48 KB module (3.5 µs for a toy); steady state **~237 Mops/s** on a tight `loop`/`br_if`. Bench: `cargo run --release -p wasmrt-core --example bench`. | ⚠️ **A ~5% steady-state regression from the ninth T9 pass is still unattributed** and handed to T11 — two hypotheses were tested and rejected. That was a footnote while the oracle defined success; **under a contest decided on speed it is a live liability.** ~~No cross-runtime comparison has been run on this machine.~~ 🆕 **2026-10-23: the first same-machine comparison exists** (wasmtime / Bun / Deno; `bench/README.md`). It shows the win is start-up, that the in-process 48 KB cold start trails both JS engines, and that the crossover against a JIT is a few M wasm ops. Still missing: wasm3, WAMR, wazmrt, and **rsxtk on wasmtime vs on wasmrt** (the headline experiment above). |
-| **Small** | 🆕 **2026-09-19: the SHIPPED cdylib was 1,363,968 B, not the 493.5 KiB below** — `rlib` in `wasmrt-capi`'s crate-type defeated LTO's dead-code removal, so the text assembler and the `.wast` runner rode along. Removed: shipped dll **521,216 B (509.0 KiB)**, staticlib 21.99 → **5.54 MB**. ✅ **MEASURED 2026-08-07.** CLI **621 KiB**, cdylib **493.5 KiB**, freestanding `wasm32` engine **158.1 KiB** (**137.5 KiB** after `wasm-opt -Oz`), engine + text toolchain **260.9 KiB**. Still **zero third-party dependencies**. | **The rlib-in-rsxtk figure has never been measured at all** — and that is the artifact the default consumer links. `wasm-opt -Oz` is worth ~13% and is **not wired into any build script**. No comparison against wasm3 / WAMR / wazmrt. |
+- Axis: **Canonical** — Standing: **99.7%** of the official spec testsuite (**63,333 / 172 / 1,024** over 284
+  files, 2026-08-19 — was 62,238 / 378 / 2,038; ⚠️ the denominator grew to 63,505 as skips became verdicts, so the
+  rate understates the move); the `.wat` corpus figure is ⚠️ UNVERIFIED since its denominator moved (`testing.md`,
+  2026-08-19), and every CLI command that takes a module accepts `.wat` directly; **every proposal in the scope list
+  now runs, tail calls included** — ✅ **CORRECTED THEN FIXED 2026-08-19: six in-scope WasmGC ARRAY instructions were
+  MISSING and now ship** (+197 passes, −213 skips)
+  (`array.new_data`/`new_elem`/`init_data`/`init_elem`/`fill`/`copy`; `any.convert_extern` is a **documented
+  deliberate** deferral, not an oversight) — no `Op`, no interpreter arm. They produced only SKIPS, never failures,
+  so no conformance number could show them. See `known-issues.md` · Gap: ✅ **T9f landed 2026-08-14, so there is no
+  unimplemented scope item and 1.0 is not blocked on a feature.** ⚠️ It landed with a warning attached:
+  `return_call_ref` had shipped for releases as a FAKE tail call — correct results, native stack growing per hop —
+  while its conformance file read 40/7. **A high conformance score can coexist with an absent feature**
+  (`best-practices.md` §3.10). What remains on this axis is not scope but **172 failures + 1,024 skips**, now scoped
+  as **F1–F7 / S1–S7** in `archive/roadmap-to-2.0.2.md`: 114 of the failures are untargeted proposals, the largest in-scope class is
+  **accept-invalid (32)**, and **91% of the skips are cascades** behind seven roots — the biggest being the
+  externref/anyref bridge at ~181 assertions. ✅ table64 is DONE.
+- Axis: **Fast** — Standing: ✅ **MEASURED 2026-08-07.** Cold start **4.48 ms** for a 48 KB module (3.5 µs for a
+  toy); steady state **~237 Mops/s** on a tight `loop`/`br_if`. Bench: `cargo run --release -p wasmrt-core --example
+  bench`. · Gap: ⚠️ **A ~5% steady-state regression from the ninth T9 pass is still unattributed** and handed to T11
+  — two hypotheses were tested and rejected. That was a footnote while the oracle defined success; **under a contest
+  decided on speed it is a live liability.** ~~No cross-runtime comparison has been run on this machine.~~ 🆕
+  **2026-10-23: the first same-machine comparison exists** (wasmtime / Bun / Deno; `bench/README.md`). It shows the
+  win is start-up, that the in-process 48 KB cold start trails both JS engines, and that the crossover against a JIT
+  is a few M wasm ops. Still missing: wasm3, WAMR, wazmrt, and **rsxtk on wasmtime vs on wasmrt** (the headline
+  experiment above).
+- Axis: **Small** — Standing: 🆕 **2026-09-19: the SHIPPED cdylib was 1,363,968 B, not the 493.5 KiB below** —
+  `rlib` in `wasmrt-capi`'s crate-type defeated LTO's dead-code removal, so the text assembler and the `.wast`
+  runner rode along. Removed: shipped dll **521,216 B (509.0 KiB)**, staticlib 21.99 → **5.54 MB**. ✅ **MEASURED
+  2026-08-07.** CLI **621 KiB**, cdylib **493.5 KiB**, freestanding `wasm32` engine **158.1 KiB** (**137.5 KiB**
+  after `wasm-opt -Oz`), engine + text toolchain **260.9 KiB**. Still **zero third-party dependencies**. · Gap:
+  **The rlib-in-rsxtk figure has never been measured at all** — and that is the artifact the default consumer links.
+  `wasm-opt -Oz` is worth ~13% and is **not wired into any build script**. No comparison against wasm3 / WAMR /
+  wazmrt.
 
 **Honest summary:** *canonical* is the axis driven hardest and is nearly done. *Fast* and *small* have
 real baselines — which is what **T11 (the optimization review) was blocked on**, so every proposal there
@@ -131,7 +164,7 @@ strongest card"*); CLI **wazmrt 890 KB vs wasmrt 684 KB** (wasmrt smaller); and 
 ⚠️ **This is a competitor measuring us. It does not close gap (3) above — it raises its priority**, and
 by the rule directly above, those figures are not adoptable: they are explicitly *not*
 feature-parity-verified, and **the 554 KB / 684 KB disagree with our own 493.5 KiB / 621 KiB** — build
-config, flags and date are part of a size number and we cannot see theirs (`roadmap.md`, T11 rule 3).
+config, flags and date are part of a size number and we cannot see theirs (`archive/roadmap-to-2.0.2.md`, T11 rule 3).
 **Run our own and publish that.** What is worth taking without re-deriving is the *shape*, because it
 survives any of those differences: **the cdylib is the artifact where wasmrt is behind**, and the cdylib
 is what wasmtk and every C consumer link. The CLI — where wasmrt leads — is the artifact the contest

@@ -13,3 +13,6 @@
 # Review issues: open findings never reach GitHub (workspace review standard, letter H37 (b));
 # scripts/privacy-gate.ts refuses it tracked.
 /cmem/review-issues.md
+
+# The root CLAUDE.md is a local pointer to cmem/STATE.md and cmem/INDEX.md (memory guide, letter H38).
+/CLAUDE.md

@@ -1,0 +1,1373 @@
+## 2026-11-12 — ONE gate list, run by CI and by `release.ts` (workspace letter H33) — 🔁 superseded 2026-11-19 above
+
+**`bun scripts/gate.ts`** is the gate, and CI's `checks` job runs that same file on every push of
+`main` (`.github/workflows/release.yml`), so the local gate IS CI's gate. In order: eol,
+`definitions.ts --check`, `cargo build --workspace --release --locked`, `cargo test --workspace
+--locked`, clippy `-D warnings`, `surface.ts --check`, the C-ABI gate (`CC=gcc` on this host), the
+three release-script self-tests (`check-github-release.ts` 34, `check-crates-io.ts` 36,
+`check-release-record.ts` 22 — each inverted by mutants), **the previous release's integration tests
+against this tree** (`prev-tag-tests.ts`: the tag's `crates/*/tests/` and `tests/` over HEAD's
+committed tree, `cargo test --test '*'`; 70 tests in 15 binaries), and `cargo publish --workspace
+--no-verify --dry-run`. **`--release` adds** the floor (`bump.ts --verify-tag`), the CHANGELOG section
+and the release's entry in `release.md` with both reviews (`release-record.ts`). Each step's exit code
+is read; the first failure stops it by name (inverted: a CR in a tracked file stops it at `eol`).
+**Measured 2026-11-12 in a fresh clone:** 12 / 12 green, `cargo test` 606 / 0 / 1 in 19 binaries; with
+`--release` at a rehearsal 2.0.2, 15 / 15. 🔁 **After review round 1 (same day): 15 steps** — added
+clippy for the OTHER OS's target (Linux from Windows, Windows from Linux: CI runs Linux, the owner
+Windows, and each compiles out the other's `#[cfg]` code; `known-issues.md` R2) and `wasmrt-core` for
+both wasm32 targets (the dual-target contract, never gated before; R14) — **15 / 15 green, 608 / 0 / 1**
+(two new tests, R1); self-tests now 44 / 44 / 37; `--release` adds 3 (18). Not in it, by nature: S2 and S3 (they need wasmtk's
+corpus, a sibling checkout) and Miri — local, in `releasing.md`'s checklist. ⚠️ **CI runs it on Linux,
+and `cmem/` records no `cargo test` run on Linux before** (grep, 2026-11-12; the old tag workflow ran
+only the floor there); the first push measures it (`checks` only, no release).
+
+## Validator review — day 6 (2026-09-20): the suite found nothing, and three sweeps found eight
+
+**Conformance is unchanged at 64,603 / 0 / 0 over 288 files**, before and after. That is the point of
+the entry: the validator carried eight defects — two of them silent wrong answers at run time — and a
+suite at 100% could not see one of them. What found them:
+
+| method | scale | found |
+| --- | --- | --- |
+| **the 64-bit axis sweep** (`scripts/sweep64.ts` in the session scratch; see below) | 24 table/memory instructions × {i64 spelling must be ACCEPTED, i32 spelling must be REFUSED} | `return_call_indirect` typed its table index `i32` |
+| the same sweep **at run time**, against wasmtime 48, addressing past `2^32` | 18 cases | 6 table instructions truncating a 64-bit index to 32 bits — `call_indirect` at `2^32` **called slot 0** |
+| **the proposal-gate sweep** | 18 proposals, each disabled, judged by wasm-tools with the same proposal disabled | table64 ungated; then the table-initializer form ungated |
+| **differential fuzz** vs `wasm-tools smith` | 1,325 valid-by-construction modules | the constant-expression operand cap (within the first 25) |
+| the same fuzz, **one mutated byte**, kept only when wasm-tools says INVALID | 5,300 mutations | a table whose element type is `i64` — accepted, validated and RUN |
+| reading the arms | — | the uninitialized-local exemption, the O(n²) export check, the CLI feature-gate hole |
+
+⚠️ **Set the outside reader's feature list to ours.** The fuzz's first run reported seven
+"refuse-valid" results that were `-f all` enabling proposals wasmrt does not implement
+(compact-imports). Both sides must be asked the same question before a difference is a finding.
+
+⚠️ **Three probes measured NO defect and that is a result too**: a non-null local set inside a block
+and read after it, a set skipped by a `br`, and a set in both `if` arms are all refused by wasmrt —
+and by wasm-tools, at the same offsets. The conservative "restore the frame's init snapshot at
+`end`" IS the rule; only the unreachable-code exemption was wrong.
+
+**Gates after the review**, all re-run on this host: workspace tests **588**, conformance
+64,603 / 0 / 0 over 288 files, repo `tests/*.wast` **236 / 0 / 0** over 18 files (4 of them new), `.wat` corpus
+**528 / 532** with all 528 accepted by wasm-tools, custom-sections **528 agree / 4 refused by both /
+0 differ**, Miri **32 / 32**, C-ABI gate PASSED, clippy clean.
+
+🔒 **Twelve mutations verified** (each defect put back, one at a time, the test confirmed to FAIL).
+Two of them found a *test* defect rather than a code one — a fixture exporting `_start` made the
+summarize test exercise the WASI path instead, and a table-initializer fixture was already refused
+for an unrelated reason. **A test that passes with the fix reverted is not a gate**, and only a
+mutation run says which one you have.
+
+## Spec-suite conformance — superseded (2026-08-20, T13 day 2) — **99.8%.** ⚠️ Its 284-file denominator no longer exists; see day 3 below.
+
+🎯 **63,807 passed / 112 failed / 584 skipped** over 284 files. **The 257 CORE spec files are at
+0 failed and 0 skipped**; every remaining number is inside `proposals/`:
+
+| proposal | failures | skips |
+| --- | --- | --- |
+| custom-descriptors (`*desc*` + `exact`) | 64 | 451 |
+| custom-page-sizes | 34 | 7 |
+| threads | 13 | 18 |
+| wide-arithmetic | 1 | 108 |
+
+Day 2 closed **F1–F7** (58 core failures → 0) and **S1, S2, S3, S6, S7**. What remains is proposal
+IMPLEMENTATION — tracks D, P, M/A and W — not defect repair. Full record in
+[roadmap.md](roadmap.md); the lessons are `best-practices.md` §3.8b, §5.6b and §5.7.
+
+⚠️⚠️ **Two of the day's fixes were wire-format divergences that the spec suite could not see**, because
+wasmrt's assembler and decoder agreed with each other: every non-null abstract reference type was
+emitted as `ValType`'s internal tag rather than `0x64 <heaptype>`, and `try_table`'s catch label was
+off by one. **wasmtime 47 rejects both.** `wasmtime compile out.wasm` is now part of how a
+format-level change is checked — see §3.8b.
+
+## Spec-suite conformance — day 3 (2026-09-17) — **99.9%: 64,068 / 66 / 549 over 288 files**
+
+`wasmrt wast <testsuite>` over the **288** vendored files (284 until the corpus sync below).
+
+| | T13 day 1 (08-19) | T13 day 2 (08-20) | corpus sync re-measure (09-17) | **T13 day 3 (09-17)** |
+| --- | --- | --- | --- | --- |
+| **passed** | 63,333 | 63,807 | 63,963 | **64,068** |
+| failed | 172 | 112 | 112 | **66** |
+| skipped | 1,024 | 584 | 604 | **549** |
+| files | 284 | 284 | 288 | **288** |
+| **pass rate** | 99.7% of 63,505 | 99.8% of 64,503 | 99.8% of 64,075 | **99.9% of 64,134** |
+
+🔻 **THE CORPUS MOVED, AND THE TOTALS HID IT.** wasmtk synced the vendored testsuite to upstream
+`65a43d2e` on **2026-08-20 at 18:34**, after day 2's numbers were recorded. Re-measuring rather than
+quoting gave **63,963 / 112 / 604 over 288 files** as day 3's true starting point: **+4 files** (a new
+`custom/` directory with three files, plus `custom-page-sizes/binary.wast`), **+156 passes**, **+20
+skips** (the unhandled `assert_malformed_custom` / `assert_invalid_custom` commands those new files use).
+⚠️⚠️ **The failure count was 112 on both sides BY COINCIDENCE** — custom-descriptors +1,
+custom-page-sizes −2, `custom/` +1. 🎓 *An unchanged total is not evidence that nothing changed*
+(`best-practices.md` §1.13), and it is one more reason the gate reads per file.
+
+**Day 3's own movement: 63,963 / 112 / 604 → 64,068 / 66 / 549**, and **`proposals/threads/` reached
+497 / 0 / 0** via the owner-directed vendored patch (8 era-pinned `assert_invalid` cases removed;
+adjudicated 64,142 → 64,134, passes unchanged because the removed assertions were the failing ones). X1 (refuse `(pagesize N)`), the
+`assert_invalid` stage fix, the bare-index segment spellings, `spectest.shared_memory`, X2's clause
+sweep, and **Track W complete** (`wide-arithmetic.wast` **0/1/108 → 107/0/0**). No file lost a pass at
+any step. 503 workspace tests, C-ABI gate PASSED (74 symbols), `.wat` corpus **528/532** ⚠️ *(not 530 — the corpus loop keyed on the CLI's exit status, which is 0 even when validation fails; reading the verdict instead exposed two pre-existing failures. All four are corpus defects wasmtime also refuses.)*.
+✅ **Miri 31/31 PASSED (2026-09-17)** — the `wasmrt-capi` surface, including `lifecycle_fuzz` and `every_entry_point_survives_a_null_pointer`, run under interpretation on the post-`u16` code. ⚠️ **31, not the 28 on record** — the crate gained tests and nobody re-counted.
+Run with `bun scripts/miri-gate.ts` (needs `rustup component add miri`; ~28s).
+
+### ✅ 2026-09-19 — SETTLED at **64,603 / 0 / 0**, and the threads contradiction is closed
+
+wasmtk finished: the fix landed in **their runner** (`assert_malformed` must mean a PARSE failure,
+not any failure), and the vendored patch was **narrowed to option 2** — they kept the 3 × "multiple
+tables" and 3 × `assert_malformed` blocks removed, and **RESTORED the 5 × "multiple memories"**,
+because the live `WebAssembly/threads` repo still carries them.
+
+Those 5 then failed here, and they were **ours to answer**: that snapshot predates multi-memory, and
+we ran the directory with Wasm 3.0, where two memories are legal. `features_for_script` now disables
+**multi-memory for `proposals/threads/` only** — a proposal snapshot must not be given features that
+POSTDATE it.
+
+🔬 **Measured, not assumed, at every step:**
+* `wasmtime wast -W threads=y,multi-memory=y` fails the SAME directive (line 14); with
+  `multi-memory=n` it clears all five and stops only on a message-wording mismatch at line 59, which
+  this runner does not compare. The era feature set is what makes the file coherent for wasmtime too.
+* Disabling multi-memory for the WHOLE suite fails `address0`, `address1`, `align0`, `binary0`,
+  `data0` and more — so the exclusion cannot hide a multi-memory regression. ⚠️ This corpus has **no
+  `proposals/multi-memory/` directory**, so that coverage rests entirely on the core files.
+* The per-file gate reports **no file lost a pass** across the change.
+
+*(The provisional note this replaces:)* ⚠️⚠️ **THE `0 FAILED` WAS PROVISIONAL — THE CORPUS WAS BEING EDITED UNDER US (2026-09-19, late).**
+wasmtk is **reverting the owner-directed `proposals/threads/` patch and re-evaluating the issue**, so
+the failure count is a moving target and **must not be quoted** until they finish. Measured before
+standing down (owner: *"they are in process, do not rerun on the wasmtk side"*):
+
+| corpus state | passed | failed |
+| --- | --- | --- |
+| patch fully applied (this morning) | 64,598 | **0** |
+| revert in progress (same evening) | **64,598** | **5** — `threads/imports.wast` 3, `threads/memory.wast` 2 |
+| their pristine HEAD (a full revert) | — | **11** in those two files (6 + 5) |
+
+🔒 **PASSES NEVER MOVED: 64,598 both times.** Nothing regressed in the engine — the failures are
+assertions the patch had REMOVED, coming back. They are the era-pinned contradiction: that snapshot
+asserts `(memory 0x1_0000_0000)` *malformed* and multi-memory/multi-table *invalid*, which core
+`memory.wast` contradicts under Wasm 3.0. Both files cannot pass at once; that is a corpus defect,
+not ours, and it is what wasmtk is re-evaluating.
+
+✅ **The per-file gate did its job** — it reported `MORE FAILURES … 0 -> 3` and `0 -> 2` rather than
+netting them against the unchanged pass total.
+
+🎓 *When the corpus can move, the denominator is a measurement* (§1.13) — **and so is the numerator.**
+A conformance headline is a joint statement about an engine and a corpus, so it is only quotable
+when BOTH have stopped moving. That is also why `1.0.0` is on hold (HANDOFF item 8).
+
+### 🔒 2026-09-19 — day 4, part 13: the WASI hardening tests (**580 tests**)
+
+`crates/wasmrt/tests/cli_wasi_hardening.rs` (5, guest-driven through the real CLI): the unfollowed
+symlink must report `LOOP` rather than the target's contents; an absurd `iovs_len`, `fd_renumber`
+target and `random_get` length must fault or refuse **without aborting the host**; and `O_APPEND` set
+after open must actually append. Plus unit tests in `wasi/fs.rs` for the fd ceiling, the non-UTF-8
+target refusal, and the escape's precondition.
+
+⚠️ **The escape test needs a real FILE symlink** (Developer Mode on Windows) and skips loudly
+without one. 🔻 **A directory JUNCTION is not a substitute** — wasmrt refuses those at the walk, so a
+probe built on one reports a false all-clear; that mistake cost an hour before the real case was
+staged. 🎓 §5.4f: the first version of the `random_get` test asserted wall-clock time and failed in
+the parallel harness while passing alone.
+
+### 🔎 2026-09-19 — day 4, part 12: the review regressions (**572 tests**)
+
+`crates/wasmrt/tests/cli_review_regressions.rs` (4) pins what a code review of the day's own work
+found: `--env` must ADD to the inherited environment (a guest probe reports its variable count as its
+exit status), `wast` must honour host flags on either side of the script path, the bare-path `.wast`
+form must keep the flags written before it, and `--` must force guest argv (the probe reports its own
+ARGC, because "nothing was printed" is also true when a stray `--` reaches the guest). Plus a unit
+test that a pin DB which exists but cannot be READ is an error, not "unarmed".
+
+⚠️ **All of these passed the suites written hours earlier**, because those drive each flag through the
+one spelling its feature was built with. **Test the spellings, not the flag** (`best-practices.md`
+§4.10).
+
+### 🔧 2026-09-19 — day 4, part 11: the gates are TypeScript now (**567 tests**)
+
+`scripts/` is **nine** `.ts` files (counted 2026-10-21), run by **Bun** — 🆕 Bun only since
+2026-10-21 (owner: Deno is going away; `design-decisions.md` TOOLING RULES §1). They use `node:`
+builtins only, and all nine build under Bun 1.4.3. The commands:
+
+    CC=gcc bun scripts/c-gate.ts                    bun scripts/miri-gate.ts
+    bun scripts/conformance-diff.ts <baseline.txt> <current.txt>
+    bun scripts/custom-sections-diff.ts target/release/wasmrt.exe @watlist.txt
+    bun scripts/wat-corpus.ts [corpus-root]         # added 2026-09-19, see below
+
+🔒 **Each port was checked to still FAIL when it should**, not merely to agree today:
+conformance-diff reproduces the shell version's output and exit status on lost passes, more failures,
+a newly-failing clean file and an honest improvement; custom-sections-diff reproduces 531/4/0 over the
+535-file corpus **and** still reports a difference when handed an assembler wrapper that strips custom
+sections. ⚠️ A ported gate that quietly stops failing is worse than no gate — this file's own history
+records two such holes.
+
+### 🆕 2026-09-19 — `scripts/wat-corpus.ts`: the `.wat` gate now ends at an OUTSIDE READER (**580 tests**)
+
+    bun scripts/wat-corpus.ts                    # default root: ../wasmtk/tests
+
+**assemble → decode+validate (wasmrt) → `wasm-tools validate` (not us).** Current reading:
+**532 files, 4 known corpus defects, 528 assembled AND accepted by wasm-tools.** The four are not
+ours — wasm-tools refuses the same *source* on the same lines (two spell `anyfunc`; two carry an
+inline function type that disagrees with its `(type …)` reference) and they are named in the script
+so a *new* failure cannot hide among them.
+
+⚠️ **The third step is the entire point.** The first two are wasmrt checking wasmrt: the decoder
+learned its conventions from the assembler, so their agreement is not evidence (§3.8b). It was added
+the day `array.new_data` was found to need the data-count section in **both** the decoder and the
+assembler — our modules ran here and were refused by wasm-tools, which is the definition of a
+format-level defect this project cannot see from the inside.
+
+🔒 **Verified it can fail**, per §5.9: with both fixes reverted, the gate reports
+`WASM-TOOLS REFUSED OUR BYTES` and exits 1. It also asserts the output file **exists** rather than
+trusting the assembler's exit text — an unrecognised assembler failure otherwise reappears as
+"wasm-tools could not read the file", a true statement filed under the wrong heading.
+
+**`tests/decoder-strictness.wast`** joins the regression corpus the same day: 8 `assert_malformed`
+cases (unassigned SIMD sub-opcodes, `atomic.fence`'s reserved byte, `br_on_cast` reserved flag bits,
+element-segment flags `8`, a non-zero elemkind, `array.new_data` with no data count) and **three
+modules that must still be ACCEPTED** — the two custom-descriptors const-expr modules that a
+hand-written skipper could not read, and a `br_on_cast` with *defined* flags, so the new flags check
+cannot pass by refusing everything.
+
+⚠️ **A scoring quirk, measured while mutation-checking that file:** a bare `(module binary …)`
+directive is counted as an adjudicated assertion only when it **fails** — the file reports 8 passed
+with three such modules present, and 8 passed / 3 failed when all three are corrupted. The verdicts
+are right and `conformance-diff.ts`'s "no clean file started failing" still catches a regression;
+but the denominator is outcome-dependent, so do not read a file's total as its directive count.
+
+### 🔒 2026-09-19 — day 4, part 10: the pin gate and the execution bound (**564 tests**)
+
+**`crates/wasmrt/tests/cli_pin_gate.rs`** (8) — armed/unarmed, pinned/unpinned, `enforce` absolute, a
+mistyped `# mode:`, a malformed DB, `.wast` gated, summarize never gated, `.wat` pinned by its
+ASSEMBLED bytes. **`crates/wasmrt/tests/cli_run_modes.rs`** (8) — the bare-path forms, Z1, `--features`
+position/vocabulary/layering, both `--dir` separators, the ceiling and env flags in both positions.
+**`crates/wasmrt-core/tests/iteration_budget.rs`** (6) — the loop and the tail-call chain, the UNIT
+(one back-edge each), per-invocation refill, `0` = unlimited, and the default not tripping a realistic
+workload. Plus 6 unit tests in `pin.rs` (NIST vectors, hex, the fail-closed rules, the whole `decide`
+matrix row by row).
+
+🔬 **Cross-checks that are not our own code:** our SHA-256 matches `sha256sum` on a real file, and
+`wasmrt pin` matches `wazmrt pin` on `.wasm` — **but on `.wat` 529 of 535 differ**, because we emit a
+`name` section and wazmrt does not (`interop.md` §3.1m).
+
+🔬 **The iteration ceiling is measured, not assumed:** `wasmrt wast --max-iterations N <suite>` at
+descending N — green at `1<<20`, `return_call.wast`/`return_call_ref.wast` fail at `1<<19`,
+`return_call_indirect` joins at `1<<18`, 36 failures at `1<<14`. **Re-run this whenever the interpreter
+changes**: an engine cap deliberately cannot satisfy an `assert_trap`, so the corpus fails loudly if
+the budget is ever set below a legitimate workload.
+
+⚙️ **A/B/A on the tick** (million-back-edge loop): 58.06 / 58.78 / 58.87 ms without, 57.29 / 57.42 ms
+with — inside the ~8% spread, so **no measurable cost**.
+
+### 🔒 2026-09-19 — day 4, part 9: the unknown-flag rule and Z3, pinned (**535 tests**)
+
+`crates/wasmrt/tests/cli_unknown_flag.rs` — `interop.md` §2.4a: `unknown flag` + rc 1 in every host-flag
+position of every command, with guest positions untouched and `-1` still a value.
+`cli_exit_codes.rs::the_summary_never_calls_an_invalid_module_valid` — §2.5. Both mutation-verified.
+
+### 🤝 2026-09-19 — day 4, part 8: the CLI exit status is the verdict (coordinated with wazmrt)
+
+`wasmrt <file>` exits **1** on an invalid module, and so do `wasmrt` with no arguments and `wasmrt wast`
+on any failed assertion, unparseable script or unreadable file. All three exited 0 (`known-issues.md` top;
+`interop.md` §2.3m). **Workspace 529 tests** (+4: `crates/wasmrt/tests/cli_exit_codes.rs`).
+✅ **So the exit status is now a usable gate**: `wasmrt wast <dir>` in CI fails on a failure, and a `.wat`
+corpus loop may key on `wasmrt <file>`'s status. ⚠️ **Before this, it could not**, and the 2026-09-19 corpus
+loop did, until it was caught. The `.wat` corpus is **531/535 validated, measured by the verdict text**.
+Suite unchanged, 64,598 / 0 / 0 (the runner's output is unchanged; only its status moved).
+
+### 🆕 2026-09-19 — day 4, part 7: **64,598 / 0 / 0, byte-identical** (value types in function bodies)
+
+**`tests/value-type-encodings.wast`** (34 assertions) — every one-byte value-type encoding as a block type
+and as a typed-`select` type, the `0x63`/`0x64` long form in both (and running), and invalid `select` typing.
+🔒 **wasmtime 48 passes this file whole** — `wasmtime wast -W gc=y,function-references=y,exceptions=y
+tests/value-type-encodings.wast` exits 0; re-run it whenever value-type decoding changes. Its failure messages
+are wasmtime's own wording so that wasmtime can referee every line (our runner does not compare messages).
+`tests/` is now **13 files / 199 assertions**, all clean. The one-byte sweep that produced it
+(every byte `0x40..=0x7f` × block/select × wasm-tools standard/all × wasmrt) is the method to reuse for any
+small encoding space — see `best-practices.md` §1.8.
+
+### 🎯 2026-09-19 — day 4, part 6: **64,598 / 0 / 0** — ZERO failed, ZERO skipped, ZERO unrun (track D3/D4)
+
+All 288 files run and every one is clean. **The runner now picks FEATURES PER FILE** (`wast::features_for_script`):
+spec-suite paths get `Features::standard()` (Wasm 3.0) plus the proposal a `proposals/<name>/` segment names;
+anything else (our `tests/`) gets `Features::all()`. ⚠️ Required, not cosmetic — core `br_on_cast.wast` and
+`proposals/custom-descriptors/br_on_cast.wast` disagree on one module's validity, and only the feature set
+decides which is right. The CLI's `wast` command does the same, so `wasmrt wast <dir>` and `cargo test` agree.
+
+**`tests/descriptor-casts.wast`** — the D3/D4 soundness checkpoint (26 assertions, cargo test): desc-eq casts by
+identity, a FORGED last field, null descriptors, cross-instance. Mutation-verified (see roadmap DAY 4 part 6).
+⚠️ **`assert_trap` does not compare the message** in this runner — any trap passes. A test that needs a
+SPECIFIC trap must be built so the wrong behaviour changes the outcome, not just the text.
+
+`.wat` corpus **531/535** assemble→decode→validate (denominator +3: new files in wasmtk; the same four corpus
+defects, all refused by wasm-tools too). Custom-sections gate **531 agree / 4 refused by both / 0 differ**.
+Workspace **525 tests**; clippy `-D warnings` **clean**; Miri **32/32**; C-ABI PASSED.
+
+### 🆕 2026-09-19 — day 4, part 5: **64,193 / 3 / 428** (track D2, descriptor/describes)
+
+Failures 39 → 3; passes −71 — FALSE passes removed (see `roadmap.md`, DAY 4 part 5; the per-file gate flags five
+custom-descriptors files, all explained). **`tests/descriptor-identity.wast`** (16) pins that descriptor links
+are part of type identity, same- and cross-instance; mutation-verified after its first version was found unable
+to fail.
+
+### 🆕 2026-09-19 — day 4, part 4: **64,264 / 39 / 331** (track D1, exact types)
+
+**`tests/exact-type-confusion.wast`** — the D1 soundness checkpoint (28 assertions, `cargo test`): a subtype must
+FAIL every exact cast arm, same- and cross-instance; exact imports refuse subtypes; exactness is part of type
+identity. ⚠️ wasmtime 48 has no custom-descriptors, so it cannot run this file; its MODULES are checked by
+wasm-tools instead (`wasm-tools json-from-wast` + `wasm-tools validate --features all` on each — all agree).
+Mutation-verified at 8 sites.
+
+### 🆕 2026-09-19 — day 4, part 3: **64,142 / 66 / 457** (track P)
+
+custom-page-sizes 166/0/0. **`tests/custom-page-size-bounds.wast`** — byte-granular OOB on every access path;
+run by `cargo test` via `regression_wast.rs`, and verified independently: `wasmtime wast -W
+custom-page-sizes=y,memory64=y,threads=y tests/custom-page-size-bounds.wast` exits 0. Re-run it on wasmtime
+whenever memory code changes. The runner now VALIDATES `(module definition …)` (it only assembled them).
+`proposals/threads/memory.wast` 68 → 65 on an era-pinned contradiction with core `memory.wast`, then **PATCHED**
+(owner-directed) → 65/0/0, `proposals/threads/` **494/0/0**; suite **64,142 / 63 / 457**. Miri 32/32.
+
+### 🆕 2026-09-19 — day 4: **64,087 / 65 / 530**, and a new EXTERNAL gate for custom sections
+
+`custom/` **0/1/20 → 20/0/0** (the custom-annotations feature); earlier the same day the whole-module
+quote fix moved 64,068/66/549 → 64,067/65/550 by removing six FALSE passes. 514 workspace tests.
+⚠️ **C-ABI gate needs `CC=gcc` on this host** (no `cc` on PATH): `CC=gcc bun scripts/c-gate.ts`.
+
+**`scripts/custom-sections-diff.ts <wasmrt.exe> <file.wat | @list.txt>…`** — assembles each file with
+`wasmrt wat` AND `wasm-tools parse` and compares section order plus every custom section's bytes
+(`@custom` placement, the `name` section, branch hints normalised past the locals vector). **Run it
+whenever the assembler's output changes.** Baseline: `.wat` corpus **528 compared byte-for-byte and
+agree, 4 refused by both, 0 differ** — since #4 closed (2026-09-19); the four refusals are corpus
+defects (two `anyfunc`, two import type-use mismatches) that wasmtime refuses too, for the same reasons. Needs `wasm-tools` on PATH and `python` (not `python3`, which is a Store stub here and hangs).
+wasmrt's own decoder cannot be this gate: it reads the name section leniently and ignores the rest.
+
+### 🔬 2026-09-17 — A THIRD HOLE IN THE PER-FILE GATE: a clean file has no row
+
+`scripts/conformance-diff.ts` enforces *no file lost a pass*, and its header already records two holes
+closed the hard way. **The third:** the runner printed a file's row only when `failed > 0 || skipped > 0`,
+so a **clean** file carried **no recorded pass count** — and passes it later lost to **skips** could not
+be detected.
+
+X1 landed in it. `custom-page-sizes/memory_max.wast` went **2 passed → 0 passed / 6 skipped** and the
+gate printed *"no file lost a pass"*. Two files were reported; **four** were affected. Every file prints
+a row now (288 rows), which makes the join total, and the same gate immediately found all four.
+
+🎓 The two earlier holes were about comparing rows badly; this one was about a row that was never
+written. **All three had the same symptom: a green verdict.** Ask what the instrument omits, not only
+what it gets wrong.
+
+### 🔬 2026-09-17 — X2, and the sweep T10a specified was the weaker half
+
+T10a asked for a **`ModuleBuild` field-coverage** sweep. It would not have caught either of the two most
+recent instances of the mechanism it was written for: `(pagesize N)` was parsed and **never stored** (no
+field to find uncovered), and the bare `tableidx` was not stored either — it was **re-read as an element
+item**. 🎓 **A field can only be covered once it exists**, so the sweep that shipped is over the
+**GRAMMAR**: 39 rows, each a text clause set to a non-default value, each checked against the **decoded**
+module rather than against `ModuleBuild` (asserting against the builder compares the parser with itself —
+§3.8b). It passed on the first run, so it was mutation-tested at three emitter sites: dropping `shared`
+from the limits flag, dropping `is64`, and dropping a memory's `max` — caught as 1, 2 and 1 lost clauses,
+the `is64` probe catching **two** because the sweep distinguishes table64 from memory64.
+
+## Spec-suite conformance — day 1 (2026-08-19) — **99.7%**
+
+`wasmrt wast <testsuite>` over the 284 vendored files:
+
+| | T6 gate (08-03) | post-linking (08-04) | post-T7 (08-05) | T8 (08-06) | type-use I (08-08) | type-use II (08-08) | T9a#4 tables (08-08) | T9a#5 GC consts (08-08) | T9a#7 + start (08-08) | charset (08-08) | **T9a#8 (08-08)** | T9f tail calls (08-14) | **T13 day 1 (08-19)** |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **passed** | 54,509 | 56,541 | 61,013 | 61,033 | 61,778 | 61,802 | 61,887 | 61,975 | 61,987 | 62,037 | 62,113 | 62,238 | **63,333** |
+| failed | 871 | 1,521 | 751 | 738 | 496 | 472 | 457 | 453 | 441 | 393 | 385 | 378 | **172** |
+| skipped | 9,608 | 6,821 | 3,094 | 3,075 | 2,466 | 2,466 | 2,339 | 2,247 | 2,247 | 2,245 | 2,163 | 2,038 | **1,024** |
+| **pass rate** | 98.4% | 97.4% | 98.8% | 98.8% | 99.2% | 99.2% | 99.3% | 99.3% | 99.3% | 99.4% | 99.4% | 99.4% of 62,616 | **99.7%** of 63,505 |
+
+⚠️ **The denominator MOVES, so the pass rate alone hides progress.** 2026-08-19 converted 1,014 skips
+into verdicts, which is why *adjudicated* grew from 62,616 to 63,505 while failures more than halved.
+**Read the three numbers, never the percentage on its own** — a run that converts a skip into a failure
+lowers the rate and is still forward motion.
+
+### 🔬 2026-08-19 — THE SKIP CENSUS. The report could not attribute the number it printed.
+
+Two holes in the **instrument**, both found while scoping the remaining work rather than by any test:
+
+1. The runner printed a per-file line only when `failed > 0`. **Every skips-only file was invisible** —
+   234 of 1,024 skips lived in files that produced no output at all, and `ref_test.wast` (68 skips),
+   `ref_cast.wast` (42) and both `br_on_cast*.wast` (27 each) had **never appeared in a conformance
+   report** in the history of the port.
+2. A skip was a bare counter at all **twenty** skip sites. Even a listed file could not say *why*.
+
+Both are fixed: `Summary::skips` records a reason at every site, the CLI lists skips-only files, prints
+reasons under `-v`, and ends with a corpus-wide **skip census**. Pinned by
+`every_skip_records_a_reason`, which trips three different skip paths and asserts both that every skip
+carries a reason *and* that the reasons distinguish the paths — a single catch-all string would satisfy
+a count-only check. Mutation-verified, with the mutation's arrival confirmed (bare-site count 1 → 2)
+**before** believing the failure.
+
+**The census is the finding:**
+
+| skip reason | count |
+| --- | --- |
+| `assert_return: no target instance` | 666 |
+| `assert_trap: no target instance` | 255 |
+| `unhandled command \`assert_exception\`` | 41 |
+| `Invalid: unsupported` | 26 |
+| `module: unsupported` | 17 |
+| `Unlinkable: unsupported` | 7 |
+| `invoke: no target instance` | 7 |
+| `register: no target instance` | 2 |
+| `unhandled command \`func\`` / \`memory\` | 3 |
+
+⚠️⚠️ **928 of 1,024 (91%) are CASCADES** — assertions stranded behind a module that never built. They
+are not 1,024 pieces of work; they are the shadow of a handful of roots. `ref_test.wast` skips **68
+assertions behind ONE unassemblable module**. Only **96** skips are genuine capability gaps.
+
+🎓 **Ranking by the skip count would have ranked 108 cascades above the single root that produces
+them.** This is §3.8 again — the instrument measured what it could reach rather than what the question
+needed — and it is why `best-practices.md` now carries *"a number the report cannot attribute is not a
+measurement"*.
+
+### T9a#9 (2026-08-08) — no column, because the suite did not move, and should not have
+
+**NOT A DEFECT.** The fixture is an invalid module; wasmrt was right to reject it. #9 read "the oracle
+assembles **and runs** them, so this is our type-checker being wrong" — true observation, wrong
+conclusion, because `wazmrt <module> <export>` **does not validate**. Through `wazmrt <module>`, its
+validating path, the oracle reports `validation: FAILED — TypeMismatch`, **agreeing with wasmrt**.
+
+The module has `if (result f64)` with **both arms pushing i32** — `if.wast`'s
+`type-then-value-num-vs-num` is an `assert_invalid` for exactly that, and our `if.wast` is at 0
+failures. The two files are also **byte-identical duplicates** and **stale**: 8 functions / 10 types
+against the source binary's 14 / 13. The real `.wasm` and the hand-written `.wat` both validate OK.
+
+**What landed instead:** validation failures now name the function (`validation FAILED in function 8`).
+Localizing this one by hand, to body #6 of 19, is what the diagnostic's absence cost. 4 tests, one of
+which pins the construct so #9 is not re-opened. ⚠️ **Cite the subcommand, not the tool** — §2.3a.
+
+### The thirteenth 08-08 column: T9a#8. **Logged at "1 file", delivered 76 assertions**
+
+**+76 passes, −8 failures, −82 skips.** Four files to zero: `call_ref.wast` 4/4/27 → **31/0/0**,
+`br_on_null.wast` 1/3/6 → **7/0/0**, `ref_as_non_null.wast` 1/1/4 → **5/0/0**, `unreached-valid.wast`
+1/2/9 → **10/0/0**; `return_call_ref.wast` 10/5/36 → 40/7/0. No file lost a pass. **438 tests.**
+
+🆕 **A new corpus measurement, and it is the one that mattered.** The `.wat` gate had only ever run
+*assemble* — 533/534. Running the full **assemble → decode → validate** round trip instead shows the
+real state: **534/534 assemble, 0 decode failures**, and the only 2 validate failures are the
+`39_JstyperMixed` pair (T9a#9). Before this pass the same round trip found the `call_ref` module
+undecodable — **"the assembler returned Ok" was never evidence, and the gate had been asserting only
+that.**
+
+**The defect:** `immediate_arity` ended in `_ => 0` and the emitter's match in `_ => {}`, so four
+instructions were emitted as **bare opcodes with their operand left in the token stream** —
+`call_ref`, `return_call_ref` (typeidx), `br_on_null`, `br_on_non_null` (labelidx). All four decode
+and execute correctly; only the assembler was wrong.
+
+⚠️ **None of the three symptoms named the assembler.** Folded `call_ref` shifted every following byte
+and produced a body the *decoder* rejected for a missing `end`; flat `call_ref` and `br_on_null` both
+reported `UnknownInstr` about the *next* token — which is why `gc-linked-list.wat` sat as an
+unexplained "1 of 534" logged **separately from #8**. One cause, three symptoms, two punch-list items.
+
+⚠️ **§1.3 again:** the entry read "1 wasmtk file, undiagnosed" because that is the one file someone
+noticed; the cost lived in the 82 skips of five spec files that could not build.
+
+**The generalization:** `Op::from_u8` makes the opcode space enumerable, so a test now walks all 256
+single-byte opcodes and asserts the **decoder** and **assembler** agree on which ops take an
+immediate, both directions, with bespoke-emitter ops listed explicitly. This is T10a's field-coverage
+sweep applied to instructions. ⚠️ **Mutation-verified — and the first attempt lied**: a `perl`
+substitution silently failed to match, the test passed, and the natural reading was "the sweep is
+decoration". `sed` plus a `grep` confirming the line was gone made it fail and name all four ops
+(§4.2a).
+
+### The twelfth 08-08 column: the text format's source character set (§6.2/§6.3)
+
+**+50 passes, −48 failures**, 2 assertions newly adjudicable. **`id.wast` reached 6/0/1 — a file at zero
+failures**; `annotations.wast` 12/51 → **56/8**. No file lost a pass, and **the `.wat` corpus held at
+533/534** — the measurement that matters when *tightening* a parser, since the suite alone would reward
+a rule that rejects valid input. **435 tests.**
+
+**The pick came from surveying by cause, not from the punch list.** The open items were #8 (1 file),
+#9 (2 files) and `func.wast` 8; grouping all 441 failures by message put text-assembler errors far
+ahead (`BadNumber` 63, `BadForm` 49, `BadValType` 18, `BadModuleField` 16), with `annotations.wast` at
+51 the single worst file — **and T9g had written it off as an untargeted proposal.**
+
+⚠️ **The scope note was wrong the way §1.1 says cost figures are wrong.** Four one-line probes, none
+containing an annotation, were all accepted: a control character in an identifier, invalid UTF-8 in an
+identifier, and a raw control byte in a string. So ~44 of the 51 were **generic §6.2/§6.3 lexer rules**
+that apply to every `.wat` file. The confirmation is `id.wast` — unrelated to annotations, 5 failures,
+now zero. See `best-practices.md` §1.1a.
+
+🆕 **`from_utf8_lossy` in the lexer was not merely over-accepting — it silently RENAMED.** `$a\xffb`
+and `$a\xfeb` both became `$a\u{FFFD}b`, so two distinct identifiers collided on one name; the quoted
+form `$"…"` carried the same bug. Restricting atoms to `idchar` makes the slice ASCII by construction,
+so the conversion cannot lose anything.
+
+⚠️ **The fourth probe was NOT a defect and was left alone**: `linechar ::= c:char (if c ≠ U+0A)` admits
+any character but a newline, so a control byte in a comment is legal. A test now pins that it stays
+accepted — **tightening what the grammar permits is the same error as accepting what it forbids**
+(§4.6a).
+
+### The eleventh 08-08 column: T9a#7 trap backtraces — and the start function, which never ran
+
+**+12 passes, −12 failures, nothing regressed** — and **all 12 came from the second item**. T9a#7 was
+predicted to be worth 0 suite assertions and was: it is diagnostics. What it *did* produce was the
+question "where does an **instantiation** trap get its frames?", which led to asking who runs
+`Module::start`. Nobody did — §4.5.5 step 11 was simply absent, though the field was decoded,
+validated, and printed by the CLI.
+
+`start.wast` **8/7 → 15/0** · `start0.wast` 5/3 → **8/0** · `linking3.wast` 11/1 → **12/0** ·
+`linking.wast` +1. **426 tests** (398 core + 28 capi), Miri **28/28**, C-ABI gate 74/74 + `c_smoke`
+(now asserting real frames, not the stub), clippy clean, all four surfaces build.
+
+⚠️ **10 of those 12 assertions had been failing in files named `start.wast` and `start0.wast` for five
+releases.** They were never diagnosed because their messages said nothing useful, and triage read
+messages. See `best-practices.md` §3.1a.
+
+### The tenth 08-08 column: T9a#5, GC constant expressions. **Logged cost 6, real value 88**
+
++88 passes, −4 failures, **−92 skips**. `i31.wast` **0/6/66 → 61/2/5**, `array.wast` **6/2/43 → 18/2/29**,
+`struct.wast` **6/3/17 → 21/3/0**. Nothing regressed.
+
+Six forms in both validator and interpreter — `struct.new`, `struct.new_default`, `array.new`,
+`array.new_default`, `array.new_fixed`, `ref.i31` — **the same six on both sides**, so the two cannot
+disagree about what a constant expression is.
+
+⚠️⚠️ **THE MEASUREMENT LESSON IN A NEW DIRECTION: a cost counted in FAILURES understates any defect that
+stops a module BUILDING.** `ConstantExpressionRequired` on a global initializer fails the whole module, and
+every later assertion in the file then has no target and is **skipped**. `i31.wast` was 0 passed / 6 failed
+/ **66 skipped** — the 6 was the visible cost, the 66 the actual one. **Read the skip column when
+triaging**, especially for defects in module-level positions (global initializers, type definitions,
+sections).
+
+### The ninth 08-08 column: T9a#4 COMPLETE — the funcref encoding, then imported tables
+
++85 passes, −15 failures, **−127 skips**. `elem.wast` **63/13/17 → 75/6/0**, `imports.wast` +34 passes and
+−69 skips, `linking.wast` +24/−20, `table_grow.wast` → **50/0/0**, `imports4.wast` → **11/0/0**. No file
+lost a pass.
+
+**A `funcref` now carries its owning instance** (instance in bits 62..32, function index in 31..0 — bit 63
+is `I31_TAG`). ✅ **The property that made it safe: instance 0 packs to the bare index**, so the encoding
+change alone moved the suite by **+1/−1** — one genuine cross-instance case in `elem.wast` that had been
+silently wrong. **A value-model change verifiable as a no-op on the existing corpus is worth arranging.**
+
+🆕 **It caught a defect in the memory work from earlier the same day.** A table or memory *instance*'s
+type has `min = its CURRENT size`; `grow` updates it (§4.5.9). The memory pass had stored the *declared*
+minimum **and asserted that in a test**. No memory case in the suite contradicted it; the table case did.
+⚠️ **A test can encode a misreading of the spec and pass forever if nothing exercises it** — the sibling
+feature found this, not review.
+
+⚠️ **Unattributed: ~5% steady-state regression, handed to T11.** Cold start unchanged (~4.46 vs ~4.50 ms).
+Steady `sum(1000000)` ~55.7 vs ~52.7 ms, consistent across A/B/A, on a loop that touches no funcref, table
+or type. Two hypotheses tested and **rejected**: moving the new `TypeRegistry` to the end of `Pools`, and
+boxing it. Likely code layout in the giant `run` match — recorded as measured-but-unexplained rather than
+asserted.
+
+### The eighth 08-08 column: the same type-use rules at their OTHER TWO sites. `call_indirect` → 0
+
++24 passes, −24 failures. **`call_indirect.wast` 158/11 → 169/0/0** and **`func.wast` 147/21 → 160/8**; no
+file lost a pass, none gained a failure, and the `.wat` corpus held at 533/534.
+
+**Block types, `call_indirect`, and function definitions each had their OWN COPY of the type-use loop** —
+and therefore its own copy of all three defects. `parse_type_use` is now the single authority for the first
+two; the function path enforces the same order inline, because its loop also owns `import`/`export`/`local`
+and the body. **Two copies of a grammar drift — three copies drifted identically.**
+
+⚠️ **One rule was attempted, measured, and withdrawn.** "No declaration after the body begins" looked
+obviously right and broke `select.wast`, `stack.wast` and `call_indirect.wast`: in **flat** instruction form
+each immediate is its own top-level item, so `select (result i32)` puts a `result` form exactly where a
+misplaced declaration would sit. Keyword scanning cannot tell them apart at that layer — deciding it needs
+the body's instruction structure. `(func (nop) (local i32))` therefore still assembles; logged as open.
+**A rule that is obviously right is still a hypothesis until measured.**
+
+### The seventh 08-08 column: type-use well-formedness. **`block`, `if`, `loop` all reach ZERO failures**
+
++40 passes, −40 failures; **`block.wast` 13→0, `if.wast` 13→0, `loop.wast` 13→0**, `type.wast` 1→0. No file
+lost a pass; the `.wat` corpus held at 533/534, which is the check that matters when *tightening* a parser.
+
+**The text format's own grammar was not being enforced.** A **type use** has a fixed clause order (§6.4.4) —
+`(type x)?` then `(param …)*` then `(result …)*` — and the assembler collected clauses in whatever order they
+appeared, so `(block (result i32) (param i32))` assembled and the **validator** then reported a stack-height
+mismatch. Wrong stage, and 36 assertions across three files on that one rule. Two more from the same place:
+a block parameter **cannot be named** (only functions have local slots to name), and giving both a
+`(type x)` *and* explicit clauses requires them to **match** — the assembler returned on the type index and
+silently discarded the clauses, so the module meant something the text did not say.
+
+⚠️ **Where the rule lives matters.** The first attempt put the order check in `parse_sig` and moved **one**
+assertion: `parse_block_type` calls `parse_sig` **one clause at a time**, so its order state reset on every
+call and could never see a sequence. The check has to be where the loop is. **A guard placed one call-level
+away from the iteration it is guarding is not a weaker check — it is no check at all**, and the measurement
+is what said so.
+
+### The sixth 08-08 column: T9h, the `Store` type registry. **`type-subtyping.wast` reaches 72/0/0**
+
++14 passes, −18 failures, no file lost a pass. `type-subtyping` **62/13 → 72/0/0 — a file at 100%**, from
+36/44 at the start of the day; `type-rec` 7/9 → **11/5**; `type-equivalence` 10/2 → **10/1**. **Every
+`Unlinkable: module linked` and `an import does not match` in the suite is gone.** Cold start within noise
+(~4.66 vs ~4.63 ms A/B/A).
+
+⚠️ **The finding: comparing SIGNATURES can never answer an IDENTITY question.** The registry alone moved
+only **2** of the ~11, because two functions can both be the empty `(func)` and still be *different types*
+— rec-group membership is part of identity, and params/results cannot express it. Only the type **index**
+carries it, and the decoder had been resolving an import's typeidx to a `FuncType` and **discarding the
+index**. Same shape as the emitter defects T10a is about: the information was present and thrown away
+because nothing needed it yet.
+
+Also: **§4.5.9 matching is subtyping, not equality** (so the registry records supertypes store-wide —
+equality refused three valid modules), and 🆕 **`call_indirect` was the third site with the identical
+defect**, worth 7 runtime assertions.
+
+### The fifth 08-08 column: type canonicalisation. +12 passes, −24 failures, **six files improved, none regressed**
+
+`type-subtyping` 57/23 → **62/13**, `type-equivalence` 7/10/3 → **10/2/0**, `type-rec` 7/11 → **7/9**,
+`ref_cast` and `ref_test` to **zero failures**, `br_on_cast_fail` 13/3 → 15/1. Cold start unmoved
+(~4.59 vs ~4.69 ms — type sections are small, so canonicalising them is free at this scale).
+
+⚠️ **A MEASUREMENT-TOOLING FINDING that affects how every conformance diff in this file was made.** The
+per-file line prints only when `verbose || failed > 0` ([main.rs](../crates/wasmrt/src/main.rs)), so a
+file reaching **zero failures disappears from a non-verbose run** — and a diff keyed on those lines reads
+that as the file losing all its passes. It raised exactly that false alarm here (`br_on_cast_fail` looked
+like −6 passes; it was actually +2). The direction is always *false alarm*, never *false all-clear*, so
+no earlier conclusion in this file was wrong — but **run the suite with `-v` on both sides when diffing
+per-file**, or a genuine improvement is indistinguishable from a catastrophe.
+
+### The fourth 08-08 column: declared subtyping. +21 passes, −21 failures, skips unchanged
+
+`type-subtyping.wast` **36/44/0 → 57/23/0**, and nothing else in the suite moved — a validation rule
+being added, with no accounting effects at all.
+
+⚠️ **The third time a logged cause turned out to be wrong.** T9a#6 read "GC subtyping depth not modelled
+by the validator". The measured top item was **21 invalid modules being accepted**, because there was no
+declared-subtype validation of any kind. Different defect, different fix, same file.
+
+**A strict version of the check was measured and rejected.** Written to refuse every undecidable pair it
+turned away **6 valid modules** whose fields compare `(ref $f1)` against `(ref $f2)` from two
+structurally identical rec groups. Accepting the undecidable case is right *here* — it preserves existing
+behaviour where refusing would break valid input — and is the opposite of the call made for cross-store
+import matching one pass earlier, where accepting would mean a wrong call. **The direction to err in is a
+property of the consequence, not a house style.**
+
+### The second 08-08 column: decoder strictness. +98 passes, −98 failures, skips **unchanged**
+
+The cleanest column in the table: no accounting movement at all, because nothing changed about what
+gets adjudicated — 98 assertions simply started passing. `binary.wast` **128/88 → 208/8** (both copies
+summed), **`binary-leb128.wast` → 58/0/0, a file at 100%**, `exact.wast` +1. The `.wat` corpus went
+532/534 → **533/534**; the `wasm_mod` corpus still validates 12/12.
+
+One theme: **the decoder must be the stage that rejects a malformed binary.** Seven checks, all of
+which the validator had been catching one stage too late (or not at all) — section order and
+uniqueness, section size, func/code count, bodies decoded at decode time, const-expr encodings, the
+`end` terminator, and the 2^32−1 locals ceiling. Details and the two findings in `known-issues.md`.
+
+### The 08-08 column: +346 passes, +42 failures, −463 skips, and **no file lost a single pass**
+
+Two changes produced it, and the second one is the one worth remembering.
+
+- **Imported memories now link** (T9a#4's memory half). `imports.wast` **25/6/108 → 196/13/95** — the
+  largest single-file gain since the `register` work — `linking.wast` **55/15/78 → 107/11/28** (failures
+  *down* as well as skips), `linking3.wast` 4/4/4 → 8/2/2.
+- **`assert_unlinkable` is adjudicated for the first time.** It had been an unconditional skip since the
+  runner was written, which meant **nothing had ever checked that a badly-typed import is refused** — and
+  the first thing switching it on revealed is that imports were **not type-checked at link time at all**.
+  A module importing `(func (param i32))` bound to a `(func)` linked and then ran, caller and callee
+  disagreeing about the stack. That is the silent-wrong-output class, found by making a skip honest.
+
+**The +42 failures are all previously-unadjudicated assertions becoming visible verdicts**, the same
+accounting as 08-04 and 08-06 — plus ~8 in files T9g already lists as out of scope
+(`custom-page-sizes-invalid`, `memory64-imports`, `exact-func-import`). Every failure increase is paired
+with a skip decrease. The check that matters is **no file regressed**: pass counts rose or held on all 284.
+
+⚠️ **A blanket skip is not a neutral placeholder.** `assert_unlinkable` was skipped for a stated reason
+that had been obsolete since T7b, and while it was skipped it hid a defect class in the *engine*, not just
+a gap in the runner. Any assertion category the runner declines wholesale should carry a note saying what
+would be measured if it stopped declining — otherwise the skip silently insures the code it covers.
+
+**The 08-07 column is the cleanest movement in the table: failures down, skips down, passes up, and
+not one of the 284 files regressed.** Two distinct effects, both worth telling apart:
+
+- **Real capability** — `br_table.wast` went **24/1/161 → 185/0/0**, `memory_size.wast` 16 failures → 0
+  (a `memory.size` that read another instance's memory), `memory_grow` 2 → 0, `store1` 4 → 0.
+- **Honest re-accounting** — fixing the runner's failed-build redirect turned phantom "value mismatch"
+  failures back into skips, which is what they always were: `i31.wast` 31 → 6, `load1.wast` 15 → 5,
+  `exact-func-import.wast` 15 → 6, `custom-page-sizes.wast` 21 → 12. **Those files did not improve; the
+  measurement did.** The 08-06 note that "98.8% is if anything understated" was correct, and this is the
+  correction landing.
+
+⚠️ **Methodological finding.** The `br_table` win was logged against `ref.null $t` — one match arm.
+That fix was real and necessary but moved **other** files; `br_table.wast` needed four independent fixes
+(see `known-issues.md`). **A cost written beside a defect is a hypothesis about the cause unless someone
+measured the fix.** Re-measure after each punch-list item rather than banking its predicted value.
+
+The dip at 08-04 was capability, not regression: wiring `register` + `spectest` moved 2,784 assertions
+out of *skipped*, and ~649 of them were already-broken code that had been hidden behind a skip. The
+08-05 column is that debt paid off — see the shared-store punch-list in `known-issues.md`.
+
+**The 08-06 (T8) column moved for one reason worth remembering: making the linker resolve a registered
+module's exported globals made previously-unbuildable modules build, and what they exposed was two
+silent-wrong-output defects** (dropped table initializers, and element-segment form 4 rewriting a
+segment's type). `table.wast` 12 failures → 2, `elem.wast` 17 → 13, `linking.wast` +4 passes. **A
+module that fails to build costs exactly one `skipped`** — not one per assertion — which is why the
+*total* adjudicated count moves when modules start building; do not read that as assertions vanishing.
+The one file that got worse is `i31.wast` (+1 visible failure, −1 skip): a module that now builds and
+meets the already-logged GC-const-expr gap. Capability up, honestly accounted.
+
+**Two-instance rule.** Every conformance defect fixed on 08-05 was a store-index/module-index
+conflation that is *unobservable* with a single instance per store. Regression tests touching pools
+(tables, memories, globals, data/elem segments) MUST instantiate a second module first, or they prove
+nothing.
+
+**Skips are never folded into passes.** A construct this build cannot put to the test is not a pass —
+that is the runner's honesty rule (`wast.rs`), and it is why the number is trustworthy. As of 08-08 the
+runner also distinguishes **"nothing defines this import"** (a real unlinkable verdict) from **"wasmrt
+cannot back this kind"** (a gap → skip); collapsing the two, as `BuildErr::Unresolved` did, is precisely
+what made `assert_unlinkable` unimplementable.
+
+Worst remaining files (2026-08-08, after the charset pass): `memory64-imports` 26 (out of scope),
+`table_copy64` 22 (out of scope), `custom-page-sizes-invalid` 20, `exact` 17. ⚠️ `annotations` was top
+of this list at 51 and is now **8** — see the twelfth column above for why "out of scope" was the wrong
+reading of it. **All 284 files parse (0 unparseable).**
+
+**The largest IN-SCOPE cluster left is type canonicalisation** — ~40 assertions across `type-subtyping`,
+`type-rec` and `type-equivalence`, every one the same cause: wasmrt compares concrete types by **index**,
+the spec compares them by **structure**, so two structurally identical rec groups are treated as two
+types. It shows up as false rejections, undecidable import matching, and wrong `ref.test` results at once.
+See `known-issues.md`; the ranked punch list is there too.
+
+**The remaining `func.wast` 21 are the TEXT parser, not the decoder** — "unexpected token" 9, "inline
+function type" 3, "duplicate local" 3, "duplicate func" 1, plus 2 wrong results and 2 malformed imports
+the decoder still accepts. A separate cluster from the binary work above, and the assembler is where it
+lives.
+
+The first run scored 96.7% and surfaced four bugs the hand vectors could not — a panic, an element-segment
+encoding no decoder could read, truncated out-of-range constants, and mis-placed digit separators (all in
+`roadmap.md`'s T6-gate entry, all pinned by regression tests). **That is the argument for the suite:** it
+tests the assembler against the decoder, validator and interpreter at a scale hand vectors cannot reach.
+
+## The wasmtk corpora — first full run (2026-08-05, at v0.8.0)
+
+Two corpora beyond the spec testsuite, both in `wasmtk/tests` ([[spec-testsuite-location]]). **This is
+the T7 `wasi-gate`**, and it now runs.
+
+**WASI corpus — 441 `.wasm`, stdout diffed against the frozen oracle `wazmrt@dadc727`:**
+
+| | count |
+| --- | --- |
+| **stdout byte-identical to the oracle** | **426** |
+| differing | 15 |
+
+**Engine-observable behaviour matches on 441/441.** All 15 differences are CLI shape, not execution: 12
+are library/reactor modules with no `_start` (the two CLIs disagree about what to do with those), and 3
+are deliberate-throw tests where both runtimes print the value and then trap. Detail in
+`known-issues.md`.
+
+**`.wat` corpus — 532 files, assemble → decode → validate (2026-08-10, after the validation-gap fix):**
+
+| stage | result |
+| --- | --- |
+| assembled | **532 / 532** |
+| decoded | **532** (0 failures) |
+| validated | **532** |
+| failed | **0 — a clean sweep at every stage** |
+
+⚠️ **Run all three stages, not just `wat -o`.** Until T9a#8 this gate ran *assemble only* and read
+533/534, while the module `call_ref` produced was **undecodable** — the assembler returned `Ok` and the
+bytes were garbage. "Assembled without error" is not evidence about an emitter; it is evidence about
+the parser. The round trip is what turned one vague "1 wasmtk file" entry into a 76-assertion fix.
+
+**Method notes worth keeping.** Compare **stdout only** (`2>/dev/null`) — wasmrt writes diagnostics to
+stderr and the oracle writes them to stdout, so an unseparated diff reports differences that are not
+there. And give each file its **own** output path: reusing one `out.wasm` across a 534-file loop hits
+Windows file locking and invents phantom failures — it did so again on 2026-08-08, reporting 6
+assemble failures where there was 1, which is exactly long enough to start diagnosing the wrong thing.
+**A re-run that disagrees with the first is the tell; the numbers above are from clean runs.**
+
+### 🔎 ACCEPT-INVALID is now the largest remaining class (scanned 2026-08-19)
+
+A corpus-wide scan for *“module was accepted (should be rejected …)”* found **70 of them** — roughly a
+third of every remaining failure, and **the most dangerous class**: wasmrt admitting input the spec
+calls malformed or invalid. Everything else on the list is wasmrt refusing something valid, which
+costs an assertion and never a wrong answer.
+
+| file | count | |
+| --- | --- | --- |
+| `custom-page-sizes-invalid` | 18 | untargeted proposal — expected, Track P |
+| `annotations` | 8 | |
+| `simd_lane` | 7 | ✅ **fixed 2026-08-19** — a lane index admits no sign |
+| `type-rec` | 5 | |
+| `memory`, `func` | 4 each | `func`’s is the duplicate-identifier item |
+| `try_table`, `simd_const`, `rethrow`, `imports` | 2 each | |
+
+🎓 **Rank by DIRECTION, not by count.** A refusing bug costs a failing assertion; an accepting bug
+ships a runtime that runs input it should have turned away — and cannot be noticed from the outside.
+The scan is one `grep` over the `-v` output and had never been run.
+
+## ⚠️⚠️ THE PER-FILE GATE WAS KEYED ON A NON-UNIQUE NAME (found + fixed 2026-08-19)
+
+**Seven basenames occur TWICE in the spec corpus** — `binary`, `br_on_cast`, `br_on_cast_fail`,
+`exports`, `imports`, `memory`, `throw` — once at the top level and once under `proposals/`. The
+`.wast` runner printed only the **basename**, so the two were indistinguishable in its report, and every
+analysis keyed on that name silently **merged them**.
+
+🎓 **A gate whose identifier is not unique is not a gate.** The per-file *“no file lost a pass”* check
+— the one this project relies on whenever skips convert into verdicts — could have had a regression in
+one file netted out by a gain in its twin and still reported **NONE**.
+
+⚠️ **How it surfaced:** `imports.wast` read **1 failure standalone and 12 in the corpus walk**. That
+looks exactly like harness state leaking between files, which would have been a much worse defect; it
+was two files wearing one name. *The alarming reading and the true one had the same symptom.*
+
+**Fixed:** the runner now prints the path relative to the working directory, so
+`proposals/threads/imports.wast` and `imports.wast` are separate rows.
+
+🔻 **Honest limitation, recorded rather than papered over.** Every per-file gate run BEFORE this fix
+was sound for the other ~277 files and **unverifiable for those 7**. The aggregate rose monotonically at
+every step and no unexplained failure increase was ever observed, so a masked regression is unlikely —
+**but it is not proven, and re-deriving it would mean rebuilding each intermediate commit.** From here
+the gate keys on the path.
+
+## 🔬 T13-0 round 3 (2026-08-19) — `BadForm` attributed, and it is custom-descriptors
+
+**Measured, not guessed** — the roadmap said *"attribute `BadForm` BEFORE scheduling it, because that is
+the mistake this section just caught"*, and it was the right call twice over. Method: run every `.wast`
+with `-v`, collect the `module failed to build:` lines, group by file. **116 module-build failures
+remain** (was 216 at the T13 baseline).
+
+| cause | modules | attributed to |
+| --- | --- | --- |
+| `BadForm` | **37** | ⚠️ **33 are custom-descriptors** (`ref_get_desc` 6, `descriptors` 6, `struct_new_desc` 5, `br_on_cast_desc_eq_fail` 5, `br_on_cast_desc_eq` 5, `ref_cast_desc_eq` 3, `exact-casts` 3) · 2 `imports` · 2 `custom-page-sizes` |
+| `BadValType` | **18** | ⚠️ **all 18 are `exact`** (`exact` 14, `exact-func-import` 3, `array_new_exact` 1) — the custom-descriptors type former |
+| `BadModuleField` | 16 | `instance` 5, `binary` 4, `exact-func-import` 3, then `table64`/`table`/`memory64` 1 each |
+| `validate: TypeMismatch` | 14 | `elem` 5, `br_on_non_null` 3, `imports` 2, `try_table`/`call_indirect64`/`br_on_cast_fail` 1 each |
+| `UnknownInstr` | 4 | `id`, `select` ×2, `stack` — **newly visible**, surfaced by the scoring split |
+| decode / link / other | 27 | mixed |
+
+### ⚠️⚠️ Three error-name clusters, three features. The pattern is now the finding.
+
+| cluster | looked like | actually was |
+| --- | --- | --- |
+| `BadNumber` 63 | a number-parsing bug | **table64** |
+| `BadForm` 37 | a text-format shape bug | **custom-descriptors** (33 of 37) |
+| `BadValType` 18 | a value-type bug | **`exact`** (18 of 18) |
+
+🎓 **An error name describes the STAGE THAT NOTICED, never the feature that is missing.** Grouping
+failures by message — which is the natural triage, and which T9 did — produces a work-list of *parser
+areas* when the real work-list is *proposals*. **Only attributing each failure to its FILE recovers the
+cause.** This is §1.1 (*a cost logged beside a defect is a hypothesis about its cause*) at the level of
+a whole triage rather than a single entry.
+
+### The re-ranked remainder
+
+**Track D (custom-descriptors + `exact`) is 54 module-build failures — 33 `BadForm` + 18 `BadValType` +
+3 `BadModuleField` — plus ~420 direct skips.** It is the largest single lever left by a wide margin.
+
+⚠️ **But it does not go first, by the rule that already promoted the GC array ops: IN-SCOPE OUTRANKS
+UNTARGETED.** A missing in-scope instruction is a **correctness gap**; an unimplemented untargeted
+proposal is a **scope decision**. Sorting the remainder that way:
+
+1. **The in-scope cluster — ~31 modules and rising.** `instance` 5 + `binary` 4 `BadModuleField`;
+   `elem` 5 + `br_on_non_null` 3 + `try_table` 1 + `br_on_cast_fail` 1 `TypeMismatch`; `id`/`select`/
+   `stack` 4 `UnknownInstr`; plus the decode/link residue. **None of these is a proposal we declined —
+   they are defects in language wasmrt claims to run**, and `br_on_non_null` / `try_table` /
+   `br_on_cast_fail` are especially pointed, because those files test features recorded as DONE.
+2. **Track D** — custom-descriptors + `exact`, 54 modules + ~420 skips.
+3. **Track W** — wide-arithmetic, 108 skips, 4 mnemonics.
+4. P / M / A / L.
+
+⚠️ **`imports.wast` appears in three different clusters** (2 `BadForm`, 2 `TypeMismatch`, plus link
+failures). Worth treating as one investigation rather than three tickets — the same-file coincidence is
+usually one cause, as `call_ref` was at T9a#8.
+
+## 🔬 T13-0 COMPLETE (2026-08-19) — all 2,038 skips attributed, and the track order was WRONG
+
+**Method:** every one of the 13 skip sites in `wast.rs` rewritten to a `skip_at(line!())` probe, plus a
+probe on the module-build failure arm; corpus run; **probe reverted from a file copy taken beforehand**,
+verified byte-identical to `HEAD`, rebuilt, and the suite re-run to confirm **62,238 / 378 / 2,038** is
+unchanged. *(A backup copy, not `git checkout` — §8.1.)*
+
+#### Where the 2,038 skips actually come from
+
+| site | count | what it is |
+| --- | --- | --- |
+| `assert_return` → `NoTarget` | **1,157** | the module never built — **cascade** |
+| `assert_trap` → `NoTarget` | **427** | **cascade** |
+| `assert_invalid`/`_malformed` → `is_unsupported` | 303 | **300 are `UnknownInstr`** — mostly correct rejections banked as skips |
+| `invoke`/`get` → `NoTarget` | 51 | **cascade** |
+| unhandled command kind | 44 | |
+| module build → `is_unsupported` | 34 | the modules themselves |
+| `assert_return` sub-form | 15 | |
+| `assert_unlinkable` → `is_unsupported` | 7 | |
+
+⚠️⚠️ **1,635 of 2,038 — 80% — are `NoTarget` CASCADES.** They are not 1,635 pieces of work; they are
+the shadow of **216 modules that fail to build**. *A skip total is dominated by cascades — ask how many
+MODULES are behind it before ranking the work.* The exchange rate here is **~7.6 assertions unblocked
+per module fixed**.
+
+#### The 216 failing modules, by cause — this is the actual work-list
+
+| cause | modules |
+| --- | --- |
+| `assemble: BadNumber` | **63** |
+| `assemble: BadForm` | **46** |
+| `assemble: UnknownInstr` | 28 |
+| `assemble: BadValType` | 18 |
+| `assemble: BadModuleField` | 16 |
+| `validate: TypeMismatch` | 14 |
+| `link: unknown import` (13 distinct) | 13 |
+| `cannot link an imported Tag yet` | 5 |
+| `decode:` (3 kinds) | 8 |
+| other | 5 |
+
+#### ⚠️⚠️ The finding that re-ranks T13: `BadNumber` is **table64**, not a number bug
+
+The provisional track order in T13 was written from T9g's file-name groupings and put
+**custom-descriptors (D) first**. That is wrong. Attributing `BadNumber` by file:
+
+`table_copy64` 22 · `memory64-imports` 20 · `table64` 11 · `table_init64` 3 · `table_size64`,
+`table_set64`, `table_grow64`, `table_get64`, `table_fill64`, `table_copy_mixed`, `elem` 1 each.
+
+**62 of the 63 are the 64-bit table family.** The assembler is refusing an `i64` table index type —
+which is **Track T (table64)**, the "tables stay 32-bit" invariant T13 reverses. It is **one feature
+wearing a parser error's name.**
+
+🎓 **This is §1.1 exactly — *a cost logged beside a defect is a hypothesis about its CAUSE*, and it has
+now been wrong five times.** The T9 triage grouped failures by message, saw `BadNumber 63`, and filed it
+as a **text-assembler** cluster; the same 63 measured from the module-build side are **table64**. **The
+message named the symptom; only the module-build attribution named the cause.**
+
+#### The re-ranked order
+
+1. **Track T — table64.** 63 build failures + ~326 direct skips in the `table_*64` / `float_memory64`
+   files. **The single largest lever on the board**, and it is one coherent feature rather than six.
+2. **The assembler scoring split** — ~300 assertions, **no feature work**, independent of every track.
+   Cheapest thing on the list per unit of effort.
+3. **`BadForm` 46 modules** — not yet attributed to a feature. ⚠️ **Attribute it before scheduling it**,
+   because that is the mistake this section just caught.
+4. **Track D — custom-descriptors/`exact`** (~420 direct skips), **Track W — wide-arithmetic** (108),
+   then P / M / A / L.
+
+⚠️ **`BadForm`, `BadValType` and `BadModuleField` (80 modules between them) are still unattributed.**
+They may collapse into the same tracks the way `BadNumber` did, or they may be genuine text-format
+gaps. **Nobody knows yet, and the correct entry for that is "unknown", not a guess** — the
+last guess cost a whole track's ordering.
+
+## 🔬 T13-0, first measurement (2026-08-19) — 300 skips are CORRECT REJECTIONS
+
+**Baseline re-measured rather than quoted**, by running the corpus: **62,238 passed / 378 failed /
+2,038 skipped of 62,616 adjudicated, 284 files, `0 unparseable`.** Identical to what the memory
+recorded on 2026-08-14, so the numbers were sound — ✅ and the runner **already prints the fourth
+number**, which is the thing a pass/fail/skip triple cannot tell you (`best-practices.md` §3A.2).
+
+### The probe
+
+Instrumented the `assert_invalid` / `assert_malformed` skip site in `wast.rs`
+(`if e.is_unsupported() { skipped += 1 }`), ran all 284 files, **reverted the edit by hand** — not with
+`git checkout`, which would have taken the uncommitted work in that file with it (§8.1).
+
+| cause at that site | count |
+| --- | --- |
+| **`assemble: wat error: UnknownInstr`** | **300** |
+| `unsupported text construct: legacy delegate` | 2 |
+| `cannot link an imported Tag yet` | 1 |
+| **total at this site** | **303** |
+
+### ⚠️⚠️ The finding: `UnknownInstr` conflates two different answers
+
+`is_unsupported()` lists `wat::Error::UnknownInstr`, and that error means **both** *"this mnemonic
+exists in no wasm proposal"* — a **malformation wasmrt is entitled to diagnose** — and *"our assembler
+has a gap"*, which must never score as a pass. Because the two are indistinguishable at the scoring
+site, **every one of them is banked as a skip, including the right answers.**
+
+🎯 **The decisive case, `load.wast` — 13 of the 300.** The file asserts that `f32.load32`,
+`i32.load32`, `i32.load64`, `i32.load32_s`, `f64.load64` … are **malformed**. ⚠️ **None of those is a
+WebAssembly instruction in any proposal** — being unknown *is* the malformation under test. wasmrt
+answers `UnknownInstr`, which is exactly right, and **scores a skip instead of a pass.**
+
+### ⚠️ DO NOT "fix" this by deleting `UnknownInstr` from `is_unsupported()`
+
+The conservatism is **load-bearing**, and the asymmetry decides the direction: an omission from the
+"we-are-incomplete" side is a **FALSE PASS**, and a false pass is the one direction that **cannot be
+noticed afterwards**. Deleting the entry would bank real assembler gaps as conformance.
+
+**The principled fix is to make the ASSEMBLER draw the distinction, at the point where it is known** —
+a mnemonic that exists in no proposal → a real malformed verdict; a mnemonic that exists but is
+unimplemented → our gap. *An error name that conflates "your input is bad" with "we are incomplete"
+cannot be scored correctly by any caller*, and the fix belongs upstream of the scoring table, never in
+it.
+
+✅ **wasmrt only became eligible for this on 2026-08-14.** The distinction is only drawable once
+**every in-scope proposal is implemented** — otherwise "exists in no proposal" cannot be decided. T9f
+(tail calls) closed that, which is the same precondition the sibling runtime needed.
+
+### ⚠️ What this measurement does NOT say — 303 of 2,038, one site of seventeen
+
+`wast.rs` has **17 skip sites** and only one was instrumented. **The other ~1,735 skips are
+unattributed**, and they are demonstrably a different population: `br_on_cast.wast` (27 skips) and
+`try_table.wast` (47) produced **zero** at this site, and both are files for features wasmrt fully
+implements. **Do not extrapolate this result to the whole skip total** — instrument the remaining
+sites before ranking the rest of the work.
+
+**The file-level shape of the rest** (skips per file, top of the list) is dominated by the untargeted
+proposals T13 brings into scope: `exact-casts` 108 · `wide-arithmetic` 108 ·
+`br_on_cast_desc_eq`/`_fail` 98 each · `ref_cast_desc_eq` 94 — with **table64** spread across
+`table_init64` 93, `float_memory64` 84, `table_fill64` 70, `table_size64` 36, `table_copy64` 22,
+`table_grow64` 21.
+
+🎓 **Ranked by assertions unblocked, the scoring fix leads** — ~300 assertions, **no feature work**,
+independent of every track, and cheaper than any of them. That ordering is the whole reason T13-0 runs
+before T13's tracks rather than after.
+
+## Current test state (2026-08-19, T13 clear-out day 1)
+
+**484 workspace tests, all green**, clippy clean on all four build surfaces. Suite
+**63,333 / 172 / 1,024 — 99.7%** of **63,505**. *(Was 458 tests and 62,238 / 378 / 2,038 at T9f.)*
+
+### ⚠️ The `.wat` corpus figure is UNVERIFIED — its denominator moved (found 2026-08-19)
+
+**The corpus is not ours**: the `.wat` files live in the `wasmtk` tree, which is a live repo, and it has
+**532** `.wat` files today. Every number this memory records is against a different one:
+
+| recorded | where | what it was |
+| --- | --- | --- |
+| 533/534 | pre-T9a#8 | assemble **only** — and that gate was the §1.5a defect |
+| **534/534 assemble, 0 decode failures**, 2 validate failures | T9a#8, 2026-08-08 | the last honest full round trip |
+| 533/533 "clean" | this file, `overview.md`, `roadmap.md`, `INDEX.md`, `loaders.md`, `CLAUDE.md` | **denominator unexplained**; propagated unmeasured |
+
+The 2 validate failures were the `39_JstyperMixed` pair, which **T9a#9 adjudicated as an invalid stale
+fixture — wasmrt was right and the file was wrong**. Those files are now absent from wasmtk, which
+accounts for 534 → 532 exactly. So the likely truth is *532/532 through assemble→decode→validate* —
+**but that is an inference, not a measurement. Re-run the round trip and record the number with its
+denominator and its date before quoting it anywhere.**
+
+🎓 **Three rules of ours converge on this one entry**: a gate's number must be reproducible **in the
+configuration it was recorded in**, and a corpus you do not own is part of that configuration
+(`best-practices.md` §3A.2); when two files disagree, **measure** rather than picking the newer; and
+**quote all four numbers** — passed / failed / skipped **and the file-error count** — because a file
+that dies before it runs contributes to none of the first three.
+
+### ⚠️⚠️ The kind of test the spec suite CANNOT replace
+
+`tests/tail_call_is_a_real_tail_call.wast` exists because **conformance checks results and the tail-call
+proposal is about a resource.** `return_call_ref` shipped for releases as "call the callee, then jump to
+the end of the body": every answer correct, native stack growing on every hop. Its conformance file read
+**40 passed / 7 failed**, which nobody reads as *the feature is absent*.
+
+Measured deliberately, with the fake restored by mutation: the property test fails **5 of 6** while the
+three tail-call spec files still score **38/6, 72/4, 40/6**. Record that pair of numbers — it is the
+evidence that a 90% conformance score can coexist with a missing feature. Full lesson:
+`best-practices.md` §3.10.
+
+The file pins four chains at **1,000,000 deep** — self-recursion, **mutual** recursion (the case a
+self-call optimizer would miss), through a **table**, and through a **typed reference** — plus one
+shallow tail call so the ordinary path stays covered.
+
+### `tests/*.wast` runs under `cargo test`
+
+`crates/wasmrt-core/tests/regression_wast.rs` executes **every** `.wast` in the repo's `tests/`
+directory, asserting zero failures **and zero skips** (a construct that regresses into "unsupported" is
+silently not a pass) and failing if the directory is empty so it cannot pass vacuously. Anything dropped
+in `tests/` is covered without anyone remembering to wire it up. ⚠️ It exists because the three
+regression reproducers were green and **nothing ran them** — *a gate with no trigger is a preference*
+(`best-practices.md` §3A).
+
+The six new CLI tests pin that `run`, `wasi` and summarize all accept `.wat`, that binaries still work,
+that an ill-typed `.wat` is **still refused with the full wasmtime-shaped diagnostic** (a new input format
+must not be a side door around validation), that the *stage* blamed stays honest (malformed text →
+`cannot assemble`, malformed bytes → `decode failed`), and that the extension match ignores case. They are
+integration tests because the defect lived in the CLI's file loading, which no core-level test reaches —
+which is also why nothing caught it for the whole port (`best-practices.md` §3.8).
+
+**Previously (2026-08-08, T9a#9 resolved as a non-defect):** 450 tests (418 core + 28 capi + 4 CLI); the
+C-ABI gate (74/74 + `c_smoke`) and Miri (28/28) pass. This pass added 15: six pinning the backtrace
+(three frames innermost-first, offsets that advance within a body, a caught exception leaving none
+behind), five pinning the start function (it runs, it runs AFTER the segments, a trap in it fails the
+instantiation, once per instance), three in the C ABI, and one pinning `size_of::<Instr>() == 80` so
+the claim that the byte offset is free fails the build the day it stops being true. The decoder pass added 11, and two of them are
+there because writing the check the obvious way is wrong: `a_passive_segment_has_no_offset_expression_to_check`
+(the const-expr sweep must key on the segment's **mode**, not on whether the byte string is empty —
+keyed on emptiness it would also excuse an *active* segment with a missing offset, and that is the
+version this test fails), and `rejects_an_expression_with_no_terminating_end`, whose last assertion pins
+the **limitation**: `block … end` with the function's own `end` missing still ends in an `end`, so the
+terminator check passes it. Full nesting balance stays `precompute_control_flow`'s job. A test that
+asserts where a check *stops* working is worth as much as one asserting where it starts.
+
+Previous (2026-08-08, T9a#4 memory half): **375 workspace tests** (349 core + 26 capi); the
+C-ABI gate (74/74 + `c_smoke`) and Miri (26/26) pass. T9a#4 added 12, each aimed at a way the memory half
+could be wrong rather than at "it links": a write through the *importer* is visible to the *exporter* (a
+copy-at-link-time bug passes any one-instance test); a **two-provider** case so the importer's index 0 and
+the pool's slot 0 differ — the standing two-instance rule, one level deeper; an active data segment
+targeting the imported memory, which is the single place the "which memory" code path forks; §4.5.9 limits
+matching in both directions plus the *grown-memory* case (matching compares declared types, so a
+`memory.grow` in the exporter must not change what links); function- and global-import type mismatch
+across five and four shapes respectively, each with the matching declaration asserted to still link — a
+check that refuses everything would otherwise look identical; and the table refusal, kept as a test so it
+cannot be "fixed" by accident before the funcref encoding is decided.
+
+Previous (2026-08-07, T9 first pass): **363 workspace tests** (337 core + 26 capi), clippy clean; the
+C-ABI gate (74/74 symbols + `c_smoke` compiled by clang) and Miri (26/26 incl. the lifecycle fuzz) both
+pass. T9 added 12: the four `br_table.wast` blockers (each pinned separately, because each one alone
+still left the file failing — a single "the file builds now" test would not say which fix mattered), the
+two `.wast`-runner cases (a failed build's assertions are skipped **and** the wanted fall-back still
+works), the four `br_table` typing rules, `memory.size` under two instances, and the data-count section.
+
+Two of them earn their keep beyond coverage:
+
+- **`memory_size_reads_its_own_instance_not_the_pool_slot` is mutation-verified** — reverting the single
+  expression makes it report `5` (module one's page count) instead of `1`, which is exactly the defect.
+- **`the_data_count_section_is_emitted_only_when_required` walks the section list** rather than
+  searching the module for the byte `0x0c`. The byte occurs all over a payload, so the scanning version
+  would have passed by accident — the same failure mode as a gate that cannot fail.
+
+### 🆕 Contract v37 — the feature matrix against the sibling (2026-10-24)
+
+The proof of the migration is wazmrt's `cmem/probes/feature-matrix.ts`, RUN (from its directory, with
+the output in a scratch folder: it writes nothing into wazmrt's tree) once per runtime, and diffed:
+
+    bun feature-matrix.ts <scratch>/wz <wazmrt.exe>  > wazmrt.txt
+    bun feature-matrix.ts <scratch>/rt <wasmrt.exe>  > wasmrt.txt
+    diff <(tail -n +2 wazmrt.txt) <(tail -n +2 wasmrt.txt)
+
+**116 differing lines before, 0 after** (86 lines each: presets × 24 modules, membership, the
+reference-type table, overlaps, per-instruction checks, group names, single-name sufficiency).
+Plus a 31-spelling exit-code probe: 0 differ. wazmrt was its 2026-10-24 v37 build, confirmed by a
+v37 fact (`call_ref` refused and a GC struct accepted under `all,-function-references`). The typed-
+reference rule was checked against wasm-tools separately (6 of 6 agree). S1 moved by design
+(`known-issues.md`, top); S2 64,603 / 0 / 0, 0 regressed.
+
+### 🆕 `wat-corpus.ts` classifies corpus defects by the SOURCE (2026-10-24)
+
+wasmtk's tree now holds **613** `.wat` files (it was 603 a day earlier, and the count moved between
+runs on 2026-10-24: wasmtk's generated `wasm_wasi_bundle` outputs are rebuilt live). About ten of
+them `throw` an undeclared tag. The gate now asks, for any file wasmrt or wasm-tools refuses, whether
+wasm-tools accepts the SOURCE: if not, and wasmrt refuses too, the file is a **corpus defect**,
+listed and not counted against wasmrt; if wasmrt ACCEPTED it, that is a failure ("accepted an invalid
+module", inverted). It also recognizes the run path's "invalid module" verdict, which it used to
+miss. Result: **602 accepted by wasm-tools, 4 known defects, 9 found**, PASSED. ⚠️ A first fix that
+enumerated only git-TRACKED files was measured and withdrawn: it shrank the corpus 612 → 95, because
+most of the `.wat` files are generated and gitignored. ⚠️ Observed, not changed: the gate's
+"validate" step is a bare `wasmrt <module>`, which RUNS a `_start` module (sandboxed, no preopens).
+
+### 🆕 The `.wast` runner compares trap messages; D3 checked (2026-10-24) — **604 workspace tests**
+
+`assert_trap` (both forms) and `assert_exhaustion` now pass only when the trap matches the expected
+message's verdict: `wast::TRAP_VERDICTS`, longest-prefix, as the reference interpreter matches. An
+unknown message is a failure. Under it the spec suite is still **64,603 / 0 / 0** (S2: 0 regressed),
+after fixing the 54 wrong traps it exposed (`known-issues.md`, top). `definitions_check` holds
+`TRAP_VERDICTS` to binaryang's D3 both ways. New tests: `a_trap_of_the_wrong_kind_is_a_failure`,
+`the_two_traps_the_old_scoring_hid`; each piece was inverted against the code (accepting any trap,
+the truncation fix, the `call_indirect` fix, a D3 message mapped to the wrong verdict).
+
+### 🆕 The compatibility gate, letter H6 (2026-10-24) — **602 workspace tests**
+
+Measured 2026-10-24 from Git Bash: **602 passed, 0 failed, 1 ignored**; spec suite **64,603 / 0 / 0**
+over 288 files (S2, 0 regressed). The one new test is
+`cli_validates_before_executing.rs::a_feature_refusal_says_invalid_module_once` (the doubled
+"invalid module: invalid module:" prefix; inverted).
+
+Two new gates, both Bun scripts, neither inside `cargo test` (they shell out to cargo and nightly):
+
+| gate | command | fails when |
+| --- | --- | --- |
+| surface freshness | `bun scripts/surface.ts --check` | `surface/current.txt` differs from the sources (Rust `pub` API, `wasmrt.h`, `--help`) |
+| the bump floor | `bun scripts/bump.ts patch\|minor\|major [--dry-run]`, `--verify-tag vX.Y.Z` | the bump is below the highest of the surface, `cargo semver-checks` and carry-forward floors (`releasing.md`, "THE NUMBER") |
+
+Both were inverted (`releasing.md` lists the 17 reader mutations and the end-to-end refusals).
+⚠️ `--verify-tag` also runs as the first job of `release.yml`; that job has **not run on a runner
+yet**. Its first run is the next tag. *(Superseded: it ran on Actions for 2.0.1, run 42724412211; since
+2026-11-12 it is a step of `gate.ts --release` in the `checks` job, on a push of `main` — top section.)*
+
+### 🆕 Behaviour carry-forward, letter H23 (2026-10-23, late night) — **601 workspace tests**
+
+What a consumer can RELY ON, in three stages run in order, stopping at the first that finds an issue
+(`releasing.md` step 1c):
+
+| stage | where | what |
+| --- | --- | --- |
+| **S1** | `cargo test` (`crates/wasmrt-core/tests/behaviour.rs`) | 71 modules (`tests/behaviour/`, generated by `scripts/behaviour-corpus.ts`, `--check`) × 38 configurations. Decode + validate, never run, against `tests/behaviour-snapshot.txt` (1,523 accepted pairs). Re-baseline: `WASMRT_BEHAVIOUR_REBASELINE=1`, in its own commit |
+| **S1 vs a release** | `bun scripts/carry-forward.ts <tag> WORKTREE` | builds the tag in a throwaway worktree and judges it with the CURRENT judge (`tests/behaviour/judge.rs`, which uses only API every release since 0.9.0 has; the feature table is generated from the tag's own `Feature::name()`) |
+| **S2** | `bun scripts/behaviour-s2.ts` (release step) | per-file spec results against `tests/spec-snapshot.txt`, pinned by the suite's content sha256 (288 files, 64,603 / 0 / 0) |
+| **S3** | `… carry-forward.ts --corpus ../wasmtk/tests <tag> WORKTREE` (local) | wasmtk's ~1,195 modules by content hash |
+
+**Inverted, every stage:**
+* S1: ungating `i64.add128` gives 23 refused → accepted; gating `i32.extend8_s` under threads gives
+  4 accepted → refused, floor MAJOR.
+* S2: a raised pass count in the snapshot is reported as a regression.
+* The carry-forward v0.9.0 → HEAD reports the two intended tightenings (6 pairs), which wasm-tools
+  confirms.
+
+🔴 **Its first S3 run found a regression since 0.9.0** that no other gate saw: every MVP element
+segment was refused with function-references off, 661 pairs. Fixed (`known-issues.md`, top). S1 had
+missed it: its corpus had no element segment, so five WebAssembly 1.0 shapes were added, and S1 then
+catches it by itself (57 pairs).
+
+### 🆕 Body parity and H13 (2026-10-23, night) — **599 workspace tests**
+
+    bun scripts/body-parity.ts                   # default binary: cargo's real target dir
+
+Every `.wat` in wasmtk's corpus is assembled by wasmrt and by `wasm-tools parse`; with custom
+sections stripped, the bodies must be byte-identical, and wasmrt may not write more `name` sections.
+Each difference is bucketed by the FIRST section that differs, so each cause is visible.
+
+| | identical | first differs in |
+| --- | --- | --- |
+| before H13 | 64/603 | code 533, type 4, export 2 |
+| after H13 | **603/603** | — |
+
+**Inverted:** a faithful revert of each fix reproduced 533 / 4 / 2 exactly. A first type mutation
+(tags first) changed nothing in the corpus, which showed the TAG half is unexercised there. It is
+pinned by a unit test instead (`the_encoding_matches_an_outside_reader_byte_for_byte`), proven
+needed: 3 of its 4 cases break under that mutation. Also `wasmrt pin` = `wazmrt pin` on 603/603
+`.wat` and 584/584 `.wasm`.
+
+⚠️ **Every gate's DEFAULT binary is now cargo's real target directory** (`scripts/target-dir.ts`,
+from `cargo metadata`). They defaulted to `<repo>/target/release`, which on this host was a STALE
+build. And `c-gate.ts` asks rustc for `--print native-static-libs`: it had been linking a stale
+library (`known-issues.md`, top). All gates were re-run with their defaults:
+
+| gate | result |
+| --- | --- |
+| `wat-corpus` | 603 accepted by wasm-tools |
+| `body-parity` | 603/603 |
+| feature-gate / index-type / fuzz sweeps | pass (fuzz: 300 modules, 1,200 mutations) |
+| custom-sections diff | pass |
+| C-ABI gate | PASSED, release and debug |
+| definitions | PASSED |
+| eol gate | PASSED |
+
+Spec suite 64,603 / 0 / 0, no file lost a pass. Miri was not re-run (no `unsafe` or C-ABI code
+changed).
+
+### 🆕 Contract mirror (2026-10-23, evening) — **597 workspace tests**
+
+`crates/wasmrt/tests/cli_contract_dir_and_guest_position.rs` (7 tests) pins the three rows wasmrt was
+found breaching when `interop.md` was mirrored to v31:
+* v27, the `--dir` host grammar (Windows drive cases are `#[cfg(windows)]`);
+* v26/v28, the eleven exact host-flag names that are an error in a guest position, plus every
+  exemption;
+* `--features=<list>`.
+
+Each case was first measured on wazmrt, and each fix was inverted (disabled, so its tests failed
+for the right reason, then restored). `cli_flag_position.rs`'s "stranded host flag WARNS" test now
+asserts the refusal. Spec suite 64,603 / 0 / 0 unchanged; the feature-gate sweep passes; clippy clean.
+
+### 🆕 Shared definitions gate (2026-10-23, letters H8 / H10) — **590 workspace tests**
+
+    bun scripts/definitions.ts --check              # the copy equals what the pinned source generates
+    cargo test -p wasmrt-core --lib definitions_check   # wasmrt's own tables equal the copy
+
+The first verifies the vendored binaryang source (content hash and git blob id) and regenerates
+`crates/wasmrt-core/src/definitions.rs`; any difference fails. The second runs inside `cargo test`.
+Every D1 instruction must decode as one instruction of exactly D1's width, with D1's name and gating
+feature, and a reverse sweep refuses anything wasmrt decodes that D1 lacks. Both were inverted
+2026-10-23. Detail, the classified `KNOWN` list and the cross-repo results:
+[shared-definitions.md](shared-definitions.md).
+
+**590 workspace tests, 0 failed** (2026-10-23, from Git Bash; was 589, plus the cross-check). ⚠️ From
+PowerShell one test fails for an environment reason (`known-issues.md`, top). Spec suite
+**64,603 / 0 / 0** over 288 files, unchanged by the day's gating fix (`conformance-diff`: no file lost
+a pass). The three sweeps pass; clippy is clean.
+
+### Benchmark (T9c, added 2026-08-07)
+
+`cargo run --release -p wasmrt-core --example bench` — cold (decode+validate+instantiate+call) and
+steady (`sum(n)` dispatch throughput), reported separately and never conflated. It **asserts the
+workload's own result before timing**, so it cannot measure a computation that is wrong, and it warms up
+outside the timer. Numbers live in `vision.md` and `roadmap.md` T9c. Compare **same-session A/B/A only**.
+🆕 **Cross-runtime (2026-10-23): `bun scripts/cross-runtime-bench.ts --wasmrt <release exe>`** runs the
+same workloads against wasmtime, Bun and Deno, end to end with each runtime's start-up floor measured
+beside it, plus in process in Bun and Deno. Every run's answer is checked. Results: `bench/README.md`.
+⚠️ **Point `--wasmrt` at the binary cargo just built**: on this host cargo's target directory is NOT
+`./target` (a stale September copy lives there), so `target/release/wasmrt.exe` would benchmark an old
+build (`cargo metadata` → `target_directory`).
+T8 added 70 over v0.8.0's 281: the proposal-gate vectors (14 modules, each checked **both** ways —
+valid with all features on, and refused *naming that exact proposal* with one flag cleared, because a
+one-sided "assert it errors" test proves nothing about *why*), the resource-ceiling tests, 14 linker
+tests, 7 regressions for the table-initializer defects, and 26 C-ABI tests.
+
+**The three C-ABI gates are real, and each catches something the others cannot:**
+
+- **`tests/abi_symbols.c` — 74/74.** Takes the address of every function the header declares, forcing
+  the linker to resolve it. A function DECLARED but not EXPORTED fails the build; nothing else catches
+  that, because compiling a declaration always succeeds.
+- **`tests/c_smoke.c` — behaviour, from real C.** Compiled by a C compiler against the shipped header,
+  so it proves two things no Rust test can: that `wasmrt.h` is valid C, and that its declarations match
+  the exported symbols.
+- **Miri (`scripts/miri-gate.ts`) — 32/32 including `lifecycle_fuzz`** (28 was the figure on record
+  while the crate already had 31; ⚠️ **re-count it every run**), which drives randomized
+  creation/use/destruction orders (including the ones the header discourages) and touches handles whose
+  store is already gone. **A normal allocator cannot tell a use-after-free from a pass** — it hands back
+  freed memory that still looks right. The fuzz is seeded and reproducible on purpose: one that finds a
+  fault on Tuesday and cannot reproduce it on Wednesday has found nothing. It scales itself down under
+  `cfg!(miri)`, so the gate finishes in ~18s rather than minutes.
+
+**Mutation-verified:** deleting the store-tag check from handle unpacking makes
+`a_handle_from_another_store_is_rejected_not_aliased` fail — so the handle checking is load-bearing,
+not decoration. (The same standard `tests/README.md` sets: a gate that cannot fail is decoration.)
+
+### Superseded — post-T7 state (2026-08-05)
+
+**281 workspace tests, all green** under native + (compile) `wasm32` no_std; clippy clean on all four
+build surfaces. T7 plus the literal/text pass added 63 over v0.7.0's 218: host imports and the shared store (incl. the two
+**two-instance** regressions above), the WASI process surface, and the sandbox — whose resolver tests
+carry a canary *outside* the preopen and assert the **outcome** (no walk may produce a path that reads
+it) rather than a particular errno, so they survive a change of mechanism.
+
+**Two lint-shaped guarantees, both mutation-verified** (a lint nobody has watched fail is not
+enforcement): `#![forbid(unsafe_code)]` in `wasmrt-core` and the CLI — adding an `unsafe` block fails
+the build; and the sandbox's `..` guard — deleting it fails the canary test.
+
+**Run the `wasm32` no_std target, not just the native one.** The `#![forbid]` work surfaced a
+`path_symlink` that compiled only under `cfg(unix)`/`cfg(windows)`; no test caught it, the second target
+did.
+
+**The T6 layers added 95.** The **`.wast` runner** added 15 (including the one that pins the honesty
+rule: an unknown mnemonic inside an `assert_invalid` must **skip**, not pass). The **assembler** added 55
+across its layers, plus 4 regressions for the bugs the spec suite found. The **validator completion**
+added 12 (SIMD alignment + missing-memory +
+operand typing, exact atomic alignment vs. the scalar hint, GC field/mutability/packing, EH try_table
+clause-vs-label, throw tag checks, legacy catch framing, `delegate` rejected). **`sexpr`** added 10
+(comments, escapes, the lone-`;` hang regression, depth cap). **The opcode name table** added 3, incl. a
+round-trip over every single-byte op — that property is what keeps the assembler's reverse map from
+drifting off the decoder. **The assembler** added 28.
+
+**The assembler's tests are its real gate: they assemble → decode → validate → instantiate → invoke.**
+Byte-level assertions would only prove the assembler agrees with itself; running what it produced proves
+it agrees with the decoder, the type-checker and the interpreter. Both bugs found in the assembler core
+(folded memargs, `call_indirect`) surfaced as failed *executions*, not mismatched bytes. Coverage so far:
+flat + folded forms, recursion (`fac 10`), a named-label loop (`sum 100`), `call_indirect` dispatch,
+data + load, globals, explicit memargs, forward-referencing exports, multi-value and parameterised block
+types, and float arithmetic — all from text source. Plus the hex-float rounding vectors the oracle
+documents (a truncating parser is one ULP low — a *wrong value*, not a rejected one) and the subnormal
+round-vs-flush edge cases.
+
+The
+EH slice added 11 — a `try_table` catch, an uncaught throw, `catch_all` binding nothing (a local records
+which path ran, since a catch_all target label must be void), an exception unwinding **across a call**, a
+`catch_ref` → `throw_ref` round-trip through the exnref box, legacy `try`/`catch`, legacy `catch_all`,
+legacy `rethrow` propagating outward, a throw from inside a handler escaping its own try (the idiom that
+loops forever without the `caught` guard), `delegate` trapping while unwinding, and no EH state leaking
+between invocations. The
+memory64 slice added 18 — 12 execution vectors (i64-address store/load round-trip, `memory.size`/`grow`
+as i64, grow-past-max → −1, an i64 active data-segment offset, **an address of 2^32 trapping instead of
+wrapping** — the case that distinguishes a real 64-bit address from a truncated one — a `memarg` offset
+above `u32`, i64 bulk `fill`/`copy`, an i64 `memory.init` destination, i64 addresses through the `0xFE`
+atomic and `v128` families, a huge declared minimum hitting the instance budget, and a mixed 64/32-bit
+`memory.copy`) and 6 validator vectors (i32 address rejected / i64 accepted on a 64-bit memory,
+`memory.size` yielding i64, a `memarg` offset above `u32` rejected on a 32-bit memory but legal on a
+64-bit one, the data-segment offset's index type, limits above the 2^48 ceiling, and an `i64` table type
+rejected as malformed). The
+atomics slice added 5 — `i32.atomic.rmw.add`, `cmpxchg`, an unaligned-atomic trap, a `wait*`-on-non-shared
+trap, and a `wait32`-on-shared mismatch (returns 1). The
+SIMD slice added 10 hand-built vectors — splat+extract, `v128.const`+extract_lane_u, `i32x4.add`,
+`i32x4.eq`+bitmask, `i32x4.shl`, `f32x4.add`, `i8x16.add_sat_s` (saturation), `v128.load`/`store`
+round-trip, a `v128` struct field, and a `v128` global — representative of each op category (full
+per-opcode SIMD conformance comes from the spec suite at T6). The multi-memory slice added 3 — distinct
+mem0/mem1 routing, an active data segment (flag `0x02`) initializing memory 1, and a cross-memory
+`memory.copy`. The
+per-slice method has held: each task ports **wazmrt's own test vectors 1:1** where they're hand-buildable
+(T1 LEB accept/reject + ValType bit ops; T2 `decode_body` vectors incl. prefix/rejection; T3 the 15
+module decode/malformed vectors; T4 9 validator vectors; T5 add/factorial/loop-sum + traps + the delicate
+float helpers directly — nearest ties-even, NaN min/max, trunc/floor/ceil, trap/sat conversions — and
+the memory ops — store/load round-trip, `memory.size`/`grow`, active data segment, OOB trap; the
+table/ref ops — `call_indirect` dispatch + OOB trap, `ref.null`/`is_null`, `table.set`/`get` via
+`ref.func`; and the **GC ops** — struct `new_default`/set/get, array `new`/set/get/len, `i31.get_s`/`get_u`,
+`ref.test`), plus a few extras and end-to-end CLI runs (`add.wasm`, `fac.wasm`, `fadd.wasm`, `rt.wasm`). The
+oracle's `wasm_mod` corpus lives on removable media, so the ported oracle unit tests stand in for it.
+
+**Two constraints shape T4/T5 coverage** (recorded so future slices plan for them): (1) most of the
+validator's tests and the interpreter's spec vectors need the **WAT assembler**, which doesn't exist
+until **T6** — so exotic validate/exec arms can't be verified until then. (2) That's exactly why T4/T5
+were **sliced** (core-first, exotic-later) with deferred ops rejecting loudly. The `.wast`/spec-testsuite
+conformance gates come online at **T6** (text toolchain) and are where SIMD/GC/atomics/EH validation +
+execution finally get real coverage; the C-ABI/Miri gates at **T8**.
+
