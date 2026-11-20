@@ -16,6 +16,11 @@ stays in the topic file named.
   definitions, the C-ABI gate (`CC=gcc` on this host); the release-script self-tests 34 / 36 / 22;
   v2.0.0's integration tests against HEAD 70 / 0; the publish dry run. The same list is CI's
   `checks` (`testing.md`, top).
+* **2.0.2 RELEASED 2026-11-20 (UTC)**: tag `v2.0.2` (CI's) = release commit `b3fb838`; run
+  44643955150 green in all four jobs; all three crates at 2.0.2 on crates.io, the licence files in
+  each; `cargo install` as a user → `wasmrt 2.0.2 (abi 1)`; `surface/released.txt` from the tag
+  (`9cd567c`, surface identical). The bump floor since: **PATCH**. Detail: [release.md](release.md)
+  § 2.0.2. Open next: I9 (`prev-tag-tests.ts` cleanup), I1–I8 (`review-issues.md`).
 * **2.0.1 RELEASED 2026-11-09 (no code changes since 2.0.0)**: tag `v2.0.1` = release commit `c3cb7dd`;
   all three crates at 2.0.1 on crates.io (verified through its API); Release page by
   `github-actions[bot]` through the REST API (H30, run 42724412211). `surface/released.txt` records it

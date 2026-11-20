@@ -60,6 +60,21 @@ Other platforms: not yet tested.
   (review-gate allows only release notes after the reviewed commit).
 - **Trial of the changed `release.yml`:** `main` `80891c6`, run 44642273945 — `checks` green, the
   rest skipped (version 2.0.1).
+- **The release run.** Owner: "release" (2026-11-19). `bump.ts patch` → `bump to v2.0.2`;
+  `release.ts` refused twice before pushing — (1) `review-gate.ts` counted the bump's internal pin as
+  unreviewed: fixed in `166e918`, the bump undone and remade (`b3fb838`), `Review complete:` moved
+  `f945956` → `166e918` (only gate scripts changed); (2) `prev-tag-tests.ts`'s cleanup hit a
+  transient Windows lock (`EBUSY`) after its tests ran (open issue I9) — retried unchanged; (3) green,
+  `main` pushed = `b3fb838` (read back).
+- **✅ PUBLISHED 2026-11-20 (UTC)**: run 44643955150, all four jobs success. Tag `v2.0.2` (annotated,
+  CI's) peels to `b3fb838`. Release page `v2.0.2` by **`github-actions[bot]`**, not a draft, titled
+  from the CHANGELOG heading. crates.io: wasmrt-core, wasmrt-capi, wasmrt at 2.0.2, not yanked,
+  `MIT OR Apache-2.0` (API; created 00:13:07–00:13:12 UTC) — the first publish through trusted
+  publishing from CI. The published `wasmrt-core-2.0.2.crate` holds `LICENSE-MIT`, `LICENSE-APACHE`,
+  `NOTICE`, `third_party/LICENSES.md`, `third_party/wabt/LICENSE` (L1 reached users) and
+  `.cargo_vcs_info.json` sha1 `b3fb838`. As a user (U10): `cargo install wasmrt --version 2.0.2` in a
+  scratch root → `wasmrt 2.0.2 (abi 1)`, twice (2026-11-19 and 11-20). Step 9: `surface/released.txt`
+  re-recorded from the tag (`9cd567c`), only its `released-as` line changed. The floor since is PATCH.
 
 ### 2.0.1 — 2026-11-09 — the Release page through GitHub's REST API
 
