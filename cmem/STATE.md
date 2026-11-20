@@ -19,11 +19,11 @@ Updated: 2026-11-20, at the end of the session
 
 ## Next
 1. The open issues in `review-issues.md`, in class order, for the next release
-2. `interop.md` (187 KB, mirrored from wazmrt): the owner names the file's owner, then it is split there
+2. `interop.md` (187 KB; co-owned with wazmrt, owner 2026-11-20): agree one split with wazmrt, made in both copies
 3. The review stages T9–T12 on the public ROADMAP: the owner's call how they fit the five-class review
 
 ## Waiting on owner
-- Who owns `interop.md` (wazmrt holds the pen today; memory guide: "name one owner")
+- nothing
 
 ## Read next
 - open-work.md: the open list

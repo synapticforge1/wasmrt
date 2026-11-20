@@ -203,9 +203,10 @@ The rule in full: `../workspace/cmem/tooling-rules.md` rule 15. For wasmrt:
 
 ## Memory-guide limits: the recorded exceptions (letter H38)
 
-- `interop.md` (187 KB, 115 lines over 200): held as it is. It is a byte-identical mirror of wazmrt's copy
-  (regime A: wazmrt holds the pen), so it is split or wrapped only there; who owns the file is the owner's
-  call (the guide: "name one owner"). wazmrt holds its copy the same way.
+- `interop.md` (187 KB, 115 lines over 200): held as it is. 🔒 **wasmrt and wazmrt co-own it** (owner,
+  2026-11-20: "wasmrt and wazmrt co-own interop.md"). The two copies stay byte-identical, so a split or a
+  wrap is ONE edit made in both — agreed through "Coordinate" (a letter), never by writing into wazmrt's tree.
+  Until then it is the exception here, as in wazmrt.
 - `best-practices-shared.md` line 114 (201 characters): the workspace's ★ rules, copied unchanged under
   their stamp (owner, 2026-11-19: keep the ★ copy as it is).
 - Every other live note holds the limits: `bun scripts/check-cmem.ts` reports only these.
