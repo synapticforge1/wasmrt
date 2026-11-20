@@ -271,8 +271,8 @@ whether you meant to or not.
   install, `cargo-public-api` / `cargo-semver-checks` and the gate; it keeps the credential-free
   clone, the version read, Bun (pinned by sha256) and `github-release.ts state`. `tag`, `release`
   and `publish` are unchanged; `publish` still installs the pinned nightly to package. Rehearsal of
-  the changed workflow (best-practices 7.22): ⏳ not yet run — it must run before this lands on
-  `main` (a scratch repository on GitHub, or the first `none` push, with the owner's word). The
+  the changed workflow (best-practices 7.22): ✅ the first `none` push (owner: "push", 2026-11-19),
+  commit `80891c6`, run 44642273945: `checks` green in all four steps, `tag` / `release` / `publish` skipped. The
   bullet below describes the 2026-11-12 shape.
 
 - 🆕 **`.github/workflows/release.yml` — the owner's order, in CI (2026-11-12; workspace letter H33,

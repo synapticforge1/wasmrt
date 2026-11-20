@@ -86,8 +86,10 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
   excluded, § 10) — triage, fixes per class, re-review until empty; the full suite per platform
   that has a machine (`win-x64`; `linux-x64` under WSL if run); then the `### 2.0.2` entry and
   CHANGELOG section with their Tested on lines, `bump.ts patch`, `release.ts`.
-- ⚠️ **The changed `release.yml` must be rehearsed before it lands** (best-practices 7.22;
-  `releasing.md` § Tooling), and it lands BEFORE 2.0.2's bump, never mid-release.
+- ✅ **The changed `release.yml` landed and ran** (2026-11-19, owner: "push"): `main` = `80891c6`,
+  run 44642273945 — `checks` green, `tag` / `release` / `publish` skipped (version 2.0.1, `none`).
+  Those three jobs are unchanged since 2026-11-12 and are first exercised by 2.0.2's release.
+  Review complete at `f945956` (gitignored `review-issues.md`); next: the owner's "release".
 
 0. ✅ **The crates.io trusted publishers are set** (owner, 2026-11-12: "trusted publisher is already
    set"; not readable from here without a crates.io login — the next release's `publish` job is the
