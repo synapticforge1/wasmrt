@@ -29,6 +29,38 @@ round N, date."; no release was made under that rule.)* Releases before 2026-11-
 
 ## Release History
 
+### 2.0.2 — 2026-11-19 — licence texts in every crate; the first release under the H37 review
+
+The first release reviewed under the five-class standard (H37; owner's "option B", restarting 2.0.2
+after the H35 rounds). Runtime behaviour unchanged. Fixed: no published crate had carried a licence
+text or NOTICE (L1) — all three now ship `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` and `third_party/`,
+held equal to the root by `licence-copies.ts`. Release tooling: `bump.ts` restores the version files
+when it fails (H1), every release subprocess has a time limit (H2), `release.ts` reads every page of
+crates.io's list (B-h1); a README privacy statement (P3). CI only publishes; every gate is local.
+The owner kept the release approval local — no GitHub environment (S1, the accepted risk:
+`releasing.md` § Repository settings); rulesets on `main` and `v*` tags set.
+
+Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)
+Tested on: Ubuntu 26.04.1 LTS under WSL (`linux-x64`)
+Other platforms: not yet tested.
+
+- **Review:** `Review complete: f945956` (gitignored `review-issues.md`). First review: B1, H1, H2,
+  L1, S1, P3 accepted (plus sibling notes); re-review 1: R-B1, R-S1; re-review 2: empty in all five
+  classes. S1 then closed by the owner's decision (the workflow back to the reviewed bytes).
+- **Platforms verified** (nightly `708c94ef0`, commit `76ca5a0`, 2026-11-19; no code changed after):
+  - `win-x64`: gate 21 / 21 (workspace tests 608 / 0 / 1; v2.0.1's 70 / 0), S2 64,603 / 0 / 0 over
+    288 (0 regressed), carry-forward vs v2.0.1 0 / 0 (patch), Miri 33 / 33.
+  - `linux-x64`: gate 21 / 21 (607 / 0 / 1 — one test is `#[cfg(windows)]`; v2.0.1's 69 / 0), S2
+    64,603 / 0 / 0, carry-forward 0 / 0, Miri PASSED.
+- **Checklist:** floor PATCH (`bump.ts patch --dry-run`: surface 0 / 0, semver patch ×2, behaviour
+  0 / 0, v2.0.1's tests 70 / 0). Size: CLI 845,824 B, DLL 536,064 B — byte-identical to v2.0.1 built
+  the same way today (sha256 compared), so speed unchanged by construction; 2.0.1's recorded
+  535,552 B DLL is not reproduced by 2.0.1 itself today. Both binaries import only Windows-provided
+  DLLs; the CLI runs from an empty folder on a system-only `PATH`. ROADMAP has no 2.0.2 row
+  (review-gate allows only release notes after the reviewed commit).
+- **Trial of the changed `release.yml`:** `main` `80891c6`, run 44642273945 — `checks` green, the
+  rest skipped (version 2.0.1).
+
 ### 2.0.1 — 2026-11-09 — the Release page through GitHub's REST API
 
 No code changes since 2.0.0. It carries the H30 release-page change (`releasing.md` § Tooling) and

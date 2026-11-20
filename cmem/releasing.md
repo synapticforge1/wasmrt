@@ -128,10 +128,12 @@ commit → `release.ts` pushes `main` → CI checks, tags, makes the page, publi
 owner's word "release" starts it and gives the level (patch / minor / major — ask when it was not
 given). Nobody tags or publishes by hand. Each release is recorded in [release.md](release.md).
 
-0. 🔒 **A security review and a hardening review, each to its EMPTY round** (owner, 2026-11-12;
-   [review-process.md](review-process.md), the workspace's `review-process.md` §§ 3–4), on everything
-   since the last release, recorded in this version's entry in [release.md](release.md) BEFORE the
-   bump. `release.ts` and CI refuse a release whose entry lacks either one.
+0. 🔒 **The five-class review, to an empty re-review and the full suite per platform** (🔁 2026-11-19,
+   letter H37; [review-process.md](review-process.md)), on everything since the last release. Its
+   result is the `Review complete: <commit>` line of the gitignored `review-issues.md`;
+   `review-gate.ts` (in `gate.ts --release`, so in `release.ts`) refuses a release whose code changed
+   after that commit. *(2026-11-12 to 11-19, H35: a security and a hardening review, recorded in the
+   entry.)*
 
 1. **Task is DONE**: its conformance gate passes, `cargo test`/`clippy` green on all surfaces, no
    regression in the spec-suite numbers and **no file losing a pass**.

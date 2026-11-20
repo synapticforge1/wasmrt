@@ -89,7 +89,9 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
 - ✅ **The changed `release.yml` landed and ran** (2026-11-19, owner: "push"): `main` = `80891c6`,
   run 44642273945 — `checks` green, `tag` / `release` / `publish` skipped (version 2.0.1, `none`).
   Those three jobs are unchanged since 2026-11-12 and are first exercised by 2.0.2's release.
-  Review complete at `f945956` (gitignored `review-issues.md`); next: the owner's "release".
+  Review complete at `f945956` (gitignored `review-issues.md`). 🔁 Owner's "release" (2026-11-19):
+  notes and `release.md` entry committed, then `bump.ts patch` and `release.ts` — see `release.md`
+  § 2.0.2 for the run.
 
 0. ✅ **The crates.io trusted publishers are set** (owner, 2026-11-12: "trusted publisher is already
    set"; not readable from here without a crates.io login — the next release's `publish` job is the

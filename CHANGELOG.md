@@ -19,6 +19,38 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-11-19 — licence texts in every crate, and a five-class review before every release
+
+Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)
+Tested on: Ubuntu 26.04.1 LTS under WSL (`linux-x64`)
+Other platforms: not yet tested.
+
+**The runtime behaves exactly as 2.0.1 does.** The public Rust API, `wasmrt.h` and the command line
+are unchanged. The bump gate measured the floor since 2.0.1 as patch: 0 surface changes,
+cargo-semver-checks patch on both libraries, 0 modules changing verdict in either direction, and
+2.0.1's integration tests pass against this release (70 of 70). The spec testsuite passes
+64,603 / 0 / 0 over 288 files on both platforms above.
+
+**Size and speed.** Built the same way on the same compiler (nightly 2026-11-03, rustc `708c94ef0`),
+2.0.2's CLI (845,824 B) and C ABI DLL (536,064 B) are byte-identical to 2.0.1's, so speed is
+unchanged by construction. *(2.0.1's notes gave the DLL as 535,552 B; 2.0.1 rebuilt today gives
+536,064 B, so the 512 B came from how that figure was taken, not from the code.)*
+
+### Fixed
+
+- **Every published crate now carries its licence texts.** Cargo packages only what is inside a
+  crate's own folder, so `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE`, which sat at the repository
+  root, were in no crate on crates.io. That left the MIT notice condition unmet, and Apache-2.0
+  § 4(a) for the instruction-table data in `wasmrt-core` that is derived from wabt. All three crates
+  now ship both licence texts, `NOTICE` and `third_party/` (the wabt licence and the ledger), and a
+  release check keeps the copies identical to the root's. Versions up to 2.0.1 are affected and cannot
+  be changed on crates.io; the licence they are under is the same.
+
+### Added
+
+- **A privacy statement** (README): wasmrt collects nothing and makes no network requests; it writes
+  only the files you name and what a guest writes inside a directory you pass with `--dir`.
+
 ### Changed
 
 - **Releases are tagged and published by CI** (no code change; the crates are unaffected). A push of
