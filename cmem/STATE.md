@@ -1,6 +1,6 @@
 # STATE: wasmrt
 
-Updated: 2026-11-20, at the end of the session
+Updated: 2026-11-23, at the end of the session
 
 ## Version
 - Released: 2.0.2 on 2026-11-20 (UTC); tag `v2.0.2`, crates.io; first published by CI
@@ -12,10 +12,10 @@ Updated: 2026-11-20, at the end of the session
 - Workspace letters answered 2026-11-20 (H10, H19, H33, H37, H38, H41–H43, C30, C49); C5 closed
 
 ## Review
-- Run for: the changes since v2.0.2 (owner: "review", 2026-11-20)
-- Position: full suite (re-review 2 empty)
+- Run for: none in progress (the review since v2.0.2 completed at `db6f63b`, 2026-11-20)
+- Position: —
 - Open issues: basic 7, hardening 2, licensing 0, security 0, privacy 0
-- Platforms passed: win-x64, linux-x64 (for 2.0.2)
+- Platforms passed: win-x64, linux-x64 (at `db6f63b`)
 
 ## Next
 1. The open issues in `review-issues.md`, in class order, for the next release
