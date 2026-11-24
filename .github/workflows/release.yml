@@ -29,9 +29,9 @@ name: release
 # rustup (over TLS, each component checked against the channel manifest's sha256 — the manifest's
 # signature is not enforced), and refused unless rustc reports the expected commit, which is the pin;
 # Bun by version AND sha256 (Bun's SHASUMS256.txt; move BUN_VERSION and BUN_SHA256 together —
-# workspace Tooling rule 10). The dated nightly packages the crates only: the local
-# rust-toolchain.toml still floats, and whether to pin it there is T11's question (it moves the binary
-# sizes; cmem/open-work.md). Every request has a time
+# workspace Tooling rule 10). The dated nightly packages the crates only; the local
+# rust-toolchain.toml pins the same one (owner, 2026-11-24), so a local build and this one use one
+# rustc. Every request has a time
 # limit (best-practices 7.21). A failed job is fixed by "Re-run failed jobs": each job skips what is
 # done; never a new or moved tag (U12).
 

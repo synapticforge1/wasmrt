@@ -15,7 +15,8 @@ Updated: 2026-11-24, at the end of the session (the review's fixes and the toolc
   and `nightly-2026-11-04` (pinned in `rust-toolchain.toml` and release.yml, the default); gnullvm dropped
   (platforms.md, architecture.md)
 - W2 (the old review stages T9–T12) performed and closed 2026-11-24; W4 (the cargo token) revoked
-- Workspace letter C50 committed in the workspace repo (48afb6e); H42's wasmrt answer written there, uncommitted
+- Workspace letters: C50 committed (48afb6e) and H42's wasmrt answer committed (b668926) in the workspace repo,
+  not pushed
 
 ## Review
 - Run for: `820669f..HEAD` (owner, 2026-11-24: "review"); the re-review came back EMPTY in every class
@@ -30,7 +31,7 @@ Updated: 2026-11-24, at the end of the session (the review's fixes and the toolc
 3. `interop.md` (187 KB; co-owned with wazmrt): agree one split; the §3.7 limits rows after wazmrt answers C50
 
 ## Waiting on owner
-- push; the workspace commit of H42's answer; the calls in Next 2
+- the workspace repo's push; the calls in Next 2
 
 ## Read next
 - open-work.md: the open list
