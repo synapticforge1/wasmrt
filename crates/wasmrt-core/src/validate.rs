@@ -164,10 +164,28 @@ pub fn validate(module: &Module) -> ValidateResult<()> {
 /// With [`Features::all`] every gate below is a no-op, which is why enabling this cost the
 /// spec-suite numbers nothing.
 pub fn validate_with_features(module: &Module, features: &Features) -> ValidateResult<()> {
+    let refs = module_checks(module, features)?;
+    // Function bodies last, so `refs` is complete before any body's C.refs check.
+    for (n, (&type_index, code)) in module.functions.iter().zip(&module.code).enumerate() {
+        let ft = module.func_sig(type_index).ok_or(ValidateError::UndefinedType)?;
+        validate_function(module, &ft, code, Some(&refs), features).map_err(|e| {
+            // Attach WHICH function failed. A bare `TypeMismatch` for a 900-line module is a
+            // diagnosis problem, not a verdict problem: localizing T9a#9's fixture by hand — to
+            // defined function #6 of 19 — is what turned "our type-checker is wrong" into "the
+            // module is ill-typed and both validators agree".
+            located(e, module.imported_func_count() + n as u32)
+        })?;
+    }
+    Ok(())
+}
+
+/// Everything [`validate_with_features`] checks outside the function bodies, in its order; returns the
+/// module's C.refs (the functions a body may name in `ref.func`). Run BEFORE any body, as wasmtime
+/// validates every section before it validates a body (`module::decode_validated` streams them after).
+pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateResult<Vec<bool>> {
     // Cleared on ENTRY, not on success: every failure below this point that is not inside a
     // function body must report "no location" rather than inherit the previous module's.
-    #[cfg(feature = "std")]
-    SITE.with(|c| c.set(FailureSite::default()));
+    reset_failure();
 
     if module.functions.len() != module.code.len() {
         return Err(ValidateError::CountMismatch);
@@ -374,19 +392,7 @@ pub fn validate_with_features(module: &Module, features: &Features) -> ValidateR
             return Err(ValidateError::InvalidStartFunction);
         }
     }
-
-    // Function bodies last, so `refs` is complete before any body's C.refs check.
-    for (n, (&type_index, code)) in module.functions.iter().zip(&module.code).enumerate() {
-        let ft = module.func_sig(type_index).ok_or(ValidateError::UndefinedType)?;
-        validate_function(module, &ft, code, Some(&refs), features).map_err(|e| {
-            // Attach WHICH function failed. A bare `TypeMismatch` for a 900-line module is a
-            // diagnosis problem, not a verdict problem: localizing T9a#9's fixture by hand — to
-            // defined function #6 of 19 — is what turned "our type-checker is wrong" into "the
-            // module is ill-typed and both validators agree".
-            located(e, module.imported_func_count() + n as u32)
-        })?;
-    }
-    Ok(())
+    Ok(refs)
 }
 
 /// Where the last validation failure was, and what it was about.
@@ -427,7 +433,7 @@ std::thread_local! {
 
 /// Record which function a failure came from. Called as the error leaves the per-body loop.
 #[cfg(feature = "std")]
-fn located(e: ValidateError, func_index: u32) -> ValidateError {
+pub(crate) fn located(e: ValidateError, func_index: u32) -> ValidateError {
     SITE.with(|c| {
         let mut s = c.get();
         s.func_index = Some(func_index);
@@ -437,7 +443,7 @@ fn located(e: ValidateError, func_index: u32) -> ValidateError {
 }
 
 #[cfg(not(feature = "std"))]
-fn located(e: ValidateError, _func_index: u32) -> ValidateError {
+pub(crate) fn located(e: ValidateError, _func_index: u32) -> ValidateError {
     e
 }
 
@@ -473,6 +479,52 @@ fn note_types(expected: V, found: V) {
 
 #[cfg(not(feature = "std"))]
 fn note_types(_expected: V, _found: V) {}
+
+// wasmtime's words for the most recent failure, written where it was found (3.0.0). The first
+// writer wins: an error is noted where it arises, and the frames it passes through on its way out
+// must not overwrite it with a vaguer one.
+#[cfg(feature = "std")]
+std::thread_local! {
+    static WORDS: core::cell::RefCell<Option<alloc::string::String>> = const { core::cell::RefCell::new(None) };
+}
+
+/// Note wasmtime's words for this failure, unless a more precise note was made first.
+#[cfg(feature = "std")]
+fn say(words: impl FnOnce() -> alloc::string::String) {
+    WORDS.with(|w| {
+        let mut w = w.borrow_mut();
+        if w.is_none() {
+            *w = Some(words());
+        }
+    });
+}
+
+#[cfg(not(feature = "std"))]
+fn say(_words: impl FnOnce() -> alloc::string::String) {}
+
+/// Forget the last failure's site and words: a new judgement begins (`module_checks`, `module::parse`), and
+/// nothing it does not itself note may be read back as its own (review note, 2026-11-24).
+pub(crate) fn reset_failure() {
+    #[cfg(feature = "std")]
+    {
+        SITE.with(|c| c.set(FailureSite::default()));
+        WORDS.with(|w| *w.borrow_mut() = None);
+    }
+}
+
+/// The most recent [`validate`] failure in wasmtime's words, when wasmrt knows them — 🆕 3.0.0:
+/// `type mismatch: expected i32 but nothing on stack`, `unknown table 3: table index out of bounds`.
+/// The words follow wasmparser 0.263 (the validator wasmtime uses), so a message from either tool can
+/// be read as the other's. `None` after a success, for a failure that has no such words yet (its
+/// [`ValidateError`] then says what it is), and in a `no_std` build. Read with
+/// [`last_failure_site`], which gives the offset.
+#[must_use]
+pub fn last_failure_message() -> Option<alloc::string::String> {
+    #[cfg(feature = "std")]
+    return WORDS.with(|w| w.borrow().clone());
+    #[cfg(not(feature = "std"))]
+    None
+}
 
 /// Everything known about the most recent [`validate`] failure — see [`FailureSite`].
 ///
@@ -1160,52 +1212,14 @@ fn validate_function(
     refs: Option<&[bool]>,
     features: &Features,
 ) -> ValidateResult<()> {
-    // locals = parameters ++ declared locals (expanded from the run-length form). Sum first
-    // (checked against the cap), then expand, so a huge run can't allocate first.
-    let mut declared: u64 = 0;
-    for l in &code.locals {
-        declared += u64::from(l.count);
-    }
-    if declared + ft.params.len() as u64 > MAX_LOCALS {
-        return Err(ValidateError::TooManyLocals);
-    }
-    let mut locals: Vec<V> = Vec::with_capacity(ft.params.len() + declared as usize);
-    locals.extend_from_slice(&ft.params);
-    for l in &code.locals {
-        // A declared local is a value-type position like any other: `(local v128)` needs
-        // SIMD even if the body never touches a vector instruction.
-        gate_val_type(l.ty, features)?;
-        locals.resize(locals.len() + l.count as usize, l.ty);
-    }
+    let locals = expand_locals(ft, &code.locals, features)?;
 
     // Already decoded, at decode time — where a malformed instruction stream belongs. This used to
     // call `decode_body` here, which both put the error at the wrong stage and decoded every body
     // a second time.
     let instrs = &code.ir;
 
-    // Local-init: params + defaultable locals start initialized; a non-nullable-ref local
-    // starts uninitialized (function-references, §3.3.5).
-    let n_params = ft.params.len();
-    let local_init: Vec<bool> = locals
-        .iter()
-        .enumerate()
-        .map(|(i, t)| i < n_params || !t.is_non_null_ref())
-        .collect();
-
-    let mut v = FuncValidator {
-        module,
-        features,
-        refs,
-        locals: &locals,
-        results: &ft.results,
-        local_init,
-        vals: Vec::new(),
-        ctrls: Vec::new(),
-        body_len: instrs.len(),
-        body_offset: code.body_offset,
-    };
-    // The whole body is an implicit block of type [] -> results.
-    v.push_ctrl(FrameKind::Block, Vec::new(), ft.results.clone())?;
+    let mut v = FuncValidator::begin(module, features, refs, ft, &locals, code.body_offset)?;
     for instr in instrs {
         // On failure, stamp the absolute module offset of the instruction that failed:
         // `Instr::offset` is body-relative (added at T9a#7) and `Code::body_offset` is the body's
@@ -1218,6 +1232,125 @@ fn validate_function(
         return Err(ValidateError::ControlUnderflow); // missing `end`
     }
     Ok(())
+}
+
+/// A function's locals: its parameters, then its declared locals expanded from their run-length form.
+/// Summed first (checked against the cap), then expanded, so a huge run cannot allocate first.
+fn expand_locals(ft: &FuncType, decl: &[crate::module::Local], features: &Features) -> ValidateResult<Vec<V>> {
+    let mut declared: u64 = 0;
+    for l in decl {
+        declared += u64::from(l.count);
+    }
+    if declared + ft.params.len() as u64 > MAX_LOCALS {
+        return Err(ValidateError::TooManyLocals);
+    }
+    let mut locals: Vec<V> = Vec::with_capacity(ft.params.len() + declared as usize);
+    locals.extend_from_slice(&ft.params);
+    for l in decl {
+        // A declared local is a value-type position like any other: `(local v128)` needs
+        // SIMD even if the body never touches a vector instruction.
+        gate_val_type(l.ty, features)?;
+        locals.resize(locals.len() + l.count as usize, l.ty);
+    }
+    Ok(locals)
+}
+
+/// A function body's first error on the merged path ([`crate::module::decode_validated`]): whichever
+/// wasmtime meets first while reading it — a malformed instruction, or an ill-typed one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BodyError {
+    Decode(crate::types::DecodeError),
+    Invalid(ValidateError),
+}
+
+/// Decode AND validate one function body in a single pass, an instruction at a time — each checked as
+/// soon as it is read, as wasmtime does (owner, 2026-11-24: "merge the decoding with validation"). So in
+/// a body that is ill-typed early and malformed later the type error is reported, where reading the
+/// whole body first reported the malformed byte. `body` starts at module offset `origin`. Without a
+/// data-count section, an instruction that names a data segment is refused where it stands.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn decode_and_validate_body(
+    module: &Module,
+    ft: &FuncType,
+    decl: &[crate::module::Local],
+    body: &[u8],
+    origin: u32,
+    refs: &[bool],
+    features: &Features,
+    has_data_count: bool,
+) -> Result<Vec<Instr>, BodyError> {
+    let locals = expand_locals(ft, decl, features).map_err(BodyError::Invalid)?;
+    let mut v = FuncValidator::begin(module, features, Some(refs), ft, &locals, origin).map_err(BodyError::Invalid)?;
+    v.no_data_count = !has_data_count;
+    let mut failed: Option<BodyError> = None;
+    let decoded = crate::opcode::decode_body_checked(body, origin as usize, &mut |instr: &Instr| {
+        match v.step(instr) {
+            Ok(()) => true,
+            // "data count section required" stays a decode-stage refusal (as `decode` reports it), at the instruction
+            Err(ValidateError::Decode(DecodeError::DataCountRequired)) => {
+                crate::reader::note_decode_at(origin as usize + instr.offset as usize);
+                failed = Some(BodyError::Decode(DecodeError::DataCountRequired));
+                false
+            }
+            Err(e) => {
+                note_offset(origin.saturating_add(instr.offset));
+                failed = Some(BodyError::Invalid(e));
+                false
+            }
+        }
+    });
+    if let Some(f) = failed {
+        return Err(f);
+    }
+    let ir = decoded.map_err(BodyError::Decode)?;
+    if !v.ctrls.is_empty() {
+        return Err(BodyError::Invalid(ValidateError::ControlUnderflow)); // missing `end`
+    }
+    Ok(ir)
+}
+
+/// wasmparser 0.263's words for an error raised inside a function body, where its raise site noted none:
+/// the ones whose sentence is fixed, and the ones that name the index the instruction itself carries
+/// (`call 7` → "unknown function 7: function index out of bounds"). `say` keeps a site's own words.
+fn default_words(e: &ValidateError, instr: &Instr) {
+    let idx = match &instr.imm {
+        Imm::Func(i) | Imm::Tag(i) | Imm::Data(i) | Imm::Elem(i) | Imm::Local(i) => Some(*i),
+        Imm::MemInit { data, .. } => Some(*data),
+        Imm::TableInit { elem, .. } => Some(*elem),
+        Imm::GcTypeSeg { seg, .. } => Some(*seg),
+        _ => None,
+    };
+    // A heap type names its type index in wasmparser's words ("unknown type 7: …", its `check_heap_type`).
+    let heap = match &instr.imm {
+        Imm::RefType(h) | Imm::RefCast(RefType { heap: h, .. }) => Some(*h),
+        _ => None,
+    };
+    if let (ValidateError::UndefinedType | ValidateError::Decode(DecodeError::IndexOutOfRange), Some(HeapType::Concrete(i) | HeapType::Exact(i))) = (e, heap) {
+        say(|| alloc::format!("unknown type {i}: type index out of bounds"));
+        return;
+    }
+    match (e, idx) {
+        (ValidateError::UndefinedFunc, Some(i)) => say(|| alloc::format!("unknown function {i}: function index out of bounds")),
+        (ValidateError::UndefinedTag, Some(i)) => say(|| alloc::format!("unknown tag {i}: tag index out of bounds")),
+        (ValidateError::UndefinedData, Some(i)) => say(|| alloc::format!("unknown data segment {i}")),
+        (ValidateError::UndefinedElem, Some(i)) => say(|| alloc::format!("unknown elem segment {i}: segment index out of bounds")),
+        (ValidateError::UninitializedLocal, Some(i)) => say(|| alloc::format!("uninitialized local: {i}")),
+        (ValidateError::UndefinedGlobal, _) => say(|| "unknown global: global index out of bounds".into()),
+        (ValidateError::UndefinedType, _) => say(|| "unknown type: type index out of bounds".into()),
+        (ValidateError::UndeclaredFuncRef, _) => say(|| "undeclared function reference".into()),
+        (ValidateError::ImmutableField, _) if instr.op == Op::StructSet => {
+            say(|| "invalid struct modification: struct field is immutable".into());
+        }
+        (ValidateError::ImmutableField, _) => say(|| "invalid array modification: array is immutable".into()),
+        (ValidateError::ImmutableGlobal, _) => say(|| "global is immutable: cannot modify it with `global.set`".into()),
+        (ValidateError::InvalidAlignment, _) if matches!(instr.imm, Imm::Atomic(_)) => {
+            say(|| "atomic instructions must always specify maximum alignment".into());
+        }
+        (ValidateError::InvalidAlignment, _) => {
+            say(|| "invalid memop alignment: alignment must not be larger than natural".into());
+        }
+        _ => {}
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1261,18 +1394,51 @@ struct FuncValidator<'a> {
     local_init: Vec<bool>,
     vals: Vec<StackType>,
     ctrls: Vec<Frame>,
-    /// Instruction count of the body being checked. Bounds `array.new_fixed`'s operand
-    /// count: `n` is an unvalidated `u32`, and in *unreachable* code `pop_expect` yields
-    /// `Unknown` instead of underflowing, so an unbounded loop would spin up to 2^32 times
-    /// on a tiny module. Every operand must be produced by at least one instruction, so a
-    /// valid `n` can never exceed this — bounding by it cannot reject a valid module.
-    body_len: usize,
+    /// The module has no data-count section, and this is the one-pass path, which has not judged that yet
+    /// (`decode` judges it after reading every body): an instruction naming a data segment is refused at
+    /// the point wasmparser refuses it — after the proposal gate and the memory index (review B2).
+    no_data_count: bool,
     /// The body's offset from the start of the module, so a refusal about ONE immediate byte can
     /// report that byte (`Instr::imm_at`, `CallIndirect::table_at`), as wasmtime does.
     body_offset: u32,
 }
 
 impl<'a> FuncValidator<'a> {
+    /// A validator for one body, its implicit outer block already open. Local-init: params and
+    /// defaultable locals start initialized; a non-nullable-ref local starts uninitialized
+    /// (function-references, §3.3.5).
+    #[allow(clippy::too_many_arguments)]
+    fn begin(
+        module: &'a Module,
+        features: &'a Features,
+        refs: Option<&'a [bool]>,
+        ft: &'a FuncType,
+        locals: &'a [V],
+        body_offset: u32,
+    ) -> ValidateResult<Self> {
+        let n_params = ft.params.len();
+        let local_init: Vec<bool> = locals
+            .iter()
+            .enumerate()
+            .map(|(i, t)| i < n_params || !t.is_non_null_ref())
+            .collect();
+        let mut v = FuncValidator {
+            module,
+            features,
+            refs,
+            locals,
+            results: &ft.results,
+            local_init,
+            vals: Vec::new(),
+            ctrls: Vec::new(),
+            body_offset,
+            no_data_count: false,
+        };
+        // The whole body is an implicit block of type [] -> results.
+        v.push_ctrl(FrameKind::Block, Vec::new(), ft.results.clone())?;
+        Ok(v)
+    }
+
     fn push_val_t(&mut self, t: V) {
         self.vals.push(StackType::Val(t));
     }
@@ -1286,23 +1452,32 @@ impl<'a> FuncValidator<'a> {
     }
 
     fn pop_val(&mut self) -> ValidateResult<StackType> {
+        self.pop_val_for(None)
+    }
+    /// Pop one operand, `expect`ed to be of a type (for the words of an empty stack).
+    fn pop_val_for(&mut self, expect: Option<V>) -> ValidateResult<StackType> {
         let top = self.ctrls.last().ok_or(ValidateError::ControlUnderflow)?;
         if self.vals.len() == top.height {
             if top.is_unreachable {
                 return Ok(StackType::Unknown);
             }
+            say(|| {
+                let desc = expect.map_or("a type", V::wat_name);
+                alloc::format!("type mismatch: expected {desc} but nothing on stack")
+            });
             return Err(ValidateError::StackUnderflow);
         }
         Ok(self.vals.pop().unwrap())
     }
     fn pop_expect(&mut self, expect: V) -> ValidateResult<StackType> {
-        let actual = self.pop_val()?;
+        let actual = self.pop_val_for(Some(expect))?;
         if let StackType::Val(t) = actual
             && !subtype_of(self.module, t, expect) {
                 // The one place that knows BOTH types, which is what makes "expected i32, found
                 // i64" possible at all — wasmtime's wording, captured here rather than
                 // reconstructed by a caller that no longer has the operand.
                 note_types(expect, t);
+                say(|| alloc::format!("type mismatch: expected {}, found {}", expect.wat_name(), t.wat_name()));
                 return Err(ValidateError::TypeMismatch);
             }
         Ok(actual)
@@ -1319,13 +1494,27 @@ impl<'a> FuncValidator<'a> {
         let st = self.pop_val()?;
         if let StackType::Val(v) = st
             && !v.is_ref() {
+                say(|| alloc::format!("type mismatch: expected ref but found {}", v.wat_name()));
                 return Err(ValidateError::TypeMismatch);
             }
         Ok(st)
     }
 
+    /// wasmparser's `check_data_segment`: a data-count section is required, then the index must be in range.
+    fn check_data_segment(&self, index: u32) -> ValidateResult<()> {
+        if self.no_data_count {
+            return Err(ValidateError::Decode(DecodeError::DataCountRequired));
+        }
+        if index as usize >= self.module.data.len() {
+            say(|| alloc::format!("unknown data segment {index}"));
+            return Err(ValidateError::UndefinedData);
+        }
+        Ok(())
+    }
+
     fn require_memory(&self, index: u32) -> ValidateResult<()> {
         if index as usize >= self.module.memories.len() {
+            say(|| alloc::format!("unknown memory {index}"));
             return Err(ValidateError::MissingMemory);
         }
         Ok(())
@@ -1389,6 +1578,7 @@ impl<'a> FuncValidator<'a> {
         self.pop_vals(&end)?;
         let frame = self.ctrls.pop().ok_or(ValidateError::ControlUnderflow)?;
         if self.vals.len() != frame.height {
+            say(|| "type mismatch: values remaining on stack at end of block".into());
             return Err(ValidateError::StackHeightMismatch);
         }
         Ok(frame)
@@ -1401,6 +1591,7 @@ impl<'a> FuncValidator<'a> {
 
     fn label_types_at(&self, n: u32) -> ValidateResult<Vec<V>> {
         if n as usize >= self.ctrls.len() {
+            say(|| "unknown label: branch depth too large".into());
             return Err(ValidateError::UnknownLabel);
         }
         let frame = &self.ctrls[self.ctrls.len() - 1 - n as usize];
@@ -1412,10 +1603,10 @@ impl<'a> FuncValidator<'a> {
     }
 
     fn local_at(&self, i: u32) -> ValidateResult<V> {
-        self.locals
-            .get(i as usize)
-            .copied()
-            .ok_or(ValidateError::UndefinedLocal)
+        self.locals.get(i as usize).copied().ok_or_else(|| {
+            say(|| alloc::format!("unknown local {i}: local index out of bounds"));
+            ValidateError::UndefinedLocal
+        })
     }
     /// §3.3.8: a tail call's callee results must satisfy the **enclosing function's** declared
     /// results — the callee returns to *our* caller, so our signature fixes the type.
@@ -1441,11 +1632,10 @@ impl<'a> FuncValidator<'a> {
         Ok(())
     }
     fn table_elem_type(&self, i: u32) -> ValidateResult<V> {
-        self.module
-            .tables
-            .get(i as usize)
-            .map(|t| t.element)
-            .ok_or(ValidateError::UndefinedTable)
+        self.module.tables.get(i as usize).map(|t| t.element).ok_or_else(|| {
+            say(|| alloc::format!("unknown table {i}: table index out of bounds"));
+            ValidateError::UndefinedTable
+        })
     }
 
     /// (pop, push) types of a block signature (§5.3.6).
@@ -1566,7 +1756,13 @@ impl<'a> FuncValidator<'a> {
         }
     }
 
+    /// Validate one instruction. A failure that noted no words of its own gets wasmparser's for its
+    /// kind, from the instruction's own immediates (see [`default_words`]).
     fn step(&mut self, instr: &Instr) -> ValidateResult<()> {
+        self.step_inner(instr).inspect_err(|e| default_words(e, instr))
+    }
+
+    fn step_inner(&mut self, instr: &Instr) -> ValidateResult<()> {
         if self.ctrls.is_empty() {
             return Err(ValidateError::ControlUnderflow); // code after the final `end`
         }
@@ -1760,10 +1956,31 @@ impl<'a> FuncValidator<'a> {
             }
             Op::End => {
                 let frame = self.pop_ctrl()?;
-                // An `if` closed without `else` has an implicit identity else branch: its
-                // params and results must match.
-                if frame.kind == FrameKind::If && frame.start != frame.end {
-                    return Err(ValidateError::TypeMismatch);
+                // An `if` closed without `else` has an implicit empty else branch: its params, left on
+                // the stack, must give its results. Judged as wasmparser judges it (`visit_end` pushes
+                // an `else` frame, then pops the results from the params) — so a param that is a SUBTYPE
+                // of its result is accepted (equality refused `(param (ref $t)) (result (ref null $t))`),
+                // and the refusal is in its words.
+                if frame.kind == FrameKind::If {
+                    let mut stack = frame.start.clone();
+                    for &want in frame.end.iter().rev() {
+                        match stack.pop() {
+                            None => {
+                                say(|| alloc::format!("type mismatch: expected {} but nothing on stack", want.wat_name()));
+                                return Err(ValidateError::TypeMismatch);
+                            }
+                            Some(got) if !subtype_of(self.module, got, want) => {
+                                note_types(want, got);
+                                say(|| alloc::format!("type mismatch: expected {}, found {}", want.wat_name(), got.wat_name()));
+                                return Err(ValidateError::TypeMismatch);
+                            }
+                            Some(_) => {}
+                        }
+                    }
+                    if !stack.is_empty() {
+                        say(|| "type mismatch: values remaining on stack at end of block".into());
+                        return Err(ValidateError::TypeMismatch);
+                    }
                 }
                 self.local_init.copy_from_slice(&frame.init_snapshot);
                 self.push_vals(&frame.end);
@@ -1906,6 +2123,7 @@ impl<'a> FuncValidator<'a> {
                 let t1 = self.pop_val()?;
                 let t2 = self.pop_val()?;
                 if is_ref_stack(t1) || is_ref_stack(t2) {
+                    say(|| "type mismatch: select only takes integral types".into());
                     return Err(ValidateError::TypeMismatch);
                 }
                 let rt = match (t1, t2) {
@@ -1915,6 +2133,7 @@ impl<'a> FuncValidator<'a> {
                         if a == b {
                             t1
                         } else {
+                            say(|| "type mismatch: select operands have different types".into());
                             return Err(ValidateError::TypeMismatch);
                         }
                     }
@@ -1989,8 +2208,9 @@ impl<'a> FuncValidator<'a> {
                 let Imm::TableCopy { dst, src } = instr.imm else {
                     return Err(ValidateError::UnsupportedValidation);
                 };
-                let dt = self.table_elem_type(dst)?;
+                // the source first, then the destination — wasmparser's order
                 let st = self.table_elem_type(src)?;
+                let dt = self.table_elem_type(dst)?;
                 if !subtype_of(self.module, st, dt) {
                     return Err(ValidateError::TypeMismatch);
                 }
@@ -2039,17 +2259,13 @@ impl<'a> FuncValidator<'a> {
                     return Err(ValidateError::UnsupportedValidation);
                 };
                 self.require_memory(mem)?;
-                if data as usize >= self.module.data.len() {
-                    return Err(ValidateError::UndefinedData);
-                }
+                self.check_data_segment(data)?;
                 self.pop_expect(V::I32)?; // n
                 self.pop_expect(V::I32)?; // src offset into the segment
                 self.pop_expect(self.mem_addr_ty(mem))?; // dst address
             }
             Op::DataDrop => {
-                if expect_data(&instr.imm)? as usize >= self.module.data.len() {
-                    return Err(ValidateError::UndefinedData);
-                }
+                self.check_data_segment(expect_data(&instr.imm)?)?;
             }
 
             Op::RefNull => {
@@ -2067,10 +2283,7 @@ impl<'a> FuncValidator<'a> {
                 self.push_val_t(vt);
             }
             Op::RefIsNull => {
-                if let StackType::Val(v) = self.pop_val()?
-                    && !v.is_ref() {
-                        return Err(ValidateError::TypeMismatch);
-                    }
+                self.pop_ref()?;
                 self.push_val_t(V::I32);
             }
             Op::RefFunc => {
@@ -2252,10 +2465,16 @@ impl<'a> FuncValidator<'a> {
                     .module
                     .array_field(type_index)
                     .ok_or(ValidateError::UndefinedType)?;
-                if n as usize > self.body_len {
-                    return Err(ValidateError::StackUnderflow); // see `body_len`
-                }
+                // `n` is the module's u32. In reachable code the pops underflow once the stack is spent; in
+                // unreachable code every pop below the frame's base yields Unknown without popping, so the loop
+                // stops there — linear in the real stack, where it was n per instruction: a 400 KB body of
+                // them took 116 s (review H1, 2026-11-24; it replaces the body-length bound, which made the two
+                // passes disagree and refused what wasm-tools accepts — review B1).
                 for _ in 0..n {
+                    let top = self.ctrls.last().ok_or(ValidateError::ControlUnderflow)?;
+                    if top.is_unreachable && self.vals.len() == top.height {
+                        break;
+                    }
                     self.pop_expect(f.storage.unpacked())?;
                 }
                 self.push_val_t(V::exact_ref(false, RefHeap::Array, type_index));
@@ -2307,9 +2526,7 @@ impl<'a> FuncValidator<'a> {
                     if f.storage.unpacked().is_ref() {
                         return Err(ValidateError::TypeMismatch);
                     }
-                    if seg as usize >= self.module.data.len() {
-                        return Err(ValidateError::UndefinedData);
-                    }
+                    self.check_data_segment(seg)?;
                 } else {
                     if seg as usize >= self.module.elements.len() {
                         return Err(ValidateError::UndefinedElem);
@@ -2391,9 +2608,7 @@ impl<'a> FuncValidator<'a> {
                     if f.storage.unpacked().is_ref() {
                         return Err(ValidateError::TypeMismatch);
                     }
-                    if seg as usize >= self.module.data.len() {
-                        return Err(ValidateError::UndefinedData);
-                    }
+                    self.check_data_segment(seg)?;
                 } else {
                     if seg as usize >= self.module.elements.len() {
                         return Err(ValidateError::UndefinedElem);
@@ -2422,10 +2637,10 @@ impl<'a> FuncValidator<'a> {
                     // A memory-touching SIMD op needs a memory to exist, its memarg index in
                     // range (multi-memory), and its alignment within the natural maximum.
                     let mi = s.mem.memory;
-                    self.require_memory(mi)?;
                     if s.mem.alignment > opcode::simd_natural_align_log2(s.sub) {
                         return Err(ValidateError::InvalidAlignment);
                     }
+                    self.require_memory(mi)?;
                     self.check_mem_offset(mi, s.mem.offset)?;
                     // memory64: the address operand is the memory's index type, not the
                     // `i32` baked into `simd_sig`. `pop[0]` is always the address — pop the
@@ -2455,10 +2670,10 @@ impl<'a> FuncValidator<'a> {
                 }
                 // Every other atomic op touches memory and MUST be naturally aligned — the
                 // alignment is exact here, not a maximum as it is for scalar/SIMD access.
-                self.require_memory(a.mem.memory)?;
                 if a.mem.alignment != opcode::atomic_natural_align_log2(sub) {
                     return Err(ValidateError::InvalidAlignment);
                 }
+                self.require_memory(a.mem.memory)?;
                 self.check_mem_offset(a.mem.memory, a.mem.offset)?;
                 // memory64: the ADDRESS operand (the deepest one) takes the memory's type.
                 let adt = self.mem_addr_ty(a.mem.memory);
@@ -2699,10 +2914,11 @@ impl<'a> FuncValidator<'a> {
             // Loads/stores, memory.size/grow, and the numeric/compare/convert/const ops.
             _ => match &instr.imm {
                 Imm::Mem(ma) => {
-                    self.require_memory(ma.memory)?;
+                    // the alignment first, then the memory — wasmparser's order (`check_memarg`)
                     if ma.alignment > opcode::natural_align_log2(instr.op) {
                         return Err(ValidateError::InvalidAlignment);
                     }
+                    self.require_memory(ma.memory)?;
                     self.check_mem_offset(ma.memory, ma.offset)?;
                     let s = simple_sig(instr.op).ok_or(ValidateError::UnsupportedValidation)?;
                     let at = self.mem_addr_ty(ma.memory);

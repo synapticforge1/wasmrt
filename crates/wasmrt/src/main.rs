@@ -17,7 +17,7 @@ use wasmrt_core::pin::{self, Action, Mode};
 // 🔒 `validate` (the `Features::all()` shorthand) is deliberately NOT imported here: every CLI
 // path judges a module under `flags.features`, and an unqualified `validate` is how two of them
 // came to ignore it.
-use wasmrt_core::validate::{validate_with_features, ValidateError};
+use wasmrt_core::validate::ValidateError;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -1065,30 +1065,17 @@ fn run_wasi_argv(rest: &[String]) -> ExitCode {
 /// Run a loaded WASI command module under `flags`. `decoded` is the module when the caller has already
 /// decoded it (the bare path, to choose a mode): decoding it again cost ~1 ms and a second copy of its
 /// instructions (efficiency review F4, 2026-11-24).
-fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String], decoded: Option<module::Module>) -> ExitCode {
+fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String], parsed: Option<module::Parsed<'_>>) -> ExitCode {
     let path = loaded.path.as_str();
     // 🔒 Authorization BEFORE validation, and before anything is decoded here (`interop.md` §3.2).
     if !verify_gate(loaded, &flags.verify) {
         return ExitCode::FAILURE;
     }
-    let decoded = match decoded {
-        Some(m) => Ok(m),
-        None => module::decode(&loaded.bytes),
-    };
-    let md = match decoded {
-        Ok(m) => m,
-        Err(e) => {
-            // The same report as `run` and the bare path (review P1, 2026-11-23: this one had no offset).
-            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
-            return ExitCode::FAILURE;
-        }
-    };
     // `--features` narrows the language this module is judged against.
     let features = flags.features.unwrap_or_else(Features::all);
-    if let Err(e) = validate_with_features(&md, &features) {
-        eprintln!("wasmrt: {path}: {}", invalidity_report(&e));
+    let Some(md) = load_valid(path, &loaded.bytes, parsed, &features) else {
         return ExitCode::FAILURE;
-    }
+    };
 
     // A CSPRNG that cannot be seeded must fail loudly rather than run predictably.
     let Some(ctx) = wasmrt_core::wasi::WasiCtx::new() else {
@@ -1251,10 +1238,10 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // Decoded here only to ask WHICH MODE this is — the module's exports decide. The gate still
-    // runs before validation, and before anything executes; a summarize that never executes is
-    // never gated at all (§3.2).
-    let md = match module::decode(&loaded.bytes) {
+    // Its structure read here only to ask WHICH MODE this is — the module's exports decide; its bodies
+    // are read when it is validated. The gate still runs before validation, and before anything
+    // executes; a summarize that never executes is never gated at all (§3.2).
+    let md = match module::parse(&loaded.bytes) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
@@ -1262,7 +1249,8 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
         }
     };
     let exports_func = |n: &str| {
-        md.exports
+        md.module()
+            .exports
             .iter()
             .any(|e| e.name == n && matches!(e.ty, Extern::Func(_)))
     };
@@ -1292,7 +1280,7 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
         }
         None if has_start => run_wasi_loaded(&loaded, &flags, &[], Some(md)),
         // Nothing to execute: inspect it, exactly as before, and do not gate.
-        None => summarize_loaded(&loaded, &md, &flags),
+        None => summarize_loaded(&loaded, md, &flags),
     }
 }
 
@@ -1353,8 +1341,13 @@ fn invalidity_report(e: &ValidateError) -> String {
     if let Some(i) = site.func_index {
         s.push_str(&format!(" (function {i})"));
     }
+    // wasmtime's words where the validator knows them (3.0.0: wasmparser's, which wasmtime prints).
+    if let Some(words) = wasmrt_core::validate::last_failure_message() {
+        s.push_str(": ");
+        s.push_str(&words);
+        return s;
+    }
     match (site.expected, site.found) {
-        // Match wasmtime's wording exactly where we have the same facts.
         (Some(exp), Some(found)) => s.push_str(&format!(": type mismatch: expected {exp:?}, found {found:?}")),
         // `ValidateError`'s Display already leads with "invalid module: "; say it once.
         _ => {
@@ -1961,23 +1954,12 @@ fn run_export(rest: &[String]) -> ExitCode {
 
 /// Call `func` on a loaded module. Shared by `wasmrt run` and the bare-path form, which hands in the
 /// module it already decoded (`decoded`; efficiency review F4).
-fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String], decoded: Option<module::Module>) -> ExitCode {
+fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String], parsed: Option<module::Parsed<'_>>) -> ExitCode {
     let path = loaded.path.as_str();
     // 🔒 Authorization first (`interop.md` §3.2).
     if !verify_gate(loaded, &flags.verify) {
         return ExitCode::FAILURE;
     }
-    let decoded = match decoded {
-        Some(m) => Ok(m),
-        None => module::decode(&loaded.bytes),
-    };
-    let module = match decoded {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
-            return ExitCode::FAILURE;
-        }
-    };
     // §4.5.1: instantiation is defined only for a **valid** module, so nothing executes before
     // validation. This path used to skip it — `wasmrt run` would happily execute an ill-typed
     // module and print a plausible answer, while `wasmrt wasi` next door refused the same bytes.
@@ -1988,10 +1970,9 @@ fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String], 
     // accepted here and silently dropped — measured, a SIMD module ran under `mvp` and printed
     // its answer. **Every path that judges a module judges it under the configured language.**
     let features = flags.features.unwrap_or_else(Features::all);
-    if let Err(e) = validate_with_features(&module, &features) {
-        eprintln!("wasmrt: {path}: {}", invalidity_report(&e));
+    let Some(module) = load_valid(path, &loaded.bytes, parsed, &features) else {
         return ExitCode::FAILURE;
-    }
+    };
     // Resolve the export's signature so args/results can be typed.
     let Some(sig) = module.exports.iter().find_map(|e| match &e.ty {
         Extern::Func(ft) if e.name == func => Some((e.index, ft.clone())),
@@ -2083,21 +2064,62 @@ fn type_name(ty: ValType) -> &'static str {
 }
 
 /// Summarize an already-loaded, already-decoded module — the bare-path form has both in hand.
-fn summarize_loaded(loaded: &Loaded, md: &Module, flags: &HostFlags) -> ExitCode {
-    if print_summary(&loaded.path, md, &flags.features.unwrap_or_else(Features::all)) {
+fn summarize_loaded(loaded: &Loaded, parsed: module::Parsed<'_>, flags: &HostFlags) -> ExitCode {
+    let features = flags.features.unwrap_or_else(Features::all);
+    // The summary describes the module's structure, and is printed for an invalid module too; a
+    // malformed body is a decode failure, with no summary, as before the one-pass read.
+    let structure = parsed.module().clone();
+    let verdict = parsed.validate(&features);
+    let ok = match verdict {
+        Err(module::LoadError::Decode(e)) => {
+            eprintln!("wasmrt: {}: decode failed{}: {e}", loaded.path, at_offset());
+            return ExitCode::FAILURE;
+        }
+        Err(module::LoadError::Invalid(e)) => print_summary(&loaded.path, &structure, Err(e)),
+        Ok(m) => print_summary(&loaded.path, &m, Ok(())),
+    };
+    if ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
 }
 
+/// Decode and validate a loaded module in one pass (`module::decode_validated`, as wasmtime reads one),
+/// finishing `parsed` when the caller has read its structure already. Reports a refusal and returns
+/// `None`: a malformed module as "decode failed at offset N", an invalid one in wasmtime's words.
+fn load_valid(path: &str, bytes: &[u8], parsed: Option<module::Parsed<'_>>, features: &Features) -> Option<Module> {
+    let parsed = match parsed {
+        Some(p) => p,
+        None => match module::parse(bytes) {
+            Ok(p) => p,
+            Err(e) => {
+                // The same report on every path (review P1, 2026-11-23: one had no offset).
+                eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
+                return None;
+            }
+        },
+    };
+    match parsed.validate(features) {
+        Ok(m) => Some(m),
+        Err(module::LoadError::Decode(e)) => {
+            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
+            None
+        }
+        Err(module::LoadError::Invalid(e)) => {
+            eprintln!("wasmrt: {path}: {}", invalidity_report(&e));
+            None
+        }
+    }
+}
+
 
 /// Print the summary and the validation verdict; `true` iff the module VALIDATED.
 ///
-/// 🔒 **Judged under `features`, not under everything wasmrt can do.** This called `validate(m)`
+/// 🔒 **Judged under `--features`, not under everything wasmrt can do** (the caller validates). This called `validate(m)`
 /// — `Features::all()` — so `wasmrt --features mvp simd.wasm` printed `validation OK` for a
 /// module full of `v128`. §4.10 again: parsing a flag proves it was ACCEPTED, not APPLIED.
-fn print_summary(path: &str, m: &Module, features: &Features) -> bool {
+fn print_summary(path: &str, m: &Module, verdict: Result<(), ValidateError>) -> bool {
     let defined_funcs = m.functions.len();
     let imported_funcs = m.imported_func_count() as usize;
     println!("{path}: WebAssembly module (version {})", m.version);
@@ -2130,7 +2152,7 @@ fn print_summary(path: &str, m: &Module, features: &Features) -> bool {
             println!("    {kind:<7} {}", e.name);
         }
     }
-    match validate_with_features(m, features) {
+    match verdict {
         Ok(()) => {
             println!("  validation OK");
             true

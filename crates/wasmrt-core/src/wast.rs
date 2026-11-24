@@ -634,8 +634,16 @@ impl Runner {
     /// merits rather than waiting for the snapshot refresh to hide it.
     fn build_to_validation(&mut self, node: &Sexpr) -> Result<(), BuildErr> {
         let bytes = Self::module_binary(node).map_err(BuildErr::Assemble)?;
-        let md = crate::module::decode(&bytes).map_err(BuildErr::Decode)?;
-        crate::validate::validate_with_features(&md, &self.features).map_err(BuildErr::Validate)
+        self.load(&bytes).map(drop)
+    }
+
+    /// Decode and validate `bytes` in one pass under the runner's features (`module::decode_validated`,
+    /// as wasmtime reads a module): a malformed module is a `Decode` error, an invalid one `Validate`.
+    fn load(&self, bytes: &[u8]) -> Result<Module, BuildErr> {
+        crate::module::decode_validated(bytes, &self.features).map_err(|e| match e {
+            crate::module::LoadError::Decode(e) => BuildErr::Decode(e),
+            crate::module::LoadError::Invalid(e) => BuildErr::Validate(e),
+        })
     }
 
     /// decode → validate → link → instantiate, from module bytes.
@@ -644,8 +652,7 @@ impl Runner {
     /// definition **again** — instantiation is generative, and a second instance must get its
     /// own globals, tables and memories rather than a handle to the first.
     fn instantiate_bytes(&mut self, bytes: &[u8]) -> Result<InstanceId, BuildErr> {
-        let md = crate::module::decode(bytes).map_err(BuildErr::Decode)?;
-        crate::validate::validate_with_features(&md, &self.features).map_err(BuildErr::Validate)?;
+        let md = self.load(bytes)?;
         let imports = self.resolve_imports(&md)?;
         self.store
             .instantiate(md, imports)
@@ -698,9 +705,7 @@ impl Runner {
                 // point of `memory_max.wast` — passed every file, because those modules are all
                 // definitions. Found by a mutation no gate caught.
                 Ok(bytes) => {
-                    let checked = crate::module::decode(&bytes)
-                        .map_err(BuildErr::Decode)
-                        .and_then(|md| crate::validate::validate_with_features(&md, &self.features).map_err(BuildErr::Validate));
+                    let checked = self.load(&bytes).map(drop);
                     match checked {
                         Ok(()) => {
                             if let Some(n) = name {

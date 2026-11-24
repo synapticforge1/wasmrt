@@ -689,6 +689,22 @@ struct Decoder {
     data_section: bool,
     /// The first function body's error and its offset, held until the module's structure is read.
     body_error: Option<(DecodeError, Option<usize>)>,
+    /// The merged path ([`decode_validated`]): each body is located, not decoded; its instructions are read
+    /// later, each validated as it is read.
+    defer_bodies: bool,
+    /// Merged path: where each defined function's instructions are in the module, `(start, length)`.
+    body_spans: Vec<(usize, usize)>,
+    /// Merged path: the first code entry whose LOCALS failed to decode — its index, error and offset —
+    /// reported in function order, after any error in the bodies before it.
+    locals_error: Option<(usize, DecodeError, Option<usize>)>,
+}
+
+/// What the structure-only read leaves for [`decode_validated`]'s body pass.
+#[derive(Default)]
+struct Deferred {
+    body_spans: Vec<(usize, usize)>,
+    locals_error: Option<(usize, DecodeError, Option<usize>)>,
+    has_data_count: bool,
 }
 
 /// wasmtime's effective type size (adopted 2026-11-24, the limits study: 100,000 imports of a 999-param type made a
@@ -737,12 +753,124 @@ pub(crate) fn bounded(max: usize, what: &'static str) -> impl FnOnce(u32, usize)
 pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
     crate::reader::reset_decode_at();
     let mut r = Reader::new(bytes);
-    let res = decode_from(&mut r);
+    let res = decode_from(&mut r, None);
     if let Err(e) = &res {
         // The least precise note, so the last resort: where the module-level reader stood.
         crate::reader::note_failure(&r, e);
     }
     res
+}
+
+/// Why [`decode_validated`] refused a module: its bytes are malformed, or it is invalid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoadError {
+    /// Malformed: what [`decode`] refuses. Its offset: [`last_decode_offset`].
+    Decode(DecodeError),
+    /// Invalid: what [`crate::validate::validate_with_features`] refuses. Where:
+    /// [`crate::validate::last_failure_site`].
+    Invalid(crate::validate::ValidateError),
+}
+
+impl core::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            LoadError::Decode(e) => write!(f, "decode failed: {e}"),
+            LoadError::Invalid(e) => e.fmt(f),
+        }
+    }
+}
+
+/// Decode AND validate a module in one pass over its function bodies, as wasmtime reads one — 🆕 3.0.0
+/// (owner, 2026-11-24: "merge the decoding with validation"): [`parse`], then [`Parsed::validate`].
+/// Accepts exactly the modules that [`decode`] followed by [`crate::validate::validate_with_features`]
+/// accepts; where a module has more than one fault, it reports the one wasmtime reports.
+pub fn decode_validated(bytes: &[u8], features: &crate::features::Features) -> Result<Module, LoadError> {
+    parse(bytes).map_err(LoadError::Decode)?.validate(features)
+}
+
+/// Read a module's STRUCTURE — every section, with each function body located but not yet decoded —
+/// for [`Parsed::validate`] to finish. 🆕 3.0.0. Between the two a caller can read the module's
+/// imports and exports ([`Parsed::module`]), and decide whether to go on (an authorization check that
+/// must come before validation, `interop.md` §3.2). A malformed structure is refused here; a malformed
+/// body, by [`Parsed::validate`], in function order.
+pub fn parse(bytes: &[u8]) -> DecodeResult<Parsed<'_>> {
+    crate::reader::reset_decode_at();
+    crate::validate::reset_failure();
+    let mut r = Reader::new(bytes);
+    let mut deferred = Deferred::default();
+    match decode_from(&mut r, Some(&mut deferred)) {
+        Ok(module) => Ok(Parsed { bytes, module, deferred }),
+        Err(e) => {
+            crate::reader::note_failure(&r, &e);
+            Err(e)
+        }
+    }
+}
+
+/// A module whose structure [`parse`] has read; its function bodies are read by [`Parsed::validate`].
+pub struct Parsed<'a> {
+    bytes: &'a [u8],
+    module: Module,
+    deferred: Deferred,
+}
+
+impl core::fmt::Debug for Parsed<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Parsed").field("module", &self.module).finish_non_exhaustive()
+    }
+}
+
+impl Parsed<'_> {
+    /// The module as far as it is read: everything but the function bodies' instructions (each
+    /// [`Code::ir`] is empty until [`Parsed::validate`]). For reading its imports, exports and sections
+    /// only: it is NOT validated and has no code, so a copy of it must never be instantiated — that is
+    /// what [`Parsed::validate`] returns.
+    #[must_use]
+    pub fn module(&self) -> &Module {
+        &self.module
+    }
+
+    /// Validate the module against `features`: first every section outside the code, then each
+    /// function body, decoded one instruction at a time and each instruction checked as soon as it is
+    /// read — so the first fault reported is the one wasmtime reports. The module, valid, with its
+    /// bodies decoded; or why not.
+    pub fn validate(self, features: &crate::features::Features) -> Result<Module, LoadError> {
+        let Parsed { bytes, mut module, mut deferred } = self;
+        let refs = crate::validate::module_checks(&module, features).map_err(LoadError::Invalid)?;
+        let first_import = module.imported_func_count();
+        for k in 0..module.code.len() {
+            if let Some((_, e, at)) = deferred.locals_error.take_if(|(at_k, ..)| *at_k == k) {
+                crate::reader::reset_decode_at();
+                if let Some(at) = at {
+                    crate::reader::note_decode_at(at);
+                }
+                return Err(LoadError::Decode(e));
+            }
+            let (start, len) = deferred.body_spans[k];
+            let ft = module
+                .func_sig(module.functions[k])
+                .ok_or(LoadError::Invalid(crate::validate::ValidateError::UndefinedType))?;
+            let origin = u32::try_from(start).unwrap_or(u32::MAX);
+            let ir = crate::validate::decode_and_validate_body(
+                &module,
+                &ft,
+                &module.code[k].locals,
+                &bytes[start..start + len],
+                origin,
+                &refs,
+                features,
+                deferred.has_data_count,
+            )
+            .map_err(|e| match e {
+                crate::validate::BodyError::Decode(e) => LoadError::Decode(e),
+                crate::validate::BodyError::Invalid(e) => {
+                    LoadError::Invalid(crate::validate::located(e, first_import + k as u32))
+                }
+            })?;
+            module.code[k].ir = ir;
+        }
+        Ok(module)
+    }
 }
 
 /// The byte offset, from the start of the module, of the last [`decode`] failure on this thread —
@@ -754,7 +882,7 @@ pub fn last_decode_offset() -> Option<u32> {
     crate::reader::decode_at().and_then(|p| u32::try_from(p).ok())
 }
 
-fn decode_from(r: &mut Reader) -> DecodeResult<Module> {
+fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<Module> {
     if r.read_bytes(4)? != MAGIC {
         return Err(DecodeError::BadMagic);
     }
@@ -763,7 +891,7 @@ fn decode_from(r: &mut Reader) -> DecodeResult<Module> {
         return Err(DecodeError::UnsupportedVersion(version));
     }
 
-    let mut d = Decoder::default();
+    let mut d = Decoder { defer_bodies: deferred.is_some(), ..Decoder::default() };
     let mut sections: Vec<Section> = Vec::new();
     let mut functions: Vec<u32> = Vec::new();
     let mut tags: Vec<u32> = Vec::new();
@@ -964,6 +1092,12 @@ fn decode_from(r: &mut Reader) -> DecodeResult<Module> {
         // data section, so its absence is a decode-stage failure rather than a validation one.
         // Only reachable now that bodies are decoded here — the check needs the instructions.
         return Err(DecodeError::DataCountRequired);
+    }
+
+    if let Some(out) = deferred {
+        out.body_spans = core::mem::take(&mut d.body_spans);
+        out.locals_error = d.locals_error.take();
+        out.has_data_count = data_count.is_some();
     }
 
     Ok(Module {
@@ -2202,11 +2336,27 @@ fn decode_code_section(d: &mut Decoder, r: &mut Reader, payload_base: usize, tru
             Ok(l) => l,
             Err(e) => {
                 crate::reader::note_failure(&er, &e);
-                hold(d, e);
+                if d.defer_bodies {
+                    // reported in function order, by `decode_validated`'s body pass
+                    if d.locals_error.is_none() {
+                        d.locals_error = Some((k, e, crate::reader::decode_at()));
+                    }
+                    crate::reader::reset_decode_at();
+                    d.body_spans.push((0, 0));
+                } else {
+                    hold(d, e);
+                }
                 list.push(Code { locals: Vec::new(), ir: Vec::new(), body_offset: 0 });
                 continue;
             }
         };
+        if d.defer_bodies {
+            // Located, not decoded: `decode_validated` reads it, validating as it reads.
+            let start = payload_base + entry_start + er.pos();
+            d.body_spans.push((start, entry_len - er.pos()));
+            list.push(Code { locals, ir: Vec::new(), body_offset: u32::try_from(start).unwrap_or(u32::MAX) });
+            continue;
+        }
         // Decode the body HERE, borrowing the entry rather than copying it out first. A malformed
         // instruction stream is a decode error by the spec, and deferring it meant `decode`
         // accepted modules the validator then rejected — the wrong stage, and measurably so

@@ -38,9 +38,36 @@ README). Refusals now name the byte wasmtime names.
   memory count, subtype depth, supertype count and type-index size are not enforced: measured, they
   protect nothing in wasmrt. The values are wasmparser's, credited in NOTICE and
   `third_party/LICENSES.md`.
+- **Decoding and validation in one pass**, as wasmtime reads a module: `module::decode_validated`
+  (or `module::parse`, then `Parsed::validate`, with the module's structure readable in between)
+  reads the structure, validates every section outside the code, then decodes each function body
+  one instruction at a time, checking each instruction as soon as it is read. It accepts exactly
+  what `decode` then `validate_with_features` accepts (both remain); where a module has more than
+  one fault, it reports the one wasmtime reports — in a body ill-typed at one byte and malformed
+  at the next, the type error. The CLI, the C ABI and the `.wast` runner use it. On 4,000 one-byte
+  corruptions of the behaviour corpus, wasmrt's refusal names wasmtime's offset in 3,165 (was
+  3,056); loading takes the same time or a little less.
+- **Validation refusals in wasmtime's words**: `type mismatch: expected i32 but nothing on stack`,
+  `unknown table 3: table index out of bounds`, `unknown local 5: local index out of bounds`,
+  `type mismatch: values remaining on stack at end of block`, `uninitialized local: 0`,
+  `select operands have different types` and wasmparser's other sentences for the operand stack,
+  unknown indices, immutable globals and fields, and alignment, with types named as wasmparser
+  names them (`(ref null $type)`, `(ref func)`). They were wasmrt's own (`StackUnderflow`,
+  `UndefinedTable`); a refusal wasmrt has no sentence for still names its kind.
+  `validate::last_failure_message` returns them; the CLI and the C ABI print them. A memory access
+  is judged on its alignment before its memory, `table.copy` on its source table before its
+  destination, and a data-segment instruction without a data-count section after its proposal and
+  its memory, as wasmparser judges them. Of the 3,165 corruptions above refused at wasmtime's
+  offset, 3,156 are now refused in its words too (2,988 after the one-pass change, 2,964 before it).
 
 ### Fixed
 
+- **Two valid modules were refused, and one check was quadratic.** An `if` without `else` whose
+  parameter is a subtype of its result (`(param (ref $t)) (result (ref null $t))`) was refused
+  (the types had to be equal); `array.new_fixed` in unreachable code naming more operands than the
+  body had instructions was refused. Both are accepted, as wasm-tools accepts them. And
+  `array.new_fixed` in unreachable code no longer counts through every operand it names: a 400 KB
+  body of them took minutes to validate, and takes 0.14 s.
 - **The CLI never destroys a file it was given.** `wasmrt pin --db` treated a pin DB it could not
   read (a UTF-16 file, a permission error) as empty and overwrote it, and concurrent `pin` runs could
   drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the

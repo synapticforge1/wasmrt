@@ -741,28 +741,32 @@ capi! {
         let Some(buf) = (unsafe { ffi::slice(bytes, len) }) else {
             return err("wasmrt_module_new: bytes is NULL");
         };
-        let md = match wasmrt_core::module::decode(buf) {
+        // Decoded and validated in one pass, as wasmtime reads a module (3.0.0), so the first fault
+        // reported is the one wasmtime reports.
+        let md = match wasmrt_core::module::decode_validated(buf, &e.features) {
             Ok(m) => m,
             // 3.0.0 (review I1): the byte offset, as the CLI and wasmtime report it.
-            Err(d) => {
+            Err(wasmrt_core::module::LoadError::Decode(d)) => {
                 let at = wasmrt_core::module::last_decode_offset().map_or_else(String::new, |o| format!(" at offset {o}"));
                 return err(format!("decode failed{at}: {d}"));
             }
+            Err(wasmrt_core::module::LoadError::Invalid(v)) => {
+                // The CLI's report, in wasmtime's words where the facts are the same (`invalidity_report` in the
+                // CLI): the offset, and for a type mismatch the two types (review P4, 2026-11-23).
+                let site = wasmrt_core::validate::last_failure_site();
+                let msg = v.to_string();
+                let what = match (wasmrt_core::validate::last_failure_message(), site.expected, site.found) {
+                    // wasmtime's words where the validator knows them (3.0.0)
+                    (Some(words), _, _) => words,
+                    (None, Some(exp), Some(found)) => format!("type mismatch: expected {exp:?}, found {found:?}"),
+                    _ => String::from(msg.strip_prefix("invalid module: ").unwrap_or(&msg)),
+                };
+                return err(match site.offset {
+                    Some(o) => format!("invalid module at offset {o}: {what}"),
+                    None => format!("invalid module: {what}"),
+                });
+            }
         };
-        if let Err(v) = wasmrt_core::validate::validate_with_features(&md, &e.features) {
-            // The CLI's report, in wasmtime's words where the facts are the same (`invalidity_report` in the
-            // CLI): the offset, and for a type mismatch the two types (review P4, 2026-11-23).
-            let site = wasmrt_core::validate::last_failure_site();
-            let msg = v.to_string();
-            let what = match (site.expected, site.found) {
-                (Some(exp), Some(found)) => format!("type mismatch: expected {exp:?}, found {found:?}"),
-                _ => String::from(msg.strip_prefix("invalid module: ").unwrap_or(&msg)),
-            };
-            return err(match site.offset {
-                Some(o) => format!("invalid module at offset {o}: {what}"),
-                None => format!("invalid module: {what}"),
-            });
-        }
         let export_names = md.exports.iter().map(|x| cstring(&x.name)).collect();
         let import_modules = md.imports.iter().map(|x| cstring(&x.module)).collect();
         let import_names = md.imports.iter().map(|x| cstring(&x.name)).collect();
@@ -789,11 +793,7 @@ capi! {
         let Some(e) = (unsafe { ffi::opt_ref(ep.cast_const()) }) else { return false };
         #[allow(unsafe_code, reason = "borrowing a caller-sized byte range")]
         let Some(buf) = (unsafe { ffi::slice(bytes, len) }) else { return false };
-        wasmrt_core::module::decode(buf)
-            .ok()
-            .is_some_and(|md| {
-                wasmrt_core::validate::validate_with_features(&md, &e.features).is_ok()
-            })
+        wasmrt_core::module::decode_validated(buf, &e.features).is_ok()
     }
 }
 

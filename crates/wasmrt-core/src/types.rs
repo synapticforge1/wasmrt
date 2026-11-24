@@ -396,6 +396,58 @@ impl ValType {
         )
     }
 
+    /// This type as wasmparser names it in an error (`RefType::wat`, wasmparser 0.263): `i32`, `funcref`,
+    /// `(ref func)`, a concrete one `(ref null $type)` — its index left out, as wasmtime leaves it out.
+    #[must_use]
+    pub(crate) fn wat_name(self) -> &'static str {
+        match self.0 {
+            0x7f => return "i32",
+            0x7e => return "i64",
+            0x7d => return "f32",
+            0x7c => return "f64",
+            0x7b => return "v128",
+            _ => {}
+        }
+        let nullable = !self.is_non_null_ref();
+        if self.is_concrete() {
+            return match (nullable, self.is_exact()) {
+                (true, false) => "(ref null $type)",
+                (false, false) => "(ref $type)",
+                (true, true) => "(ref null (exact $type))",
+                (false, true) => "(ref (exact $type))",
+            };
+        }
+        if !self.is_ref() {
+            return "unknown type";
+        }
+        match (nullable, self.ref_heap()) {
+            (true, RefHeap::Func) => "funcref",
+            (true, RefHeap::Extern) => "externref",
+            (true, RefHeap::Any) => "anyref",
+            (true, RefHeap::None) => "nullref",
+            (true, RefHeap::NoExtern) => "nullexternref",
+            (true, RefHeap::NoFunc) => "nullfuncref",
+            (true, RefHeap::Eq) => "eqref",
+            (true, RefHeap::Struct) => "structref",
+            (true, RefHeap::Array) => "arrayref",
+            (true, RefHeap::I31) => "i31ref",
+            (true, RefHeap::Exn) => "exnref",
+            (true, RefHeap::NoExn) => "nullexnref",
+            (false, RefHeap::Func) => "(ref func)",
+            (false, RefHeap::Extern) => "(ref extern)",
+            (false, RefHeap::Any) => "(ref any)",
+            (false, RefHeap::None) => "(ref none)",
+            (false, RefHeap::NoExtern) => "(ref noextern)",
+            (false, RefHeap::NoFunc) => "(ref nofunc)",
+            (false, RefHeap::Eq) => "(ref eq)",
+            (false, RefHeap::Struct) => "(ref struct)",
+            (false, RefHeap::Array) => "(ref array)",
+            (false, RefHeap::I31) => "(ref i31)",
+            (false, RefHeap::Exn) => "(ref exn)",
+            (false, RefHeap::NoExn) => "(ref noexn)",
+        }
+    }
+
     /// True for a non-nullable reference (a non-defaultable local type).
     #[must_use]
     pub fn is_non_null_ref(self) -> bool {

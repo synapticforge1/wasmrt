@@ -1115,6 +1115,32 @@ fn read_try_table(r: &mut Reader) -> DecodeResult<Imm> {
     }))
 }
 
+/// [`decode_body_at`] with each instruction handed to `hook` as soon as it is read; `false` stops the
+/// read, returning the instructions so far (the merged decode + validate path, `module::decode_validated`).
+pub(crate) fn decode_body_checked(body: &[u8], origin: usize, hook: &mut dyn FnMut(&Instr) -> bool) -> DecodeResult<Vec<Instr>> {
+    let mut r = Reader::with_origin(body, origin);
+    let mut cur = r.abs_pos();
+    let mut stopped = false;
+    let res = decode_expr_from(&mut r, &mut cur, false, Some(&mut |i: &Instr| {
+        let go = hook(i);
+        stopped = !go;
+        go
+    }));
+    if let Err(e) = &res {
+        note_expr_failure(&r, cur, e);
+    }
+    let mut list = res?;
+    if stopped {
+        return Ok(list);
+    }
+    if !r.at_end() {
+        crate::reader::note_decode_at(r.abs_pos());
+        return Err(DecodeError::UnbalancedEnd);
+    }
+    list.shrink_to_fit();
+    Ok(list)
+}
+
 /// Decode a function body's raw bytes into a flat instruction list. Nesting and branch
 /// targets are left to validation. Owned immediates are freed when the `Vec` drops.
 ///
@@ -1174,24 +1200,46 @@ pub(crate) fn decode_const_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
 
 fn decode_expr_mode(r: &mut Reader, is_const: bool) -> DecodeResult<Vec<Instr>> {
     let mut cur = r.abs_pos();
-    let res = decode_expr_from(r, &mut cur, is_const);
+    let res = decode_expr_from(r, &mut cur, is_const, None);
     if let Err(e) = &res {
-        match e {
-            // wasmtime reports these at the INSTRUCTION
-            DecodeError::MalformedFlag(_) | DecodeError::UnknownSubopcode { .. } | DecodeError::SimdIndexOutOfBounds => {
-                crate::reader::note_decode_at(cur);
-            }
-            // …this just after its opcode byte
-            DecodeError::OutsideBlock { .. } => crate::reader::note_decode_at(cur + 1),
-            DecodeError::MissingEnd | DecodeError::ExprFramesRemain => crate::reader::note_decode_at(r.abs_pos()),
-            other => crate::reader::note_failure(r, other),
-        }
+        note_expr_failure(r, cur, e);
     }
     res
 }
 
-fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeResult<Vec<Instr>> {
+/// Note where wasmtime reports an expression's decode failure `e` (`cur`: the instruction being read).
+fn note_expr_failure(r: &Reader, cur: usize, e: &DecodeError) {
+    match e {
+        // wasmtime reports these at the INSTRUCTION
+        DecodeError::MalformedFlag(_) | DecodeError::UnknownSubopcode { .. } | DecodeError::SimdIndexOutOfBounds => {
+            crate::reader::note_decode_at(cur);
+        }
+        // …this just after its opcode byte
+        DecodeError::OutsideBlock { .. } => crate::reader::note_decode_at(cur + 1),
+        DecodeError::MissingEnd | DecodeError::ExprFramesRemain => crate::reader::note_decode_at(r.abs_pos()),
+        other => crate::reader::note_failure(r, other),
+    }
+}
+
+fn decode_expr_from(
+    r: &mut Reader,
+    cur: &mut usize,
+    is_const: bool,
+    mut hook: Option<&mut dyn FnMut(&Instr) -> bool>,
+) -> DecodeResult<Vec<Instr>> {
     let mut list: Vec<Instr> = Vec::new();
+    // Each instruction, once read, is handed to `hook` (the merged path's validator): `false` stops the
+    // read there, and the list so far is returned — the hook holds the reason.
+    macro_rules! emit {
+        ($i:expr) => {{
+            list.push($i);
+            if let Some(h) = hook.as_mut() {
+                if !h(list.last().expect("just pushed")) {
+                    return Ok(list);
+                }
+            }
+        }};
+    }
     // The structures open inside the expression, innermost last (see [`control`]); empty — and so never
     // allocated — for a flat expression such as almost every constant one.
     let mut frames: Vec<u8> = Vec::new();
@@ -1224,7 +1272,7 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeRe
             };
             let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
             let imm = read_prefixed_immediate(&mut *r, op, nullable)?;
-            list.push(Instr { offset: at, op, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
+            emit!(Instr { offset: at, op, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
             continue;
         }
 
@@ -1232,7 +1280,7 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeRe
             let sub = r.read_var_u32()?;
             let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
             let i = decode_simd(&mut *r, sub)?;
-            list.push(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
+            emit!(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
             continue;
         }
 
@@ -1240,7 +1288,7 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeRe
             let sub = r.read_var_u32()?;
             let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
             let i = decode_atomic(&mut *r, sub)?;
-            list.push(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
+            emit!(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
             continue;
         }
 
@@ -1313,7 +1361,7 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeRe
             ImmKind::Unsupported => return Err(DecodeError::IllegalOpcode(b0)),
         };
 
-        list.push(Instr { op, offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
+        emit!(Instr { op, offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
     }
 
     // An `expr` is terminated by its matching `end` (§5.4.9); the loop above exits only when that

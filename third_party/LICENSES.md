@@ -77,17 +77,23 @@ allowed, and did we document it?).
 
 Newest first. Copy the template below for each future adopted component.
 
-### bytecodealliance/wasm-tools `wasmparser` — implementation-limit values (2026-11-24)
+### bytecodealliance/wasm-tools `wasmparser` — implementation-limit values and error wording (2026-11-24)
 - **Source:** https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser
-- **Version / commit:** crate `wasmparser` 0.263.0 (crates.io), `src/limits.rs`.
+- **Version / commit:** crate `wasmparser` 0.263.0 (crates.io): `src/limits.rs`; the error sentences of
+  its decoder (`src/binary_reader.rs`, `src/readers/`) and validator (`src/validator/operators.rs`,
+  `src/validator/core.rs`); `RefType::wat` (`src/readers/core/types.rs`).
 - **License (SPDX):** `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` (the crate's `license` field,
   confirmed against its licence files); **used under MIT**. Copyright notice retained: *Copyright 2017
   Mozilla Foundation* (the header of `limits.rs`).
 - **License file:** `third_party/wasmparser/LICENSE-MIT` (verbatim). The crate ships no `NOTICE` file.
 - **What we reused:** DATA, not code: the limit values (the counts, sizes and depths wasmtime refuses
-  past), their order, and the error wording wasmparser reports for them.
+  past), their order, and the error wording wasmparser reports for them; the sentences it reports a
+  malformed or invalid module in (`type mismatch: expected i32 but nothing on stack`, `unknown table 3:
+  table index out of bounds`, …), the names it gives types in them (`RefType::wat`), and the order of a
+  few checks (a memarg's alignment before its memory; `table.copy`'s source before its destination).
 - **Where it lives in wasmrt:** `crates/wasmrt-core/src/limits.rs` (compiled into every binary); the
-  checks that use it are wasmrt's own (`module.rs`, `opcode.rs`).
+  sentences in `validate.rs`, `types.rs` (`DecodeError`'s Display, `ValType::wat_name`), `module.rs`,
+  `opcode.rs` and `reader.rs`. The checks that use them are wasmrt's own.
 - **Modifications:** renamed without the `MAX_WASM_` prefix, given wasmrt's types, and a measured subset
   kept (owner, 2026-11-24). The file's header says so.
 - **Obligations satisfied:** [x] license copied  [x] NOTICE (none upstream; attribution in ours)

@@ -29,6 +29,7 @@ source file, as required by Section 4(b).
 Incorporated components (see third_party/LICENSES.md for the full ledger):
 
   * bytecodealliance/wasm-tools wasmparser — implementation-limit values
+    and error wording
 
     Copyright 2017 Mozilla Foundation
     Used under the MIT license, one of the three wasmparser offers
@@ -37,7 +38,11 @@ Incorporated components (see third_party/LICENSES.md for the full ledger):
     The limit values in crates/wasmrt-core/src/limits.rs (the counts, sizes
     and depths wasmtime refuses past), and the error wording reported for
     them, are wasmparser's, renamed and given wasmrt's types; the file
-    carries this attribution and a change note.
+    carries this attribution and a change note. So are the sentences
+    wasmrt reports a malformed or invalid module in, the names it gives
+    value and reference types in them (crates/wasmrt-core/src/validate.rs,
+    types.rs, module.rs, opcode.rs, reader.rs), and the order in which a
+    few checks are made, all so that wasmrt's refusals read as wasmtime's.
     wasmparser ships no NOTICE file of its own.
 
   * WebAssembly/wabt — instruction-table data
