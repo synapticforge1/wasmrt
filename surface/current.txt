@@ -474,6 +474,7 @@ rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::Module
@@ -534,6 +535,7 @@ rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::Module
@@ -596,6 +598,7 @@ rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::Module
@@ -683,9 +686,11 @@ rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Module
+rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Parsed<'_>
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::Section
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::StorageType
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::TableType
@@ -726,6 +731,7 @@ rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::features::Feature
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::features::IncoherentFeatures
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::interp::Trap
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::linker::LinkError
+rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::pin::ParseError
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::sexpr::ParseError
 rust:wasmrt-core	impl core::fmt::Display for wasmrt_core::types::DecodeError
@@ -802,6 +808,7 @@ rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::Module
@@ -871,6 +878,7 @@ rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::Module
@@ -938,6 +946,7 @@ rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module:
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::Module
@@ -1000,6 +1009,7 @@ rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::Module
@@ -1074,6 +1084,7 @@ rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::FuncType
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::Module
@@ -1148,6 +1159,7 @@ rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::FuncTyp
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::Module
@@ -1217,6 +1229,7 @@ rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::m
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::Module
@@ -1286,6 +1299,7 @@ rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::modu
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::GlobalType
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::Import
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::Limits
+rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::LoadError
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::Local
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::Module
@@ -1347,6 +1361,7 @@ rust:wasmrt-core	impl wasmrt_core::module::CompType
 rust:wasmrt-core	impl wasmrt_core::module::Extern
 rust:wasmrt-core	impl wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl wasmrt_core::module::Module
+rust:wasmrt-core	impl wasmrt_core::module::Parsed<'_>
 rust:wasmrt-core	impl wasmrt_core::module::StorageType
 rust:wasmrt-core	impl wasmrt_core::opcode::Op
 rust:wasmrt-core	impl wasmrt_core::pin::Db
@@ -1365,17 +1380,24 @@ rust:wasmrt-core	impl<'a> !core::panic::unwind_safe::UnwindSafe for wasmrt_core:
 rust:wasmrt-core	impl<'a> core::clone::Clone for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::fmt::Debug for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::marker::Freeze for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::marker::Freeze for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::marker::Freeze for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::marker::Send for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::marker::Send for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::marker::Send for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::marker::Sync for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::marker::Sync for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::marker::Sync for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::marker::Unpin for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::marker::Unpin for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::marker::Unpin for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::marker::UnsafeUnpin for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::marker::UnsafeUnpin for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::marker::UnsafeUnpin for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::interp::Caller<'a>
+rust:wasmrt-core	impl<'a> core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::reader::Reader<'a>
+rust:wasmrt-core	impl<'a> core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	impl<'a> core::panic::unwind_safe::UnwindSafe for wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	impl<'a> wasmrt_core::reader::Reader<'a>
 rust:wasmrt-core	pub const fn wasmrt_core::abi_version() -> u32
@@ -1535,6 +1557,7 @@ rust:wasmrt-core	pub enum wasmrt_core::module::CompKind
 rust:wasmrt-core	pub enum wasmrt_core::module::CompType
 rust:wasmrt-core	pub enum wasmrt_core::module::ElementMode
 rust:wasmrt-core	pub enum wasmrt_core::module::Extern
+rust:wasmrt-core	pub enum wasmrt_core::module::LoadError
 rust:wasmrt-core	pub enum wasmrt_core::module::StorageType
 rust:wasmrt-core	pub enum wasmrt_core::opcode::BlockType
 rust:wasmrt-core	pub enum wasmrt_core::opcode::CatchKind
@@ -1695,6 +1718,9 @@ rust:wasmrt-core	pub fn wasmrt_core::module::Import::fmt(&self, &mut core::fmt::
 rust:wasmrt-core	pub fn wasmrt_core::module::Limits::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::module::Limits::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::module::Limits::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+rust:wasmrt-core	pub fn wasmrt_core::module::LoadError::clone(&self) -> Self
+rust:wasmrt-core	pub fn wasmrt_core::module::LoadError::eq(&self, &Self) -> bool
+rust:wasmrt-core	pub fn wasmrt_core::module::LoadError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 rust:wasmrt-core	pub fn wasmrt_core::module::Local::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::module::Local::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::module::Local::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1725,6 +1751,9 @@ rust:wasmrt-core	pub fn wasmrt_core::module::Module::tag_type(&self, u32) -> cor
 rust:wasmrt-core	pub fn wasmrt_core::module::Module::tag_type_index(&self, u32) -> core::option::Option<u32>
 rust:wasmrt-core	pub fn wasmrt_core::module::Module::types_equal(&self, u32, u32) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::module::Module::val_types_equal(&self, wasmrt_core::types::ValType, wasmrt_core::types::ValType) -> bool
+rust:wasmrt-core	pub fn wasmrt_core::module::Parsed<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+rust:wasmrt-core	pub fn wasmrt_core::module::Parsed<'_>::module(&self) -> &wasmrt_core::module::Module
+rust:wasmrt-core	pub fn wasmrt_core::module::Parsed<'_>::validate(self, &wasmrt_core::features::Features) -> core::result::Result<wasmrt_core::module::Module, wasmrt_core::module::LoadError>
 rust:wasmrt-core	pub fn wasmrt_core::module::Section::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::module::Section::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::module::Section::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1739,7 +1768,9 @@ rust:wasmrt-core	pub fn wasmrt_core::module::TypeLinks::default() -> Self
 rust:wasmrt-core	pub fn wasmrt_core::module::TypeLinks::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::module::TypeLinks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 rust:wasmrt-core	pub fn wasmrt_core::module::decode(&[u8]) -> wasmrt_core::types::DecodeResult<wasmrt_core::module::Module>
+rust:wasmrt-core	pub fn wasmrt_core::module::decode_validated(&[u8], &wasmrt_core::features::Features) -> core::result::Result<wasmrt_core::module::Module, wasmrt_core::module::LoadError>
 rust:wasmrt-core	pub fn wasmrt_core::module::last_decode_offset() -> core::option::Option<u32>
+rust:wasmrt-core	pub fn wasmrt_core::module::parse(&[u8]) -> wasmrt_core::types::DecodeResult<wasmrt_core::module::Parsed<'_>>
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Atomic::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Atomic::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Atomic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1891,6 +1922,7 @@ rust:wasmrt-core	pub fn wasmrt_core::validate::ValidateError::eq(&self, &Self) -
 rust:wasmrt-core	pub fn wasmrt_core::validate::ValidateError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 rust:wasmrt-core	pub fn wasmrt_core::validate::ValidateError::from(wasmrt_core::types::DecodeError) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::validate::last_failure_func_index() -> core::option::Option<u32>
+rust:wasmrt-core	pub fn wasmrt_core::validate::last_failure_message() -> core::option::Option<alloc::string::String>
 rust:wasmrt-core	pub fn wasmrt_core::validate::last_failure_site() -> wasmrt_core::validate::FailureSite
 rust:wasmrt-core	pub fn wasmrt_core::validate::validate(&wasmrt_core::module::Module) -> wasmrt_core::validate::ValidateResult<()>
 rust:wasmrt-core	pub fn wasmrt_core::validate::validate_with_features(&wasmrt_core::module::Module, &wasmrt_core::features::Features) -> wasmrt_core::validate::ValidateResult<()>
@@ -2011,6 +2043,7 @@ rust:wasmrt-core	pub struct wasmrt_core::module::Limits
 rust:wasmrt-core	pub struct wasmrt_core::module::Local
 rust:wasmrt-core	pub struct wasmrt_core::module::MemoryType
 rust:wasmrt-core	pub struct wasmrt_core::module::Module
+rust:wasmrt-core	pub struct wasmrt_core::module::Parsed<'a>
 rust:wasmrt-core	pub struct wasmrt_core::module::Section
 rust:wasmrt-core	pub struct wasmrt_core::module::TableType
 rust:wasmrt-core	pub struct wasmrt_core::module::TypeLinks
@@ -2202,6 +2235,8 @@ rust:wasmrt-core	pub wasmrt_core::module::Limits::is64: bool
 rust:wasmrt-core	pub wasmrt_core::module::Limits::max: core::option::Option<u64>
 rust:wasmrt-core	pub wasmrt_core::module::Limits::min: u64
 rust:wasmrt-core	pub wasmrt_core::module::Limits::shared: bool
+rust:wasmrt-core	pub wasmrt_core::module::LoadError::Decode(wasmrt_core::types::DecodeError)
+rust:wasmrt-core	pub wasmrt_core::module::LoadError::Invalid(wasmrt_core::validate::ValidateError)
 rust:wasmrt-core	pub wasmrt_core::module::Local::count: u32
 rust:wasmrt-core	pub wasmrt_core::module::Local::ty: wasmrt_core::types::ValType
 rust:wasmrt-core	pub wasmrt_core::module::MemoryType::limits: wasmrt_core::module::Limits
