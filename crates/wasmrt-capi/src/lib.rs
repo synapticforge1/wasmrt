@@ -744,10 +744,25 @@ capi! {
         };
         let md = match wasmrt_core::module::decode(buf) {
             Ok(m) => m,
-            Err(d) => return err(format!("decode failed: {d}")),
+            // 3.0.0 (review I1): the byte offset, as the CLI and wasmtime report it.
+            Err(d) => {
+                let at = wasmrt_core::module::last_decode_offset().map_or_else(String::new, |o| format!(" at offset {o}"));
+                return err(format!("decode failed{at}: {d}"));
+            }
         };
         if let Err(v) = wasmrt_core::validate::validate_with_features(&md, &e.features) {
-            return err(format!("{v}"));
+            // The CLI's report, in wasmtime's words where the facts are the same (`invalidity_report` in the
+            // CLI): the offset, and for a type mismatch the two types (review P4, 2026-11-23).
+            let site = wasmrt_core::validate::last_failure_site();
+            let msg = v.to_string();
+            let what = match (site.expected, site.found) {
+                (Some(exp), Some(found)) => format!("type mismatch: expected {exp:?}, found {found:?}"),
+                _ => String::from(msg.strip_prefix("invalid module: ").unwrap_or(&msg)),
+            };
+            return err(match site.offset {
+                Some(o) => format!("invalid module at offset {o}: {what}"),
+                None => format!("invalid module: {what}"),
+            });
         }
         let export_names = md.exports.iter().map(|x| cstring(&x.name)).collect();
         let import_modules = md.imports.iter().map(|x| cstring(&x.module)).collect();

@@ -48,17 +48,18 @@ interface State {
   from: Record<string, string>; // crate -> the commit its .crate names (default SHA, this run's)
   noDownload: string[]; // listed crates whose .crate is not served yet
   paged: boolean; // the version list puts V on a SECOND page
-  shape: Record<string, "dup" | "badsize" | "dirty">; // a hostile .crate (review round 2)
+  shape: Record<string, Shape>; // a hostile .crate (review round 2; tar extensions, review I7)
   dl503: string[]; // the CDN answers 503 for these .crate downloads
   paging: "" | "repeat" | "404on2"; // the version list's paging misbehaves
 }
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
+type Shape = "dup" | "badsize" | "dirty" | "longname-other" | "pax-other" | "longname-real";
 
 /** A minimal ustar archive holding `<crate>-<V>/.cargo_vcs_info.json` naming `sha`, gzipped — the
  *  shape of a real .crate (measured on wasmrt-core 2.0.1). */
-function member(name: string, body: Buffer, sizeField?: string): Buffer {
+function member(name: string, body: Buffer, sizeField?: string, type = "0"): Buffer {
   const header = Buffer.alloc(512);
   header.write(name, 0, "utf8");
   header.write("0000644\0", 100);
@@ -67,7 +68,7 @@ function member(name: string, body: Buffer, sizeField?: string): Buffer {
   header.write(sizeField ?? body.length.toString(8).padStart(11, "0") + "\0", 124);
   header.write("00000000000\0", 136);
   header.write("        ", 148);
-  header.write("0", 156);
+  header.write(type, 156);
   header.write("ustar\0", 257);
   header.write("00", 263);
   let sum = 0;
@@ -75,14 +76,33 @@ function member(name: string, body: Buffer, sizeField?: string): Buffer {
   header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148);
   return Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512)]);
 }
-function crateFile(crate: string, sha: string, shape?: "dup" | "badsize" | "dirty"): Buffer {
+function crateFile(crate: string, sha: string, shape?: Shape): Buffer {
   const vcs = (s: string, dirty = false) =>
     Buffer.from(JSON.stringify({ git: { sha1: s, ...(dirty ? { dirty: true } : {}) }, path_in_vcs: `crates/${crate}` }, null, 2));
   const name = `${crate}-${V}/.cargo_vcs_info.json`;
+  // Review I7: the tar extensions that rename the NEXT member. A GNU long-name entry ("L") or a pax
+  // header ("x", a `path=` record) gives the following member its real name; its own 100-byte name
+  // field is then only a fallback, and a reader that trusts it reads the wrong file.
+  const longName = (real: string) => member("././@LongLink", Buffer.from(`${real}\0`), undefined, "L");
+  const pax = (real: string) => {
+    const rec = (k: string, v: string) => {
+      const body = ` ${k}=${v}\n`;
+      let n = body.length + 1;
+      while (String(n).length + body.length !== n) n = String(n).length + body.length;
+      return `${n}${body}`;
+    };
+    return member(`PaxHeaders/x`, Buffer.from(rec("path", real)), undefined, "x");
+  };
   const parts = shape === "dup"
     ? [member(name, vcs(sha)), member(name, vcs(OTHER))] // the first names this commit, the second (what tar keeps) another
     : shape === "badsize"
     ? [member(name, vcs(sha), "0000000017z\0")]
+    : shape === "longname-other" // a member NAMED like the vcs file but really another: not provenance
+    ? [longName(`${crate}-${V}/src/${"x".repeat(120)}.json`), member(name, vcs(OTHER)), member(name, vcs(sha))]
+    : shape === "pax-other"
+    ? [pax(`${crate}-${V}/benches/other.json`), member(name, vcs(OTHER)), member(name, vcs(sha))]
+    : shape === "longname-real" // the vcs file whose real name arrives only by the long-name entry
+    ? [longName(name), member(`${crate}-${V}/.cargo_vcs_inf`, vcs(sha))]
     : [member(name, vcs(sha, shape === "dirty"))];
   return gzipSync(Buffer.concat([...parts, Buffer.alloc(1024)]));
 }
@@ -313,6 +333,16 @@ await run("readback: a non-octal tar size field → refused", { listed: ALL, sha
 });
 await run("readback: a crate published from a DIRTY tree → refused", { listed: ALL, shape: { "wasmrt-core": "dirty" } }, ["readback"], {
   code: 1, out: "DIRTY tree",
+});
+// Review I7: a member renamed by a GNU long-name or pax header is read by its REAL name.
+await run("readback: a long-name entry renames a vcs-named member → only the real vcs file counts", { listed: ALL, shape: { wasmrt: "longname-other" } }, ["readback"], {
+  code: 0, out: "read back: wasmrt-core",
+});
+await run("readback: a pax path record renames a vcs-named member → only the real vcs file counts", { listed: ALL, shape: { "wasmrt-capi": "pax-other" } }, ["readback"], {
+  code: 0, out: "read back: wasmrt-core",
+});
+await run("readback: the vcs file named only by its long-name entry → found", { listed: ALL, shape: { "wasmrt-core": "longname-real" } }, ["readback"], {
+  code: 0, out: "read back: wasmrt-core",
 });
 await run("readback: the CDN answering 503 is retried, not fatal at once — and reported AS a 503", { listed: ALL, dl503: ["wasmrt"] }, ["readback"], {
   code: 1, out: "HTTP 503 from the .crate download",

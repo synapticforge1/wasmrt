@@ -9,18 +9,105 @@
 
 use crate::types::{DecodeError, DecodeResult};
 
+// **Where the last decode failure was** (🆕 3.0.0, review I1 sibling C): wasmtime and wasm-tools
+// give every malformed module a byte offset, and wasmrt gave none.
+//
+// A thread-local rather than a payload on [`DecodeError`] — the validator's `FailureSite` does the
+// same, for the same reasons: the error is `Copy`, matched exhaustively, and crosses the C ABI.
+// The protocol: every reader knows where its slice starts in the module ([`Reader::with_origin`]),
+// and the innermost function that owns a reader **notes** [`Reader::abs_pos`] when it fails (only
+// the first note counts), so the outer ones cannot overwrite a more precise position.
+// `module::last_decode_offset` reads it.
+#[cfg(feature = "std")]
+std::thread_local! {
+    #[allow(clippy::missing_const_for_thread_local)]
+    static DECODE_AT: core::cell::Cell<Option<usize>> = const { core::cell::Cell::new(None) };
+}
+
+/// Note the failing position, from the start of the module (first note wins).
+#[cfg(feature = "std")]
+pub(crate) fn note_decode_at(pos: usize) {
+    DECODE_AT.with(|c| {
+        if c.get().is_none() {
+            c.set(Some(pos));
+        }
+    });
+}
+/// Forget any earlier failure (at the start of a decode).
+#[cfg(feature = "std")]
+pub(crate) fn reset_decode_at() {
+    DECODE_AT.with(|c| c.set(None));
+}
+/// The noted position.
+#[cfg(feature = "std")]
+pub(crate) fn decode_at() -> Option<usize> {
+    DECODE_AT.with(core::cell::Cell::get)
+}
+/// Note a failure of `r` at the offset wasmtime reports for `e` (each rule measured against
+/// wasm-tools 1.263, 2026-11-23): a truncated input where the next byte was needed; malformed UTF-8
+/// one byte before the end of the name read (wasmparser's `original_position() - 1`); anything else
+/// at the START of the value just read — a bad version at 4, a bad type form at its own byte.
+pub(crate) fn note_failure(r: &Reader, e: &DecodeError) {
+    note_decode_at(match e {
+        // where reading stopped: the next byte needed, the first unread byte of a section, or the
+        // end of the module for a disagreement between two sections' counts
+        DecodeError::UnexpectedEof
+        | DecodeError::SectionSizeMismatch
+        | DecodeError::FuncCodeCountMismatch
+        | DecodeError::DataCountMismatch => r.abs_pos(),
+        DecodeError::InvalidUtf8 => r.abs_pos().saturating_sub(1),
+        // the LEB byte that overflowed (`80 80 80 80 80 00` as a section size: offset 13, its 5th byte)
+        DecodeError::LebOverflow => r.abs_pos().saturating_sub(1),
+        _ => r.last_abs(),
+    });
+}
+
+#[cfg(not(feature = "std"))]
+pub(crate) fn note_decode_at(_pos: usize) {}
+#[cfg(not(feature = "std"))]
+pub(crate) fn reset_decode_at() {}
+#[cfg(not(feature = "std"))]
+pub(crate) fn decode_at() -> Option<usize> {
+    None
+}
+
 /// A borrowing cursor. Holds a slice of the input and a position; copies nothing.
 #[derive(Debug, Clone)]
 pub struct Reader<'a> {
     bytes: &'a [u8],
     pos: usize,
+    /// Where `bytes[0]` sits in the module (0 for a whole module): makes [`Reader::abs_pos`] the
+    /// offset wasmtime would print for a failure here.
+    origin: usize,
+    /// Where the most recent read STARTED (relative to `bytes`): the offset wasmtime reports for a
+    /// value it then refuses — a bad version, a bad type form — rather than the position after it.
+    last: usize,
 }
 
 impl<'a> Reader<'a> {
     /// Start a reader at the beginning of `bytes`.
     #[must_use]
     pub const fn new(bytes: &'a [u8]) -> Reader<'a> {
-        Reader { bytes, pos: 0 }
+        Reader { bytes, pos: 0, origin: 0, last: 0 }
+    }
+
+    /// Start a reader over `bytes`, which begin `origin` bytes into the module (a section payload,
+    /// a code entry, a function body) — so a failure can be located absolutely (3.0.0).
+    #[must_use]
+    pub(crate) const fn with_origin(bytes: &'a [u8], origin: usize) -> Reader<'a> {
+        Reader { bytes, pos: 0, origin, last: 0 }
+    }
+
+    /// The current offset from the start of the MODULE (`origin` + `pos`).
+    #[must_use]
+    pub(crate) const fn abs_pos(&self) -> usize {
+        self.origin.saturating_add(self.pos)
+    }
+
+    /// Where the most recent read started, from the start of the MODULE.
+    #[must_use]
+    pub(crate) const fn last_abs(&self) -> usize {
+        self.origin.saturating_add(self.last)
     }
 
     /// The current byte offset.
@@ -50,6 +137,12 @@ impl<'a> Reader<'a> {
 
     /// Read one byte and advance.
     pub fn read_byte(&mut self) -> DecodeResult<u8> {
+        self.last = self.pos;
+        self.take_byte()
+    }
+
+    /// `read_byte` without moving `last` — for the bytes INSIDE a compound read.
+    fn take_byte(&mut self) -> DecodeResult<u8> {
         if self.pos >= self.bytes.len() {
             return Err(DecodeError::UnexpectedEof);
         }
@@ -68,6 +161,12 @@ impl<'a> Reader<'a> {
 
     /// Borrow `n` bytes from the current position without copying.
     pub fn read_bytes(&mut self, n: usize) -> DecodeResult<&'a [u8]> {
+        self.last = self.pos;
+        self.take_bytes(n)
+    }
+
+    /// `read_bytes` without moving `last`.
+    fn take_bytes(&mut self, n: usize) -> DecodeResult<&'a [u8]> {
         if self.remaining() < n {
             return Err(DecodeError::UnexpectedEof);
         }
@@ -85,6 +184,9 @@ impl<'a> Reader<'a> {
     pub fn read_vec_len(&mut self) -> DecodeResult<u32> {
         let n = self.read_var_u32()?;
         if n as usize > self.remaining() {
+            // Back to the count, so the failure is located at it (wasmtime: "… size is out of bounds"
+            // at the count's first byte; review P3, 2026-11-23). The reader is not used after an error.
+            self.pos = self.last;
             return Err(DecodeError::UnexpectedEof);
         }
         Ok(n)
@@ -92,17 +194,19 @@ impl<'a> Reader<'a> {
 
     /// Read a fixed 32-bit little-endian integer (used for the format version).
     pub fn read_u32_le(&mut self) -> DecodeResult<u32> {
-        let b = self.read_bytes(4)?;
+        self.last = self.pos;
+        let b = self.take_bytes(4)?;
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
 
     /// Read an unsigned LEB128 integer into a `u32` (§5.2.2). Rejects over-long
     /// encodings and values that don't fit in 32 bits ([`DecodeError::LebOverflow`]).
     pub fn read_var_u32(&mut self) -> DecodeResult<u32> {
+        self.last = self.pos;
         let mut result: u32 = 0;
         let mut shift: u32 = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             if shift == 28 {
                 // 5th byte: only 4 value bits fit, and there must be no 6th byte.
                 if byte >> 4 != 0 {
@@ -121,10 +225,11 @@ impl<'a> Reader<'a> {
     /// Read an unsigned LEB128 integer into a `u64` (§5.2.2) — for memory64 page counts
     /// and 64-bit indices. Rejects over-long encodings / >64-bit values.
     pub fn read_var_u64(&mut self) -> DecodeResult<u64> {
+        self.last = self.pos;
         let mut result: u64 = 0;
         let mut shift: u32 = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             if shift == 63 {
                 // 10th byte: only 1 value bit fits, and there must be no 11th byte.
                 if byte >> 1 != 0 {
@@ -143,10 +248,11 @@ impl<'a> Reader<'a> {
     /// Read a signed LEB128 integer into an `i32` (§5.2.2). Rejects over-long encodings
     /// and values that don't sign-fit in 32 bits.
     pub fn read_var_i32(&mut self) -> DecodeResult<i32> {
+        self.last = self.pos;
         let mut result: u32 = 0;
         let mut shift: u32 = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             if shift == 28 {
                 // 5th byte: bits 4..6 must sign-extend bit 3 (value bit 31), no 6th byte.
                 if byte & 0x80 != 0 {
@@ -172,10 +278,11 @@ impl<'a> Reader<'a> {
     /// Read a signed LEB128 integer into an `i64` (§5.2.2). Rejects over-long encodings
     /// and values that don't sign-fit in 64 bits.
     pub fn read_var_i64(&mut self) -> DecodeResult<i64> {
+        self.last = self.pos;
         let mut result: u64 = 0;
         let mut shift: u32 = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             if shift == 63 {
                 // 10th byte: only bit 63 fits; bits 1..6 must sign-extend it, no 11th byte.
                 if byte & 0x80 != 0 {
@@ -206,10 +313,11 @@ impl<'a> Reader<'a> {
     ///
     /// [`read_var_i64`]: Reader::read_var_i64
     pub fn read_var_s33(&mut self) -> DecodeResult<i64> {
+        self.last = self.pos;
         let mut result: u64 = 0;
         let mut shift: u32 = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             if shift == 28 {
                 // 5th byte: payload bit 4 (0x10) is value bit 32 = the sign; the higher
                 // payload bits (0x60) must sign-extend it, and there is no 6th byte.
@@ -242,9 +350,10 @@ impl<'a> Reader<'a> {
     /// `max_bytes` bounds the encoding length (5 for a 32-bit LEB, 10 for a 64-bit LEB)
     /// so an over-long encoding is rejected as malformed, not spun on.
     pub fn skip_leb(&mut self, max_bytes: usize) -> DecodeResult<()> {
+        self.last = self.pos;
         let mut n: usize = 0;
         loop {
-            let byte = self.read_byte()?;
+            let byte = self.take_byte()?;
             n += 1;
             if byte & 0x80 == 0 {
                 break;
@@ -258,13 +367,15 @@ impl<'a> Reader<'a> {
 
     /// Read a fixed 32-bit little-endian float bit pattern (for `f32.const`).
     pub fn read_f32_bits(&mut self) -> DecodeResult<u32> {
-        let b = self.read_bytes(4)?;
+        self.last = self.pos;
+        let b = self.take_bytes(4)?;
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
 
     /// Read a fixed 64-bit little-endian float bit pattern (for `f64.const`).
     pub fn read_f64_bits(&mut self) -> DecodeResult<u64> {
-        let b = self.read_bytes(8)?;
+        self.last = self.pos;
+        let b = self.take_bytes(8)?;
         Ok(u64::from_le_bytes([
             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
         ]))

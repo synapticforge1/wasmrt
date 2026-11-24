@@ -422,8 +422,9 @@ impl Features {
 /// **One authority, and now an EXHAUSTIVE one.** The match is GENERATED from binaryang's D1
 /// (`tables::op_feature`, letter H10 step 2; `scripts/definitions.ts`), with no catch-all: an op
 /// added to `define_ops!` without a D1 entry fails the generator, and one added without
-/// regenerating fails the build. The one place wasmrt differs from D1 (`return_call_ref` gated on
-/// function-references, as wasm-tools gates it) is an explicit, reasoned override in the generator.
+/// regenerating fails the build. wasmrt does not differ from D1 here: `return_call_ref` is gated on
+/// function-references (as wasm-tools gates it) in D1 itself since binaryang v2.1.0, so the
+/// generator's override list is empty (🔁 corrected 2026-11-23, review I4).
 ///
 /// *(Until 2026-10-24 this was a hand-kept match ending in `_ => return None`, so a new opcode
 /// defaulted to ungated: the six GC bulk array ops shipped that way, and its doc comment had

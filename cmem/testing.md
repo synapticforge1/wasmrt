@@ -4,6 +4,14 @@
 plus the size and speed numbers that decide inclusion. Detail:
 `docs/port/06-build-docs-licensing.md`; the test tree layout is in `tests/README.md`.
 
+## The gate today — measured 2026-11-23 (review I6)
+
+- `bun scripts/gate.ts`: **22 steps** (`gate: 22 steps`, 2026-11-20 at `db6f63b`); `--release` adds 4 (the floor,
+  the CHANGELOG section, the `release.md` entry, the review gate). Workspace tests 608 / 0 / 1 on win-x64.
+- Self-tests: privacy gate 33, review gate 30, bump 14, previous-tests cleanup 9, release record 40, release page 55,
+  crates.io 53, versions 23; `licence-copies.ts` checks 5 files in each of 3 crates. Counts in the dated sections
+  below are those days' figures, not current ones.
+
 ## 🆕 2026-11-19 — the gate runs LOCALLY only; CI tests nothing (workspace letter H37 (e))
 
 🔒 "Every gate, the test suites included, runs locally and is not repeated on GitHub — CI only
@@ -14,7 +22,7 @@ output), its self-test `check-privacy-gate.ts` (33), and `check-review-gate.ts` 
 checks `release-record.ts notes` + `entry` (the Tested on lines; self-test 40) and `review-gate.ts`
 (the review's result) instead of H35's two review paragraphs. The CI annotation code is gone with
 CI's run. Linux is no longer exercised by CI: `platforms.md`. Step and test counts in the 2026-11-12
-section below are that day's. *Gate run on the adoption tree: see `open-work.md` § State.*
+section below are that day's. *Gate run on the adoption tree: see `archive/open-work-to-2026-11-23.md` § State.*
 
 ## 🔒 Conformance anchors (owner, 2026-08-11 — the oracle is retired)
 
@@ -33,7 +41,7 @@ the universalWasmLoader-\* runtimes, so parity with one is not evidence about th
    (`best-practices.md`).
 3. **The wasmtk WASI corpus** — real compiled guests, which is the only thing that exercises the WASI
    surface end to end.
-4. **wasmrt's own tests** — 606 of them (2026-10-24; the count lives in `open-work.md`), for the
+4. **wasmrt's own tests** — 606 of them (2026-10-24; the current count: the newest `release.md` entry), for the
    internal invariants none of the above can reach
    (handle tagging, store isolation, encoding invariants, the `size_of` pins).
 

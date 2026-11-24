@@ -86,7 +86,7 @@ the records.
   `-D warnings` clean; surface check, eol, definitions and C-ABI gate (`CC=gcc`) green; S1 in
   `cargo test`; the floor against `v2.0.0` 0 / 0; S2 64,603 / 0 / 0, 0 regressed. S3 (wasmtk's
   corpus) was not run: the source is identical. Size and speed: see the CHANGELOG [2.0.1] and
-  `open-work.md` (the floating nightly, proven by building on both). Both binaries import only
+  `archive/open-work-to-2026-11-23.md` (the floating nightly, proven by building on both). Both binaries import only
   Windows-provided DLLs, and the CLI runs on a system-only `PATH`. `bump.ts patch`: 2.0.0 → 2.0.1.
   **Steps 7–8 were done by the agent this time, on the owner's "release"**: the crates.io login was
   already on this machine.

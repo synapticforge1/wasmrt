@@ -27,7 +27,7 @@ fn fixture() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("wasmrt_flagpos_{}_{n}.wat", std::process::id()));
+    let p = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("wasmrt_flagpos_{}_{n}.wat", std::process::id()));
     std::fs::write(&p, br#"(module (func (export "f")))"#).expect("write fixture");
     p
 }
@@ -41,7 +41,7 @@ fn no_two_fixtures_share_a_path() {
 /// says nothing. The distinction is the whole point: it makes "was the flag applied?" observable
 /// without needing a guest that touches the filesystem.
 fn missing_dir() -> String {
-    std::env::temp_dir()
+    std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("wasmrt_no_such_dir_flagpos")
         .to_string_lossy()
         .into_owned()

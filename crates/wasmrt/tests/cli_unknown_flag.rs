@@ -19,7 +19,7 @@ use std::process::{Command, Output};
 fn write_temp(name: &str, bytes: &[u8]) -> String {
     // A folder per process: two test runs on one host (two sessions, a gate beside a release) must
     // not truncate each other's fixtures (review round 3; the file name itself is unchanged).
-    let d = std::env::temp_dir().join(format!("wasmrt_tests_{}", std::process::id()));
+    let d = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("wasmrt_tests_{}", std::process::id()));
     std::fs::create_dir_all(&d).expect("scratch dir");
     let p = d.join(name);
     std::fs::write(&p, bytes).expect("write fixture");
@@ -104,7 +104,7 @@ fn wast_and_wat_have_no_guest_argv_so_every_position_is_checked() {
     assert_eq!(wasmrt(&["wast", &s, "-v"]).status.code(), Some(0), "`-v` is recognised");
 
     let w = write_temp("wasmrt_uf_wat.wat", MODULE);
-    let out = std::env::temp_dir().join(format!("wasmrt_uf_wat_out_{}.wasm", std::process::id()));
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("wasmrt_uf_wat_out_{}.wasm", std::process::id()));
     assert_unknown_flag(&["wat", "--bogus", &w], "--bogus");
     assert_unknown_flag(&["wat", &w, "--bogus"], "--bogus");
     assert_eq!(

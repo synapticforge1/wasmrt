@@ -54,7 +54,7 @@ sections below are moved verbatim.
     release depends on it.
   - 🔁 **Review round 1 (2026-11-12) changed this flow** — `known-issues.md` R1–R15: `state` checks
     what a tag claims (R4), crates are matched by provenance (R5), the review clause is fixed (R3),
-    per-version concurrency (R11), time limits (R14). Self-tests now 44 / 44 / 37; the numbers just
+    per-version concurrency (R11), time limits (R14). Self-tests then 44 / 44 / 37 (today's: `testing.md`, top); the numbers just
     below are the first version's.
   - **Self-tests (each inverted by mutants, 2026-11-12):** `check-github-release.ts` 34 checks (+ `state`
     and `tag`; 8 mutants caught), `check-crates-io.ts` 36 (mock registry + OIDC + a fake cargo; 11

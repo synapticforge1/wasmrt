@@ -55,10 +55,6 @@ Legend: ✅ done & verified · 🚧 in progress · ⬜ planned
 | **2.0.0** | Type-rule correction | an `exact` reference type needs reference-types (binaryang D2 2.2.0, wasm-tools); wasmrt held to D2's type and encoding rules in `cargo test` | ✅ |
 | **2.0.1** | Release tooling | the GitHub Release page made through the REST API, not the GitHub CLI; no code changes | ✅ |
 | **2.0.2** | Licence texts + the five-class review | every published crate carries its licence texts and notices; the first release reviewed in five classes and published by CI | ✅ |
-| T9 | Hardening | the correctness punch-list, licensing, docs, size minimization, all gates green (module authenticity, `pin`, landed early, in 1.0.0) | ⬜ |
-| T10 | Bug hunt + code hygiene | a comprehensive audit across tested **and** untested paths — bugs, fall-throughs, stale workarounds, dead code, missing documentation | ⬜ |
-| T11 | Optimization review | measured options for making the shipped artifacts faster and smaller — judged at the binary and C-ABI boundary, not by micro-benchmarks | ⬜ |
-| T12 | Security review | an adversarial review of the penetration surfaces — hostile guests, malformed input, and C-ABI misuse — with recommended mitigations | ⬜ |
 
 ## What you can do with wasmrt (use-case matrix)
 

@@ -149,18 +149,32 @@ async function packagedFrom(crate: string): Promise<string | null> {
   }
   // Walk EVERY member (review round 2: the first of two vcs members won, while tar extraction keeps
   // the last), with strict octal sizes (parseInt stopped silently at a bad digit).
+  // Review I7 (2026-11-23): a GNU long-name entry (typeflag "L") or a pax header ("x", its `path`
+  // record) names the NEXT member, whose own name field is then only a truncated fallback; a global
+  // pax header ("g") names nothing; and only a regular file ("0" or NUL) can be the provenance file.
+  // Read by the 100-byte field alone, a member renamed that way was taken for (or hid) the vcs file.
   const want = `${crate}-${version}/.cargo_vcs_info.json`;
   const found: string[] = [];
+  let next: string | null = null; // the real name the previous extension header gave
   for (let off = 0; off + 512 <= tar.length;) {
     const h = tar.subarray(off, off + 512);
     if (h.every((b) => b === 0)) break;
     const str = (a: number, n: number) => h.subarray(a, a + n).toString("utf8").replace(/\0.*$/s, "");
-    const name = (str(345, 155) ? `${str(345, 155)}/` : "") + str(0, 100);
     const field = str(124, 12).trim();
     if (!/^[0-7]+$/.test(field)) fail(`${crate} ${version}: a malformed tar size field ("${field}") in the .crate`);
     const size = parseInt(field, 8);
     if (off + 512 + size > tar.length) fail(`${crate} ${version}: a tar member runs past the end of the .crate`);
-    if (name === want) found.push(tar.subarray(off + 512, off + 512 + size).toString("utf8"));
+    const body = tar.subarray(off + 512, off + 512 + size);
+    const type = String.fromCharCode(h[156]);
+    if (type === "L") next = body.toString("utf8").replace(/\0.*$/s, "");
+    else if (type === "x") {
+      const path = /(?:^|\n)\d+ path=([^\n]*)\n/.exec(body.toString("utf8"));
+      if (path) next = path[1];
+    } else if (type !== "g") {
+      const name = next ?? (str(345, 155) ? `${str(345, 155)}/` : "") + str(0, 100);
+      next = null;
+      if ((type === "0" || type === "\0") && name === want) found.push(body.toString("utf8"));
+    }
     off += 512 + Math.ceil(size / 512) * 512;
   }
   if (found.length === 0) fail(`${crate} ${version}: the published .crate has no ${want} — its provenance cannot be read`);

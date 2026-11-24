@@ -19,6 +19,36 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
+**A breaking release** (the Rust API gains fields and two error variants; see Breaking Changes in the
+README). Refusals now name the byte wasmtime names.
+
+### Fixed
+
+- **A refusal points at the offending byte, in wasmtime's words.** With reference-types disabled,
+  `call_indirect`'s table index must be the single byte `0x00`. wasmrt reported such a module at the
+  instruction (`offset 598 … uses the disabled proposal`); it now reports the byte itself
+  (`offset 604 … zero byte expected`), as wasmtime 51 and wasm-tools do. The same holds for
+  `memory.size` / `memory.grow` with multi-memory disabled.
+- **Two invalid encodings were accepted with multi-memory disabled:** an overlong memory index on
+  `memory.size` / `memory.grow` (`80 00`), and a memarg carrying the memory-index flag. Both are now
+  refused, as wasm-tools refuses them.
+- **A valid encoding was refused with reference-types disabled:** an overlong table index on
+  `return_call_indirect`, which binaryang's shared definitions and wasm-tools both accept.
+- **Every decode failure carries its byte offset** (`decode failed at offset 10: unexpected end of
+  input`), on the CLI and in the C ABI's error strings, at the offsets wasmtime reports: 16 of 17
+  measured malformed modules agree exactly (the exception is a local count past wasmtime's lower
+  limit).
+- **WASI on macOS:** removing a non-empty directory reported a generic I/O error, because the error
+  codes were compared as raw numbers and macOS's differs from Linux's. They are now matched by kind.
+- **`wasmrt wast`** chose a spec file's proposals from the path as typed, so running from inside
+  the suite folder gave a proposal file every feature. It now uses the file's absolute path.
+
+### Changed
+
+- `opcode::Instr` is 64 bytes, down from 80, with the new fields included.
+- Release tooling: the crates.io read-back reads tar long-name and pax headers; the CLI tests keep
+  their fixtures in cargo's build folder rather than the system temp folder.
+
 ## [2.0.2] — 2026-11-19 — licence texts in every crate, and a five-class review before every release
 
 Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)

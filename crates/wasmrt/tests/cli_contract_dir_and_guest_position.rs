@@ -25,7 +25,7 @@ fn fixture() -> String {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("wasmrt_contract_dir_guest_{}_{n}.wat", std::process::id()));
+    let p = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("wasmrt_contract_dir_guest_{}_{n}.wat", std::process::id()));
     std::fs::write(&p, br#"(module (func (export "_start")))"#).expect("write fixture");
     p.to_string_lossy().into_owned()
 }
@@ -87,7 +87,7 @@ fn a_drive_without_a_separator_is_drive_relative() {
         assert!(!ok && text.contains("drive-relative"), "--dir {spec}; got: {text}");
     }
     // A drive WITH a separator is absolute, so it passes the grammar.
-    let abs = std::env::temp_dir().join(NOT_THERE);
+    let abs = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(NOT_THERE);
     let (ok, text) = run(&["wasi", "--dir", &abs.to_string_lossy(), &m]);
     assert!(!ok && text.contains("cannot preopen"), "an absolute drive path passes the grammar; got: {text}");
 }
@@ -109,7 +109,7 @@ fn features_with_an_equals_sign_is_the_same_flag() {
     let (ok, text) = run(&[&m, "--features=mvp"]);
     assert!(!ok && text.contains("must come BEFORE the module path"), "after the path it names the position; got: {text}");
     // It really is applied: a SIMD module is refused under `--features=mvp`.
-    let simd = std::env::temp_dir().join(format!("wasmrt_contract_simd_{}.wat", std::process::id()));
+    let simd = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("wasmrt_contract_simd_{}.wat", std::process::id()));
     std::fs::write(&simd, br#"(module (func (export "f") (result v128) (v128.const i32x4 1 2 3 4)))"#).unwrap();
     let (ok, text) = run(&["--features=mvp", &simd.to_string_lossy()]);
     assert!(!ok && text.contains("proposal `simd`"), "`--features=mvp` must refuse a SIMD module, naming it; got: {text}");

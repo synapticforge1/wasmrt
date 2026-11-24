@@ -682,7 +682,26 @@ struct Decoder {
 
 /// Decode a WebAssembly binary into an owned [`Module`]. `bytes` may be freed afterward.
 pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
+    crate::reader::reset_decode_at();
     let mut r = Reader::new(bytes);
+    let res = decode_from(&mut r);
+    if let Err(e) = &res {
+        // The least precise note, so the last resort: where the module-level reader stood.
+        crate::reader::note_failure(&r, e);
+    }
+    res
+}
+
+/// The byte offset, from the start of the module, of the last [`decode`] failure on this thread —
+/// the number wasmtime prints as "(at offset N)". 🆕 3.0.0 (review I1, sibling C). `None` before
+/// any failure, after a successful decode, and in a `no_std` build. Read it right after [`decode`] fails:
+/// `opcode::decode_body` / `decode_expr`, called directly, leave a note that only the next `decode` clears.
+#[must_use]
+pub fn last_decode_offset() -> Option<u32> {
+    crate::reader::decode_at().and_then(|p| u32::try_from(p).ok())
+}
+
+fn decode_from(r: &mut Reader) -> DecodeResult<Module> {
     if r.read_bytes(4)? != MAGIC {
         return Err(DecodeError::BadMagic);
     }
@@ -710,6 +729,15 @@ pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
     while !r.at_end() {
         let raw_id = r.read_byte()?;
         if raw_id > SectionId::MAX {
+            if raw_id & 0x80 != 0 {
+                // A continuation bit: wasmparser reads the id as a LEB and fails AT it (offset 8).
+                crate::reader::note_decode_at(r.last_abs());
+                return Err(DecodeError::InvalidSectionId);
+            }
+            // wasmtime reports this at the section's payload, after its size (measured: offset 10
+            // for `20 00` after the header); read the size so the note lands there too.
+            let _ = r.read_var_u32();
+            crate::reader::note_decode_at(r.abs_pos());
             return Err(DecodeError::InvalidSectionId);
         }
         let id = SectionId::from_u8(raw_id).ok_or(DecodeError::InvalidSectionId)?;
@@ -719,6 +747,10 @@ pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
         // section changed the module's function count and only surfaced later as a count mismatch.
         if let Some(ord) = id.order() {
             if last_order.is_some_and(|prev| ord <= prev) {
+                // Reported at the section's payload, after its size, as wasmtime does (offset 16 for a
+                // second type section at 14).
+                let _ = r.read_var_u32();
+                crate::reader::note_decode_at(r.abs_pos());
                 return Err(DecodeError::SectionOrder);
             }
             last_order = Some(ord);
@@ -728,7 +760,10 @@ pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
         let payload = r.read_bytes(size)?;
         sections.push(Section { id, offset, size });
 
-        let mut sub = Reader::new(payload);
+        let mut sub = Reader::with_origin(payload, offset);
+        // Any failure inside the section is noted where its reader stood (a more precise note made
+        // deeper — a function body, a code entry — is kept: the first note wins).
+        let step = (|| -> DecodeResult<()> {
         match id {
             SectionId::Custom => {
                 let nlen = sub.read_var_u32()? as usize;
@@ -767,6 +802,12 @@ pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
         if id != SectionId::Custom && !sub.at_end() {
             return Err(DecodeError::SectionSizeMismatch);
         }
+        Ok(())
+        })();
+        if let Err(e) = step {
+            crate::reader::note_failure(&sub, &e);
+            return Err(e);
+        }
     }
 
     // Constant expressions are stored as raw bytes and read by the validator and the interpreter,
@@ -776,7 +817,12 @@ pub fn decode(bytes: &[u8]) -> DecodeResult<Module> {
     // stored: a const-expr is a handful of bytes and both consumers want the raw form, so decoding
     // it twice costs nothing worth the data-model change.
     for expr in module_const_exprs(&d, &elements, &data) {
-        crate::opcode::decode_body(expr)?;
+        // These are COPIES, already decoded in their sections, so a position noted in one would be
+        // relative to the copy, not the module: drop it (the module-level note stands in).
+        if let Err(e) = crate::opcode::decode_body(expr) {
+            crate::reader::reset_decode_at();
+            return Err(e);
+        }
     }
 
     // The function and code sections must declare the same number of functions (§5.5.13). This is
@@ -1091,7 +1137,7 @@ fn read_storage_type(r: &mut Reader, kinds: &[CompKind]) -> DecodeResult<Storage
 /// a forward reference in the same rec group.
 fn decode_type_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
     let mut scan = r.clone(); // Reader is a value cursor — clone for the pre-scan pass.
-    d.type_kinds = prescan_type_kinds(&mut scan)?;
+    d.type_kinds = prescan_type_kinds(&mut scan).inspect_err(|e| crate::reader::note_failure(&scan, e))?;
 
     let mut comp: Vec<CompType> = Vec::new();
     let mut supers: Vec<Option<u32>> = Vec::new();
@@ -1421,7 +1467,7 @@ fn scan_sub_type(r: &mut Reader, kinds: &mut Vec<CompKind>) -> DecodeResult<()> 
             kinds.push(CompKind::Func);
         }
         0x5f => {
-            let mut n = r.read_var_u32()?;
+            let mut n = r.read_vec_len()?;
             while n > 0 {
                 n -= 1;
                 skip_field_type(r)?;
@@ -1438,7 +1484,9 @@ fn scan_sub_type(r: &mut Reader, kinds: &mut Vec<CompKind>) -> DecodeResult<()> 
 }
 
 fn skip_val_type_vec(r: &mut Reader) -> DecodeResult<()> {
-    let mut n = r.read_var_u32()?;
+    // A count larger than the bytes left is refused AT the count (each type takes a byte), as wasmtime
+    // reports "function params size is out of bounds" there (review, 2026-11-23: it ran to the end).
+    let mut n = r.read_vec_len()?;
     while n > 0 {
         n -= 1;
         skip_val_type(r)?;
@@ -1574,12 +1622,13 @@ fn decode_tag_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<Vec<u32>>
     let count = r.read_vec_len()?;
     let mut list = Vec::with_capacity(count as usize);
     for _ in 0..count {
+        let at = r.abs_pos(); // the tag's start: where wasmtime reports an unknown type (review P3)
         let attr = r.read_byte()?;
         if attr != 0x00 {
             return Err(DecodeError::MalformedFlag);
         }
         let ti = r.read_var_u32()?;
-        let ft = func_type_at(d, ti)?;
+        let ft = func_type_at(d, ti).inspect_err(|_| crate::reader::note_decode_at(at))?;
         d.tag_space.push(ft);
         list.push(ti);
     }
@@ -1670,8 +1719,17 @@ fn space_at<T: Clone>(space: &[T], index: u32) -> DecodeResult<T> {
 fn decode_locals(r: &mut Reader, kinds: &[CompKind]) -> DecodeResult<Vec<Local>> {
     let n = r.read_vec_len()?;
     let mut locals = Vec::with_capacity(n as usize);
+    let mut total: u64 = 0;
     for _ in 0..n {
+        let at = r.abs_pos();
         let count = r.read_var_u32()?;
+        // Refused at the ENTRY that crosses the limit (3.0.0), so the offset names it. ⚠️ wasmtime's
+        // limit is lower (50,000 locals), so it refuses earlier entries than wasmrt does.
+        total += u64::from(count);
+        if total > MAX_DECLARED_LOCALS {
+            crate::reader::note_decode_at(at);
+            return Err(DecodeError::TooManyLocals);
+        }
         let ty = read_val_type(r, kinds)?;
         locals.push(Local { count, ty });
     }
@@ -1882,21 +1940,27 @@ fn decode_code_section(d: &Decoder, r: &mut Reader, payload_base: usize) -> Deco
         let entry_len = r.read_var_u32()? as usize;
         let entry_start = r.pos();
         let entry = r.read_bytes(entry_len)?;
-        let mut er = Reader::new(entry);
-        let locals = decode_locals(&mut er, &d.type_kinds)?;
+        let mut er = Reader::with_origin(entry, payload_base + entry_start);
+        let locals = match decode_locals(&mut er, &d.type_kinds) {
+            Ok(l) => l,
+            Err(e) => {
+                crate::reader::note_failure(&er, &e);
+                return Err(e);
+            }
+        };
         // Too many declared locals is a *malformed* encoding, not a typing fact (the count cannot
         // be represented), so it belongs here. Summed as `u64` before anything is allocated, so a
         // run of `0xFFFFFFFF` costs a comparison rather than an allocation.
         let declared: u64 = locals.iter().map(|l| u64::from(l.count)).sum();
         if declared > MAX_DECLARED_LOCALS {
-            return Err(DecodeError::TooManyLocals);
+            return Err(DecodeError::TooManyLocals); // unreachable: `decode_locals` refuses it per entry
         }
         // Decode the body HERE, borrowing the entry rather than copying it out first. A malformed
         // instruction stream is a decode error by the spec, and deferring it meant `decode`
         // accepted modules the validator then rejected — the wrong stage, and measurably so
         // (`binary-leb128.wast` reported 15 such assertions). Doing it once also replaces two later
         // decodes of the same bytes (the validator's, and each instantiation's).
-        let ir = crate::opcode::decode_body(&entry[er.pos()..])?;
+        let ir = crate::opcode::decode_body_at(&entry[er.pos()..], er.abs_pos())?;
         // The body starts `er.pos()` into the entry, which began at `entry_start`.
         // Saturate rather than truncate (only used to label a trap backtrace).
         let body_offset = u32::try_from(payload_base + entry_start + er.pos()).unwrap_or(u32::MAX);
@@ -1919,6 +1983,62 @@ mod tests {
         let mut v = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
         v.extend_from_slice(rest);
         v
+    }
+
+    /// Review I1, sibling C (2026-11-23): every decode failure carries the byte offset wasmtime
+    /// reports for it. Each expected offset below was MEASURED with wasm-tools 1.263 on the same bytes.
+    #[test]
+    fn decode_failures_carry_wasmtimes_offset() {
+        let ty = [0x01, 0x04, 0x01, 0x60, 0x00, 0x00];
+        let func = [0x03, 0x02, 0x01, 0x00];
+        let body = |b: &[u8]| -> Vec<u8> {
+            let mut v = m(&ty);
+            v.extend_from_slice(&func);
+            v.extend_from_slice(&[0x0a, u8::try_from(b.len() + 2).unwrap(), 0x01, u8::try_from(b.len()).unwrap()]);
+            v.extend_from_slice(b);
+            v
+        };
+        let cases: [(&str, Vec<u8>, DecodeError, u32); 23] = [
+            // a type's params / results count past the section: at the count, as wasmtime ("… size is out of bounds")
+            ("a params count past the section", m(&[0x01, 0x07, 0x01, 0x60, 0xff, 0xff, 0xff, 0xff, 0x0f]), DecodeError::UnexpectedEof, 12),
+            ("a results count past the section", m(&[0x01, 0x08, 0x01, 0x60, 0x00, 0xff, 0xff, 0xff, 0xff, 0x0f]), DecodeError::UnexpectedEof, 13),
+            // review P2 / P3 (2026-11-23): an overflowing LEB at its last byte; a high-bit section id at
+            // itself; a body's bad value type and `br_table` count at their own bytes; a tag's start.
+            ("an over-long LEB section size", m(&[0x01, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00]), DecodeError::LebOverflow, 13),
+            ("an over-long LEB in a body", body(&[0x00, 0x41, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 0x1a, 0x0b]), DecodeError::LebOverflow, 28),
+            ("a section id with the high bit", m(&[0xff, 0x00]), DecodeError::InvalidSectionId, 8),
+            ("a bad block type", body(&[0x00, 0x02, 0x55, 0x0b, 0x0b]), DecodeError::BadValType, 24),
+            ("a br_table count past the body", body(&[0x00, 0x41, 0x00, 0x0e, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x0b]), DecodeError::UnexpectedEof, 26),
+            ("a tag naming no type", m(&[0x0d, 0x03, 0x01, 0x00, 0x05]), DecodeError::IndexOutOfRange, 11),
+            ("bad version", vec![0x00, 0x61, 0x73, 0x6d, 0x02, 0x00, 0x00, 0x00], DecodeError::UnsupportedVersion, 4),
+            ("truncated header", vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00], DecodeError::UnexpectedEof, 4),
+            ("truncated section size", m(&[0x01, 0x80]), DecodeError::UnexpectedEof, 10),
+            ("unknown section id", m(&[0x20, 0x00]), DecodeError::InvalidSectionId, 10),
+            ("section past the end", m(&[0x01, 0x10, 0x01]), DecodeError::UnexpectedEof, 10),
+            ("a repeated section", m(&[ty, ty].concat()), DecodeError::SectionOrder, 16),
+            ("a bad type form", m(&[0x01, 0x04, 0x01, 0x61, 0x00, 0x00]), DecodeError::BadType, 11),
+            ("a section with bytes left over", m(&[0x01, 0x05, 0x01, 0x60, 0x00, 0x00, 0x00]), DecodeError::SectionSizeMismatch, 14),
+            ("a custom name not UTF-8", m(&[0x00, 0x03, 0x02, 0xff, 0xfe]), DecodeError::InvalidUtf8, 12),
+            ("an illegal opcode", body(&[0x00, 0x27, 0x0b]), DecodeError::UnsupportedOpcode, 23),
+            ("a body without its end", body(&[0x00, 0x01]), DecodeError::MissingEnd, 24),
+            ("bytes after the body's end", body(&[0x00, 0x0b, 0x01]), DecodeError::UnbalancedEnd, 24),
+            ("a truncated LEB in a body", body(&[0x00, 0x41, 0x80]), DecodeError::UnexpectedEof, 25),
+            ("atomic.fence's nonzero byte", {
+                let mut v = body(&[0x00, 0xfe, 0x03, 0x01, 0x0b]);
+                // a memory section, so the fence is the only fault (inserted before the code section)
+                let code_at = v.len() - 9;
+                v.splice(code_at..code_at, [0x05, 0x03, 0x01, 0x00, 0x01]);
+                v
+            }, DecodeError::MalformedFlag, 28),
+            ("function and code counts disagree", m(&[&ty[..], &func[..]].concat()), DecodeError::FuncCodeCountMismatch, 18),
+        ];
+        for (name, bytes, err, at) in cases {
+            assert_eq!(decode(&bytes).err(), Some(err), "{name}");
+            assert_eq!(last_decode_offset(), Some(at), "{name}: wasm-tools reports offset {at}");
+        }
+        // A successful decode clears the record.
+        decode(&m(&ty)).expect("a type section alone decodes");
+        assert_eq!(last_decode_offset(), None);
     }
 
     /// §5.5.12 spells an element segment's explicit type field **reftype**, not valtype — so a

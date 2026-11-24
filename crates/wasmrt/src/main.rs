@@ -996,7 +996,8 @@ fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String]) ->
     let md = match module::decode(&loaded.bytes) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("wasmrt: {path}: {e}");
+            // The same report as `run` and the bare path (review P1, 2026-11-23: this one had no offset).
+            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
             return ExitCode::FAILURE;
         }
     };
@@ -1168,7 +1169,7 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
     let md = match module::decode(&loaded.bytes) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("wasmrt: {path}: decode failed: {e}");
+            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
             return ExitCode::FAILURE;
         }
     };
@@ -1248,6 +1249,12 @@ fn read_module_bytes(path: &str) -> Result<Vec<u8>, String> {
 /// so the two tools' numbers are directly comparable on the same file — then the two types. The
 /// function index is ours to add: wasmtime does not print it, and it is what makes a twenty-body
 /// module tractable. Anything the validator did not record is simply omitted rather than guessed.
+/// `" at offset N"` for the last decode failure, or nothing when none was recorded (3.0.0: wasmtime
+/// gives every malformed module a byte offset, and so does wasmrt now — review I1, sibling C).
+fn at_offset() -> String {
+    wasmrt_core::module::last_decode_offset().map_or_else(String::new, |off| format!(" at offset {off}"))
+}
+
 fn invalidity_report(e: &ValidateError) -> String {
     let site = wasmrt_core::validate::last_failure_site();
     let mut s = String::from("invalid module");
@@ -1456,8 +1463,13 @@ fn run_wast_files(
             .unwrap_or(f)
             .to_string_lossy();
         // Each file under the features it is written against (`features_for_script`): a proposal can
-        // change what is valid, so a core file must not run with one it does not expect.
-        match wasmrt_core::wast::run_script_with(&src, wasmrt_core::wast::features_for_script(&name), gate_flags.limits()) {
+        // change what is valid, so a core file must not run with one it does not expect. The
+        // features are judged on the file's ABSOLUTE path, not the cwd-relative `name` printed
+        // above: run from inside the suite folder, `proposals/threads/imports.wast` has no
+        // `testsuite` in it and got every feature (review I2, 2026-11-23).
+        let absolute = std::fs::canonicalize(f).unwrap_or_else(|_| f.to_path_buf());
+        let features = wasmrt_core::wast::features_for_script(&absolute.to_string_lossy());
+        match wasmrt_core::wast::run_script_with(&src, features, gate_flags.limits()) {
             Ok(s) => {
                 passed += s.passed;
                 failed += s.failed;
@@ -1656,7 +1668,7 @@ fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String]) 
     let module = match module::decode(&bytes) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("wasmrt: {path}: decode failed: {e}");
+            eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
             return ExitCode::FAILURE;
         }
     };
@@ -1885,10 +1897,11 @@ mod tests {
 
         let present = std::env::temp_dir().join(format!("wasmrt_pin_db_present_{}", std::process::id()));
         std::fs::write(&present, b"# mode: warn\n").expect("write");
-        assert_eq!(
-            read_db_file(present.to_str().unwrap()),
-            Ok(Some(String::from("# mode: warn\n")))
-        );
+        let read = read_db_file(present.to_str().unwrap());
+        // Leave nothing in the system temp folder (review I10; letter H43).
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file(&present);
+        assert_eq!(read, Ok(Some(String::from("# mode: warn\n"))));
     }
 
     /// Both separators, and a Windows drive letter is not a separator (the reason `::` exists).

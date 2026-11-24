@@ -115,8 +115,9 @@ data** rather than wazmrt's arena (frees on drop; no `deinit`).
 
 ## Crates
 
-- **`wasmrt-core`** — the runtime library. **`#![no_std]`-friendly** and **`wasm32`-freestanding-clean**
-  (no libc), so the same code targets native *and* embed-inside-wasm. Modules mirror wazmrt `src/`:
+- **`wasmrt-core`** — the runtime library. **`#![no_std]`-friendly**: with `--no-default-features` it builds as a library
+  for `wasm32-unknown-unknown` (no libc), so the same code targets native *and* an embedder inside wasm (which
+  supplies the allocator; no linked wasm32 artifact exists — see the dual-target contract). Modules mirror wazmrt `src/`:
   - `types` — `ValType` as a **`u32` newtype** with concrete refs bit-packed; `RefHeap`/subtyping.
   - `reader` — zero-copy cursor + spec-correct LEB128.
   - `module` — decode (two-pass type section for rec-group forward refs); owned data model.
@@ -148,7 +149,10 @@ data** rather than wazmrt's arena (frees on drop; no `deinit`).
 ## Dual-target contract (reproduce from wazmrt)
 
 One core source produces: **native CLI**, **static lib**, **cdylib** (`.so`/`.dylib`/`.dll`), and a
-**freestanding `wasm32`** build of the runtime itself. Cross-platform native builds go through
+**`no_std` `wasm32` library build** of the runtime itself (`wasmrt-core --no-default-features` for
+`wasm32-unknown-unknown`, built by every gate). 🔁 *Corrected 2026-11-23 (review I5): it is a library
+(an rlib), not a linked freestanding artifact — no such artifact or allocator exists; the embedder that
+links it for `wasm32` supplies the allocator.* Cross-platform native builds go through
 `cargo-zigbuild` until `rust-lld` is the native default beyond `x86_64-unknown-linux-gnu`; `wasm32`
 linking needs only the bundled `rust-lld`. **Pointer-width rule:** type ABI pointer params as real
 pointers / `#[repr(C)]` structs (`*const u32`, `*mut c_void`), never hardcoded `i32` — lowers to `i32`
@@ -200,6 +204,8 @@ Two consequences worth knowing before touching this:
 
 ## Libc-free / allocator
 
-Core links no libc. Native builds and the C-ABI lib pick a global allocator (system/`smp`-equivalent);
-the freestanding-`wasm32` build uses a bump/`wasm`-page allocator. Never assume libc `malloc` in the
-C-ABI path. Rust: keep core `no_std`-compatible; the capi crate sets `#[global_allocator]`.
+Core links no libc. No crate sets a `#[global_allocator]` (measured 2026-11-23: none in `crates/`):
+native builds and the C-ABI library use Rust's default (system) allocator, and a `wasm32` embedder of the
+`no_std` core brings its own. Never assume libc `malloc` in the C-ABI path. Rust: keep core
+`no_std`-compatible. 🔁 *Corrected 2026-11-23 (review I5): this said the freestanding-`wasm32` build
+uses a bump allocator and the capi crate sets `#[global_allocator]`; neither exists.*

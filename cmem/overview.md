@@ -32,7 +32,7 @@ reference.*
 
 ## What has shipped, and where the state is
 
-**The current state is in [open-work.md](open-work.md)** (measured, dated), and nowhere else.
+**The current state is in [STATE.md](STATE.md)**; the open items in [open-work.md](open-work.md).
 
 Released stage by stage to crates.io ([releasing.md](releasing.md); the public notes are
 `CHANGELOG.md`). Each line is the release that landed it; tag `v0.9.0` is commit `bc1f7ca`:

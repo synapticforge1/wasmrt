@@ -58,10 +58,24 @@ function manifestVersion(): V {
  *  version that is NOT on HEAD. Between releases the manifest still says the last release, so that
  *  release IS the previous one (review round 1: "strictly below" ran v2.0.0's tests while v2.0.1 was
  *  current); on a release's own tagged commit (a CI re-run), the one before it. */
+/** The `# released-as: X.Y.Z` line of a released-surface file, or undefined when the file has no such
+ *  line or does not exist — the "no record" case `previousTag` falls back from. Any other read error is
+ *  a named failure, not a stack trace (review I7, 2026-11-23: a missing file threw ENOENT). */
+export function releasedAs(path: string): string | undefined {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (e) {
+    if ((e as { code?: string }).code === "ENOENT") return undefined;
+    throw new Error(`cannot read ${path}: ${(e as Error).message}`);
+  }
+  return /^# released-as: (\d+\.\d+\.\d+)\r?$/m.exec(text)?.[1];
+}
+
 export function previousTag(): string | null {
   // First choice: the last COMPLETED release, as surface/released.txt records it — the one bump.ts
   // tests against — so a burned (tagged, never published) version is never taken (review round 2).
-  const rel = /^# released-as: (\d+\.\d+\.\d+)$/m.exec(readFileSync(join(repo, "surface", "released.txt"), "utf8"))?.[1];
+  const rel = releasedAs(join(repo, "surface", "released.txt"));
   const head = must("git", ["rev-parse", "HEAD"], repo).trim();
   if (rel) {
     const at = run("git", ["rev-parse", "-q", "--verify", `v${rel}^{commit}`], repo);
@@ -156,7 +170,13 @@ export function removeScratch(dir: string, rm: typeof rmSync = rmSync): boolean 
 }
 
 if (import.meta.main) {
-  const tag = process.argv[2] ?? previousTag();
+  let tag: string | null;
+  try {
+    tag = process.argv[2] ?? previousTag();
+  } catch (e) {
+    console.log(`✗ cannot choose the previous release: ${(e as Error).message}`);
+    process.exit(1);
+  }
   if (!tag) {
     console.log("no earlier release tag: nothing to run");
     process.exit(0);

@@ -361,6 +361,10 @@ pub struct MemArg {
     pub alignment: u32,
     pub offset: u64,
     pub memory: u32,
+    /// The flags carried bit `0x40`, "a memory index follows" (multi-memory). 🆕 3.0.0 (review I1,
+    /// sibling B): `memory` cannot tell an explicit index 0 from none, and without multi-memory the
+    /// bit itself is malformed ("malformed memop: reserved flags bits set", as wasmtime says).
+    pub memory_flag: bool,
 }
 
 /// A `br_table` target list.
@@ -378,6 +382,10 @@ pub struct CallIndirect {
     /// The table index was encoded in more than one byte. WebAssembly 1.0's form is a single
     /// zero byte, so an overlong one needs reference-types (gated by the validator).
     pub overlong: bool,
+    /// Byte offset of the table index's first byte within the body. 🆕 3.0.0 (review I1): without
+    /// reference-types that byte must be `0x00`, and wasmtime reports a refusal AT it ("zero byte
+    /// expected"), six bytes past the opcode when the type index is a padded LEB.
+    pub table_at: u32,
 }
 
 /// The four `try_table` catch-clause kinds.
@@ -506,14 +514,22 @@ pub struct Instr {
     pub op: Op,
     /// Byte offset of this instruction **within its function body**, for trap backtraces.
     ///
-    /// **Free.** `Imm` is 64 bytes with 16-byte alignment, so `Instr` was already 80 bytes with 15
-    /// of them padding after the one-byte opcode; this `u32` lands in that padding and `Instr` is
-    /// still 80. A test pins that, because the moment `Imm` shrinks this stops being free and the
-    /// trade should be re-decided rather than silently paid.
+    /// **Free.** `Imm` is 48 bytes at 16-byte alignment (since 3.0.0; it was 64), and this `u32`,
+    /// `imm_at`, `imm_len` and the `u16` opcode fill the 16 bytes after it: `Instr` is 64 (it was
+    /// 80). A test pins both sizes, because the moment `Imm` changes size these fields may stop
+    /// being free and the trade should be re-decided rather than silently paid.
     ///
     /// Relative to the body, not absolute: `Code::body_offset` carries the body's own position, and
     /// keeping this relative means it cannot overflow on a module whose sections are large.
     pub offset: u32,
+    /// Byte offset of this instruction's **first immediate byte** within its body — after the
+    /// opcode, and after a prefixed op's sub-opcode — or where its immediates would start when it
+    /// has none. 🆕 3.0.0 (review I1): a refusal about one immediate byte reports THAT byte, as
+    /// wasmtime does (`memory.size`'s index, a memarg's flags), not the instruction's start.
+    pub imm_at: u32,
+    /// How many bytes the immediates take (so an overlong one-byte immediate is visible). Both
+    /// fields fit beside `offset` after `Imm`: `Instr` is 64 bytes (pinned by a test).
+    pub imm_len: u32,
     pub imm: Imm,
 }
 
@@ -759,7 +775,8 @@ fn read_value_type_from(r: &mut Reader, v: i64) -> DecodeResult<BlockType> {
         // alone as a value type (wasm-tools: "unexpected exact type").
         _ => match abstract_heap_type(v) {
             Some(ht) => BlockType::Value(abstract_heap_val_type(ht, true)),
-            None => return Err(DecodeError::UnsupportedOpcode),
+            // "invalid value type", as wasmtime says (review P3: this said "unsupported instruction opcode")
+            None => return Err(DecodeError::BadValType),
         },
     })
 }
@@ -960,7 +977,8 @@ fn read_mem_arg(r: &mut Reader) -> DecodeResult<MemArg> {
         return Err(DecodeError::MalformedMemopFlags);
     }
     let mut memory = 0u32;
-    if alignment & 0x40 != 0 {
+    let memory_flag = alignment & 0x40 != 0;
+    if memory_flag {
         alignment &= !0x40u32;
         memory = r.read_var_u32()?;
     }
@@ -969,6 +987,7 @@ fn read_mem_arg(r: &mut Reader) -> DecodeResult<MemArg> {
         alignment,
         offset,
         memory,
+        memory_flag,
     })
 }
 
@@ -981,6 +1000,7 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             alignment: 0,
             offset: 0,
             memory: 0,
+            memory_flag: false,
         },
         lane: 0,
         bytes: 0,
@@ -1030,6 +1050,8 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
     Ok(Instr {
         op: Op::Simd,
         offset: 0,
+        imm_at: 0,
+        imm_len: 0,
         imm: Imm::Simd(s),
     })
 }
@@ -1043,6 +1065,7 @@ fn decode_atomic(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             alignment: 0,
             offset: 0,
             memory: 0,
+            memory_flag: false,
         },
     };
     match sub {
@@ -1060,6 +1083,8 @@ fn decode_atomic(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
     Ok(Instr {
         op: Op::Atomic,
         offset: 0,
+        imm_at: 0,
+        imm_len: 0,
         imm: Imm::Atomic(at),
     })
 }
@@ -1095,9 +1120,16 @@ fn read_try_table(r: &mut Reader) -> DecodeResult<Imm> {
 ///
 /// The body is the *whole* expression, so nothing may follow its terminating `end`.
 pub fn decode_body(body: &[u8]) -> DecodeResult<Vec<Instr>> {
-    let mut r = Reader::new(body);
+    decode_body_at(body, 0)
+}
+
+/// [`decode_body`] for a body that begins `origin` bytes into the module, so a failure in it is
+/// noted at its absolute offset (`module::last_decode_offset`, 3.0.0).
+pub(crate) fn decode_body_at(body: &[u8], origin: usize) -> DecodeResult<Vec<Instr>> {
+    let mut r = Reader::with_origin(body, origin);
     let list = decode_expr(&mut r)?;
     if !r.at_end() {
+        crate::reader::note_decode_at(r.abs_pos());
         return Err(DecodeError::UnbalancedEnd);
     }
     Ok(list)
@@ -1123,6 +1155,23 @@ pub fn decode_body(body: &[u8]) -> DecodeResult<Vec<Instr>> {
 /// Both vanish structurally here: a const expr is decoded by the decoder that decodes everything
 /// else, so an instruction cannot be legal in a body and unknown in an initializer ever again.
 pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
+    // 🆕 3.0.0 (review I1 sibling C; P2, P3): a failure is noted where wasmtime reports it — at the
+    // start of the value just read (a block type, a `br_table` count, an opcode), at the LEB byte that
+    // overflowed, where the next byte was needed when the input ran out, and at the INSTRUCTION for
+    // `atomic.fence`'s nonzero reserved byte (wasmtime: "nonzero byte after `atomic.fence`" at the 0xFE).
+    let mut cur = r.abs_pos();
+    let res = decode_expr_from(r, &mut cur);
+    if let Err(e) = &res {
+        match e {
+            DecodeError::MalformedFlag => crate::reader::note_decode_at(cur),
+            DecodeError::MissingEnd => crate::reader::note_decode_at(r.abs_pos()),
+            other => crate::reader::note_failure(r, other),
+        }
+    }
+    res
+}
+
+fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>> {
     let mut list: Vec<Instr> = Vec::new();
     // Open control structures, counting the expression itself. `end` (and the legacy `delegate`,
     // which terminates a `try` in place of one) closes one; reaching zero ends the expression.
@@ -1137,6 +1186,7 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
         }
         // Where this instruction starts, for trap backtraces. Captured before the opcode byte is
         // consumed, so it points at the instruction rather than its first immediate.
+        *cur = r.abs_pos();
         let at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
         let b0 = r.read_byte()?;
 
@@ -1153,20 +1203,25 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
             } else {
                 (crate::tables::fc_op(sub).ok_or(DecodeError::UnsupportedOpcode)?, false)
             };
+            let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
             let imm = read_prefixed_immediate(&mut *r, op, nullable)?;
-            list.push(Instr { offset: at, op, imm });
+            list.push(Instr { offset: at, op, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
             continue;
         }
 
         if b0 == 0xfd {
             let sub = r.read_var_u32()?;
-            list.push(Instr { offset: at, ..decode_simd(&mut *r, sub)? });
+            let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
+            let i = decode_simd(&mut *r, sub)?;
+            list.push(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
             continue;
         }
 
         if b0 == 0xfe {
             let sub = r.read_var_u32()?;
-            list.push(Instr { offset: at, ..decode_atomic(&mut *r, sub)? });
+            let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
+            let i = decode_atomic(&mut *r, sub)?;
+            list.push(Instr { offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, ..i });
             continue;
         }
 
@@ -1179,6 +1234,7 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
         // structural instead of maintained. `rejects_raw_internal_tag_bytes` still pins the
         // behaviour; only the mechanism changed.
 
+        let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
         let imm = match immediate_kind(b0) {
             ImmKind::None => Imm::None,
             ImmKind::BlockType => Imm::BlockType(read_block_type(&mut *r)?),
@@ -1195,8 +1251,9 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
             ImmKind::CallIndirect => {
                 let type_index = r.read_var_u32()?;
                 let at = r.pos();
+                let table_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
                 let table = r.read_var_u32()?;
-                Imm::CallIndirect(CallIndirect { type_index, table, overlong: r.pos() - at > 1 })
+                Imm::CallIndirect(CallIndirect { type_index, table, overlong: r.pos() - at > 1, table_at })
             }
             ImmKind::Local => Imm::Local(r.read_var_u32()?),
             ImmKind::Global => Imm::Global(r.read_var_u32()?),
@@ -1234,7 +1291,7 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
 
         let op = Op::from_u8(b0).ok_or(DecodeError::UnsupportedOpcode)?;
         depth = control_depth(depth, op)?;
-        list.push(Instr { op, offset: at, imm });
+        list.push(Instr { op, offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
     }
 
     // An `expr` is terminated by its matching `end` (§5.4.9); the loop above exits only when that
@@ -1275,9 +1332,9 @@ mod tests {
         let body = [0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b];
         let instrs = decode_body(&body).unwrap();
         assert_eq!(instrs.len(), 4);
-        assert_eq!(instrs[0], Instr { offset: 0, op: Op::LocalGet, imm: Imm::Local(0) });
-        assert_eq!(instrs[1], Instr { offset: 2, op: Op::LocalGet, imm: Imm::Local(1) });
-        assert_eq!(instrs[2], Instr { offset: 4, op: Op::I32Add, imm: Imm::None });
+        assert_eq!(instrs[0], Instr { offset: 0, imm_at: 1, imm_len: 1, op: Op::LocalGet, imm: Imm::Local(0) });
+        assert_eq!(instrs[1], Instr { offset: 2, imm_at: 3, imm_len: 1, op: Op::LocalGet, imm: Imm::Local(1) });
+        assert_eq!(instrs[2], Instr { offset: 4, imm_at: 5, imm_len: 0, op: Op::I32Add, imm: Imm::None });
         assert_eq!(instrs[3].op, Op::End);
     }
 
@@ -1293,7 +1350,7 @@ mod tests {
         assert_eq!(instrs[1].imm, Imm::I32(-3));
         assert_eq!(
             instrs[2].imm,
-            Imm::Mem(MemArg { alignment: 2, offset: 8, memory: 0 })
+            Imm::Mem(MemArg { alignment: 2, offset: 8, memory: 0, memory_flag: false })
         );
         assert_eq!(instrs[3].op, Op::End);
     }
@@ -1323,10 +1380,11 @@ mod tests {
 
     #[test]
     fn select_t_rejects_invalid_valtype() {
-        // select_t (0x1c), 1 result type, 0x50 — not a value type → rejected.
+        // select_t (0x1c), 1 result type, 0x50 — not a value type → rejected, as "invalid value type"
+        // (wasm-tools 1.263; it said UnsupportedOpcode until 2026-11-23, review P3).
         assert_eq!(
             decode_body(&[0x1c, 0x01, 0x50]),
-            Err(DecodeError::UnsupportedOpcode)
+            Err(DecodeError::BadValType)
         );
         // A valid typed select (i32 = 0x7f) still decodes.
         let ok = decode_body(&[0x1c, 0x01, 0x7f, 0x0b]).unwrap();
@@ -1353,7 +1411,7 @@ mod tests {
         let instrs = decode_body(&[0xfc, 0x0a, 0x00, 0x00, 0x0b]).unwrap();
         assert_eq!(
             instrs[0],
-            Instr { offset: 0, op: Op::MemoryCopy, imm: Imm::MemCopy { dst: 0, src: 0 } }
+            Instr { offset: 0, imm_at: 2, imm_len: 2, op: Op::MemoryCopy, imm: Imm::MemCopy { dst: 0, src: 0 } }
         );
     }
 
@@ -1364,12 +1422,19 @@ mod tests {
     /// Pinned because it stops being true the moment `Imm` shrinks — at which point the offset starts
     /// costing 16 bytes per instruction and the trade should be **re-decided**, not silently paid.
     /// An optimization pass that shrinks `Imm` (a live T11 candidate) will fail here and be told why.
+    ///
+    /// 🔁 **3.0.0 (2026-11-23): `Instr` is 64 bytes, down from 80.** `MemArg::memory_flag` (a `bool`)
+    /// gave `Imm` a niche for its discriminant, so `Imm` shrank from 64 to 48 — and the three `u32`s
+    /// (`offset`, `imm_at`, `imm_len`) plus the `u16` opcode fill the 16 bytes after it exactly.
+    /// Re-decided rather than silently paid: every field is still free, and each instruction is 16
+    /// bytes smaller.
     #[test]
     fn the_instruction_offset_costs_nothing() {
+        assert_eq!(core::mem::size_of::<Imm>(), 48, "Imm changed size; see the doc above");
         assert_eq!(
             core::mem::size_of::<Instr>(),
-            80,
-            "Instr grew — if Imm shrank, `offset` is no longer free; see the doc on Instr::offset"
+            64,
+            "Instr changed size — `offset`, `imm_at` and `imm_len` may no longer be free; see above"
         );
     }
 

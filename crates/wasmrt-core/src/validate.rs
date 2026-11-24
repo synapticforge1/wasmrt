@@ -30,7 +30,7 @@ use core::fmt;
 
 use crate::features::{op_feature, simd_sub_feature, Feature, Features};
 use crate::module::{Code, CompType, FuncType, Module, StorageType};
-use crate::opcode::{self, HeapType, Imm, Instr, Op, RefType};
+use crate::opcode::{self, Atomic, HeapType, Imm, Instr, MemArg, Op, RefType, Simd};
 use crate::reader::Reader;
 use crate::types::{DecodeError, RefHeap, ValType};
 
@@ -112,6 +112,13 @@ pub enum ValidateError {
     /// The module uses a proposal this engine was configured to reject
     /// ([`crate::features::Features`]). Carries the proposal so an embedder can say which.
     FeatureDisabled(Feature),
+    /// 🆕 3.0.0 (review I1): a byte that must be `0x00` without the proposal that would give it a
+    /// meaning — `call_indirect`'s table index without reference-types, `memory.size` /
+    /// `memory.grow`'s memory index without multi-memory. Reported AT that byte, in wasmtime's words.
+    ZeroByteExpected,
+    /// 🆕 3.0.0 (review I1, sibling B): a memarg's flags carry bit `0x40` ("a memory index follows")
+    /// without multi-memory. Reported at the flags byte, in wasmtime's words.
+    MemopReservedFlags,
 }
 
 impl From<DecodeError> for ValidateError {
@@ -126,6 +133,10 @@ impl fmt::Display for ValidateError {
             ValidateError::Decode(e) => write!(f, "decode error during validation: {e}"),
             ValidateError::FeatureDisabled(x) => {
                 write!(f, "invalid module: uses the disabled proposal `{x}`")
+            }
+            ValidateError::ZeroByteExpected => write!(f, "invalid module: zero byte expected"),
+            ValidateError::MemopReservedFlags => {
+                write!(f, "invalid module: malformed memop: reserved flags bits set")
             }
             other => write!(f, "invalid module: {other:?}"),
         }
@@ -1197,6 +1208,7 @@ fn validate_function(
         vals: Vec::new(),
         ctrls: Vec::new(),
         body_len: instrs.len(),
+        body_offset: code.body_offset,
     };
     // The whole body is an implicit block of type [] -> results.
     v.push_ctrl(FrameKind::Block, Vec::new(), ft.results.clone())?;
@@ -1261,6 +1273,9 @@ struct FuncValidator<'a> {
     /// on a tiny module. Every operand must be produced by at least one instruction, so a
     /// valid `n` can never exceed this — bounding by it cannot reject a valid module.
     body_len: usize,
+    /// The body's offset from the start of the module, so a refusal about ONE immediate byte can
+    /// report that byte (`Instr::imm_at`, `CallIndirect::table_at`), as wasmtime does.
+    body_offset: u32,
 }
 
 impl<'a> FuncValidator<'a> {
@@ -1576,9 +1591,40 @@ impl<'a> FuncValidator<'a> {
             // made it a LEB table index, so an overlong encoding (`80 00`) is that proposal (wasm-tools'
             // `call-indirect-overlong`, a reference-types name; contract v37's matrix). wasmrt accepted
             // it under every feature set until 2026-10-24.
-            if let Imm::CallIndirect(ci) = &instr.imm {
-                if ci.overlong {
-                    gate(Some(Feature::ReferenceTypes), self.features)?;
+            // 🆕 3.0.0 (review I1 and its siblings): the bytes a disabled proposal leaves with ONE
+            // legal value are refused AT that byte, in wasmtime's words — wasmtime 51 and
+            // wasm-tools 1.263 measured 2026-11-23 on `1_fib-rs.wasm` ("zero byte expected (at
+            // offset 0x25c)", 604) and on hand-built modules. Until then `call_indirect` reported
+            // the instruction (598) as a disabled proposal, `memory.size`/`memory.grow` reported
+            // `MissingMemory` at the instruction or ACCEPTED an overlong `80 00`, and a memarg with
+            // the memory-index flag was accepted outright.
+            // Only `call_indirect`: `return_call_indirect` (tail-call) reads its table index as a plain
+            // LEB, so wasm-tools accepts an overlong one there — wasmrt refused it until 2026-11-23.
+            if !self.features.reference_types && instr.op == Op::CallIndirect {
+                if let Imm::CallIndirect(ci) = &instr.imm {
+                    if ci.overlong || ci.table != 0 {
+                        note_offset(self.body_offset.saturating_add(ci.table_at));
+                        return Err(ValidateError::ZeroByteExpected);
+                    }
+                }
+            }
+            if !self.features.multi_memory {
+                let at = self.body_offset.saturating_add(instr.imm_at);
+                match &instr.imm {
+                    Imm::MemIndex(m)
+                        if matches!(instr.op, Op::MemorySize | Op::MemoryGrow)
+                            && (*m != 0 || instr.imm_len != 1) =>
+                    {
+                        note_offset(at);
+                        return Err(ValidateError::ZeroByteExpected);
+                    }
+                    Imm::Mem(MemArg { memory_flag: true, .. })
+                    | Imm::Simd(Simd { mem: MemArg { memory_flag: true, .. }, .. })
+                    | Imm::Atomic(Atomic { mem: MemArg { memory_flag: true, .. }, .. }) => {
+                        note_offset(at);
+                        return Err(ValidateError::MemopReservedFlags);
+                    }
+                    _ => {}
                 }
             }
             // A typed `select` names its result type outright, so `(select (result v128) …)` must
@@ -3064,6 +3110,79 @@ fn simple_sig(op: Op) -> Option<Sig> {
 mod tests {
     use super::*;
     use crate::module::decode;
+
+    /// A module of one `() -> ()` function whose body is `code` (no locals, then `end`), with one
+    /// memory and — `table` — one funcref table. Returns the bytes and the offset of `code[0]`.
+    fn one_body(code: &[u8], table: bool) -> (Vec<u8>, u32) {
+        let mut v = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+        v.extend_from_slice(&[0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00]);
+        if table {
+            v.extend_from_slice(&[0x04, 0x04, 0x01, 0x70, 0x00, 0x01]);
+        }
+        v.extend_from_slice(&[0x05, 0x03, 0x01, 0x00, 0x01]);
+        let body_len = u8::try_from(code.len() + 2).unwrap();
+        v.extend_from_slice(&[0x0a, body_len + 2, 0x01, body_len, 0x00]);
+        let at = u32::try_from(v.len()).unwrap();
+        v.extend_from_slice(code);
+        v.push(0x0b);
+        (v, at)
+    }
+
+    /// Validate under `features` minus `off`; the error and its recorded offset.
+    fn refusal(code: &[u8], table: bool, off: fn(&mut Features)) -> (ValidateResult<()>, Option<u32>, u32) {
+        let (bytes, at) = one_body(code, table);
+        let mut f = Features::all();
+        off(&mut f);
+        let r = validate_with_features(&decode(&bytes).unwrap(), &f);
+        (r, last_failure_site().offset, at)
+    }
+
+    /// Review I1 (2026-11-23): `call_indirect`'s table index without reference-types must be the
+    /// single byte `0x00`; a refusal points AT that byte with wasmtime's words, not at the opcode.
+    #[test]
+    fn call_indirect_table_byte_refusals_point_at_the_byte() {
+        let no_refs = |f: &mut Features| f.reference_types = false;
+        // i32.const 0 ; call_indirect type 0, table index `80 00` (overlong) — the byte is code[4].
+        let (r, off, at) = refusal(&[0x41, 0x00, 0x11, 0x00, 0x80, 0x00], true, no_refs);
+        assert_eq!(r, Err(ValidateError::ZeroByteExpected));
+        assert_eq!(off, Some(at + 4), "at the table index byte, as wasmtime reports");
+        // …and a one-byte nonzero table index, the same rule.
+        let (r, off, at) = refusal(&[0x41, 0x00, 0x11, 0x00, 0x01], true, no_refs);
+        assert_eq!(r, Err(ValidateError::ZeroByteExpected));
+        assert_eq!(off, Some(at + 4));
+        // `return_call_indirect` reads its table index as a plain LEB: overlong is valid there.
+        let (r, _, _) = refusal(&[0x41, 0x00, 0x13, 0x00, 0x80, 0x00], true, no_refs);
+        assert_eq!(r, Ok(()), "return_call_indirect's overlong index is valid (wasm-tools agrees)");
+        // With reference-types the overlong form is a valid LEB index.
+        let (r, _, _) = refusal(&[0x41, 0x00, 0x11, 0x00, 0x80, 0x00], true, |_| {});
+        assert_eq!(r, Ok(()));
+    }
+
+    /// Review I1, siblings A and B: without multi-memory, `memory.size` / `memory.grow`'s index is the
+    /// single byte `0x00` (an overlong `80 00` was ACCEPTED), and a memarg may not carry the
+    /// memory-index flag (it was ACCEPTED). Each refusal points at its byte, in wasmtime's words.
+    #[test]
+    fn memory_index_byte_refusals_point_at_the_byte() {
+        let no_mm = |f: &mut Features| f.multi_memory = false;
+        for (code, byte) in [
+            (&[0x3f, 0x01, 0x1a][..], 1), // memory.size 1 ; drop
+            (&[0x3f, 0x80, 0x00, 0x1a][..], 1), // memory.size `80 00` (overlong 0) ; drop
+            (&[0x41, 0x00, 0x40, 0x01, 0x1a][..], 3), // i32.const 0 ; memory.grow 1 ; drop
+        ] {
+            let (r, off, at) = refusal(code, false, no_mm);
+            assert_eq!(r, Err(ValidateError::ZeroByteExpected), "{code:02x?}");
+            assert_eq!(off, Some(at + byte), "{code:02x?}: at the memory index byte");
+        }
+        // i32.const 0 ; i32.load flags `0x42` (align 2 + the memory-index bit), memory 0, offset 0.
+        let (r, off, at) = refusal(&[0x41, 0x00, 0x28, 0x42, 0x00, 0x00, 0x1a], false, no_mm);
+        assert_eq!(r, Err(ValidateError::MemopReservedFlags));
+        assert_eq!(off, Some(at + 3), "at the memarg's flags byte");
+        // The plain forms stay valid without multi-memory, and the flagged ones with it.
+        assert_eq!(refusal(&[0x3f, 0x00, 0x1a], false, no_mm).0, Ok(()));
+        assert_eq!(refusal(&[0x41, 0x00, 0x28, 0x02, 0x00, 0x1a], false, no_mm).0, Ok(()));
+        assert_eq!(refusal(&[0x3f, 0x80, 0x00, 0x1a], false, |_| {}).0, Ok(()));
+        assert_eq!(refusal(&[0x41, 0x00, 0x28, 0x42, 0x00, 0x00, 0x1a], false, |_| {}).0, Ok(()));
+    }
 
     fn m(rest: &[u8]) -> Vec<u8> {
         let mut v = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];

@@ -28,7 +28,7 @@ scratch folder is under the main session's scratchpad, removed at triage (worksp
 
 ## 3. Reference results — re-run after each class's fixes, and once at the end
 
-Each a dated claim; the current values are in `open-work.md` § State.
+Each a dated claim; the current values are the newest entry's "Platforms verified" in `release.md`.
 
 - the spec suite, **64,603 / 0 / 0 over 288 files** (`bun scripts/behaviour-s2.ts`: 0 regressed);
 - S1, the behaviour corpus (`tests/behaviour/`, 38 configurations), in every `cargo test`, and the

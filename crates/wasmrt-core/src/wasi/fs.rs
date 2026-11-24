@@ -410,45 +410,15 @@ pub fn errno_for(e: &std::io::Error) -> i32 {
         K::AlreadyExists => errno::EXIST,
         K::InvalidInput => errno::INVAL,
         K::UnexpectedEof => errno::IO,
-        _ => match e.raw_os_error() {
-            // `DirectoryNotEmpty`/`NotADirectory`/`IsADirectory` are still unstable to
-            // match on portably, so fall back to the raw code for the ones that matter.
-            Some(c) if is_notdir(c) => errno::NOTDIR,
-            Some(c) if is_isdir(c) => errno::ISDIR,
-            Some(c) if is_notempty(c) => errno::NOTEMPTY,
-            _ => errno::IO,
-        },
+        // platform: every ID — the standard library maps each host's own code to these kinds
+        // (ENOTDIR / EISDIR / ENOTEMPTY on Linux and macOS — macOS's ENOTEMPTY is 66, Linux's 39 —
+        // and ERROR_DIRECTORY / ERROR_DIR_NOT_EMPTY on Windows), so no raw code is compared here.
+        // Until 2026-11-23 the raw codes were, and macOS's 66 fell through to `IO` (review I8).
+        K::NotADirectory => errno::NOTDIR,
+        K::IsADirectory => errno::ISDIR,
+        K::DirectoryNotEmpty => errno::NOTEMPTY,
+        _ => errno::IO,
     }
-}
-
-// platform: win-x64 win-arm64 linux-x64 linux-arm64 mac-x64 mac-arm64 — raw OS error codes, two
-// spellings: Windows' `ERROR_*`, and the Unix errno values. ⚠️ 39 is Linux's ENOTEMPTY; macOS's is
-// 66, so `is_notempty` misses it there (open issue I8, cmem/platforms.md § mac).
-#[cfg(windows)]
-fn is_notdir(c: i32) -> bool {
-    c == 267 // ERROR_DIRECTORY
-}
-#[cfg(not(windows))]
-fn is_notdir(c: i32) -> bool {
-    c == 20 // ENOTDIR
-}
-
-#[cfg(windows)]
-fn is_isdir(c: i32) -> bool {
-    c == 5 // ERROR_ACCESS_DENIED — Windows has no distinct EISDIR
-}
-#[cfg(not(windows))]
-fn is_isdir(c: i32) -> bool {
-    c == 21 // EISDIR
-}
-
-#[cfg(windows)]
-fn is_notempty(c: i32) -> bool {
-    c == 145 // ERROR_DIR_NOT_EMPTY
-}
-#[cfg(not(windows))]
-fn is_notempty(c: i32) -> bool {
-    c == 39 // ENOTEMPTY
 }
 
 // --- the fd table -------------------------------------------------------------
@@ -1628,6 +1598,54 @@ impl Drop for Scratch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// I8: the three directory errors map by KIND, so they hold on every host — an error made
+    /// from a kind has no raw code, which the raw-code mapping before 2026-11-23 sent to `IO`.
+    #[test]
+    fn directory_errors_map_by_kind_not_by_raw_code() {
+        use std::io::{Error, ErrorKind as K};
+        assert_eq!(errno_for(&Error::from(K::NotADirectory)), errno::NOTDIR);
+        assert_eq!(errno_for(&Error::from(K::IsADirectory)), errno::ISDIR);
+        assert_eq!(errno_for(&Error::from(K::DirectoryNotEmpty)), errno::NOTEMPTY);
+        assert_eq!(errno_for(&Error::from(K::Other)), errno::IO);
+    }
+
+    /// I8: each platform's OWN codes for the three errors (macOS's ENOTEMPTY is 66, Linux's 39).
+    #[test]
+    fn each_hosts_own_directory_codes_map() {
+        use std::io::Error;
+        // platform: win-x64 win-arm64 — ERROR_DIRECTORY 267, ERROR_DIR_NOT_EMPTY 145.
+        #[cfg(windows)]
+        let (notdir, isdir, notempty) = (Some(267), None, 145);
+        // platform: linux-x64 linux-arm64 — ENOTDIR 20, EISDIR 21, ENOTEMPTY 39.
+        #[cfg(target_os = "linux")]
+        let (notdir, isdir, notempty) = (Some(20), Some(21), 39);
+        // platform: mac-x64 mac-arm64 — ENOTDIR 20, EISDIR 21, ENOTEMPTY 66.
+        #[cfg(target_os = "macos")]
+        let (notdir, isdir, notempty) = (Some(20), Some(21), 66);
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        {
+            if let Some(c) = notdir {
+                assert_eq!(errno_for(&Error::from_raw_os_error(c)), errno::NOTDIR, "code {c}");
+            }
+            if let Some(c) = isdir {
+                assert_eq!(errno_for(&Error::from_raw_os_error(c)), errno::ISDIR, "code {c}");
+            }
+            assert_eq!(errno_for(&Error::from_raw_os_error(notempty)), errno::NOTEMPTY, "code {notempty}");
+        }
+    }
+
+    /// I8 end to end: removing a non-empty directory on this host reports NOTEMPTY, not IO.
+    #[test]
+    fn removing_a_non_empty_directory_reports_notempty() {
+        let dir = std::env::temp_dir().join(alloc::format!("wasmrt_i8_notempty_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("inner")).expect("scratch dir");
+        let e = std::fs::remove_dir(&dir).expect_err("a non-empty directory is not removed");
+        let got = errno_for(&e);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(got, errno::NOTEMPTY, "remove_dir on a non-empty directory gave {e}");
+    }
 
     /// Creating a symlink needs privilege on Windows (admin or Developer Mode). Where it is
     /// unavailable the symlink tests cannot run — and per the project's honesty rule they

@@ -1270,3 +1270,22 @@ fn a_null_externref_crosses_as_the_all_ones_sentinel() {
     assert!(e.is_null(), "{}", msg_of_err(e));
     assert_eq!(as_i32v(&out[0]), 1);
 }
+
+/// Review P4 (2026-11-23): the C ABI's error strings carry the byte offset, as the CLI and wasmtime do —
+/// a truncated module where the next byte was needed, an invalid one at the failing instruction (the
+/// type mismatch wasmtime 51 reports as "offset 26: type mismatch: expected i32, found i64" — measured).
+#[test]
+fn module_new_errors_carry_the_byte_offset() {
+    let engine = wasmrt_engine_new();
+    let mut module: *mut wasmrt_module = core::ptr::null_mut();
+    let truncated = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x80];
+    let e = wasmrt_module_new(engine, truncated.as_ptr(), truncated.len(), &raw mut module);
+    assert_eq!(msg_of_err(e), "decode failed at offset 10: unexpected end of input");
+    wasmrt_error_delete(e); // each error is the caller's to free (Miri caught the leak)
+    let invalid = wasm("(module (func (result i32) i64.const 1))");
+    let e = wasmrt_module_new(engine, invalid.as_ptr(), invalid.len(), &raw mut module);
+    let msg = msg_of_err(e);
+    wasmrt_error_delete(e);
+    assert_eq!(msg, "invalid module at offset 26: type mismatch: expected i32, found i64");
+    wasmrt_engine_delete(engine);
+}
