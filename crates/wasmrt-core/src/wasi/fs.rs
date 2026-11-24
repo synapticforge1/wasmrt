@@ -936,11 +936,10 @@ pub fn fd_read_file(
     } else {
         None
     };
-    if let Some(off) = at {
-        if let Err(e) = f.file.seek(SeekFrom::Start(off)) {
+    if let Some(off) = at
+        && let Err(e) = f.file.seek(SeekFrom::Start(off)) {
             return ret(results, errno_for(&e));
         }
-    }
     let mut total: u32 = 0;
     let mut failed = None;
     let mut chunks: Vec<(u32, Vec<u8>)> = Vec::new();
@@ -1030,11 +1029,10 @@ pub fn fd_write_file(
         if let Err(e) = f.file.seek(SeekFrom::Start(off)) {
             return ret(results, errno_for(&e));
         }
-    } else if f.append {
-        if let Err(e) = f.file.seek(SeekFrom::End(0)) {
+    } else if f.append
+        && let Err(e) = f.file.seek(SeekFrom::End(0)) {
             return ret(results, errno_for(&e));
         }
-    }
     let written = f.file.write(&data);
     if let (Some(p), Some(_)) = (saved, at) {
         let _ = f.file.seek(SeekFrom::Start(p));
@@ -1254,8 +1252,8 @@ pub fn path_open(
     // `O_CREAT` without write access is meaningful in POSIX (and wasmtime creates the file), but
     // Rust's `OpenOptions` refuses `create` without `write`. Create it first, then open it as the
     // guest asked — the rights check above has already established it may.
-    if creat && !writable && existing.is_none() {
-        if let Err(e) = std::fs::OpenOptions::new()
+    if creat && !writable && existing.is_none()
+        && let Err(e) = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(false)
@@ -1263,7 +1261,6 @@ pub fn path_open(
         {
             return ret(results, errno_for(&e));
         }
-    }
     let mut opts = std::fs::OpenOptions::new();
     opts.read(base & rights::FD_READ != 0 || !writable)
         .write(writable)

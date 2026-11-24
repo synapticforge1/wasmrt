@@ -1510,11 +1510,10 @@ fn assemble_parts(module: &[Sexpr], annots: &[Annot]) -> Result<Vec<u8>> {
     // The deferred type uses, now that every type — implicit ones included — exists. An index
     // that still names nothing is left for the validator, whose stage "unknown type" is.
     for (ti, sig) in &b.deferred_type_uses {
-        if let Some(d) = func_sig_at(&b.types, *ti) {
-            if d.params != sig.params || d.results != sig.results {
+        if let Some(d) = func_sig_at(&b.types, *ti)
+            && (d.params != sig.params || d.results != sig.results) {
                 return Err(Error::TypeUseMismatch);
             }
-        }
     }
 
     // §6.3.5: within an index space, a `$name` must be UNIQUE.
@@ -2153,12 +2152,11 @@ fn parse_memory_type(items: &[Sexpr], j: &mut usize) -> Result<(MemoryDef, Optio
     };
     *j += 1;
     let mut max = None;
-    if let Some(a) = items.get(*j).and_then(Sexpr::as_atom) {
-        if a != "shared" {
+    if let Some(a) = items.get(*j).and_then(Sexpr::as_atom)
+        && a != "shared" {
             max = Some(parse_u64_str(a)?);
             *j += 1;
         }
-    }
     let shared = items.get(*j).is_some_and(|s| eq_atom(s, "shared"));
     if shared {
         *j += 1;
@@ -2287,8 +2285,8 @@ fn parse_func_field(items: &[Sexpr], annots: &[Annot], b: &mut ModuleBuild) -> R
     // An inline signature given ALONGSIDE a `(type $t)` must match it — they are not alternatives.
     // Without this the explicit clauses were kept while the type index was also used, so the module
     // could mean something the text did not say. The suite calls it "inline function type".
-    if let Some(ti) = type_ref {
-        if seen_param || seen_result {
+    if let Some(ti) = type_ref
+        && (seen_param || seen_result) {
             match b.types.get(ti as usize) {
                 Some(TypeDef::Func(d)) => {
                     if d.params != sig.params || d.results != sig.results {
@@ -2300,13 +2298,12 @@ fn parse_func_field(items: &[Sexpr], annots: &[Annot], b: &mut ModuleBuild) -> R
                 Some(_) => return Err(Error::TypeUseMismatch),
             }
         }
-    }
 
     // An explicit `(type $t)` with no inline params/results takes its signature from the
     // referenced type, so locals resolve against the right param count.
-    if let Some(ti) = type_ref {
-        if sig.params.is_empty() && sig.results.is_empty() {
-            if let Some(s) = func_sig_at(&b.types, ti) {
+    if let Some(ti) = type_ref
+        && sig.params.is_empty() && sig.results.is_empty()
+            && let Some(s) = func_sig_at(&b.types, ti) {
                 sig = s.clone();
                 // The referenced type's params are unnamed, and they occupy the FIRST local
                 // indices — so every declared local name shifts up by the param count.
@@ -2324,8 +2321,6 @@ fn parse_func_field(items: &[Sexpr], annots: &[Annot], b: &mut ModuleBuild) -> R
                 names.append(&mut local_names);
                 local_names = names;
             }
-        }
-    }
 
     // Parameters and locals share ONE index space, so a name may not repeat across the two.
     check_unique_names(&local_names)?;
@@ -2552,12 +2547,11 @@ fn parse_table_limits(items: &[Sexpr], j: &mut usize) -> Result<(u64, Option<u64
     let min = parse_u64_str(want_atom(nth(items, *j)?)?)?;
     *j += 1;
     let mut max = None;
-    if let Some(a) = items.get(*j).and_then(Sexpr::as_atom) {
-        if a.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+    if let Some(a) = items.get(*j).and_then(Sexpr::as_atom)
+        && a.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             max = Some(parse_u64_str(a)?);
             *j += 1;
         }
-    }
     Ok((min, max, is64))
 }
 
@@ -3834,12 +3828,11 @@ fn emit_call_indirect(ctx: &mut Ctx, l: &[Sexpr], start: usize, folded: bool, op
     let mut j = start;
     // An optional leading table index or `$name` (multi-table).
     let mut table = 0u32;
-    if let Some(s) = l.get(j) {
-        if s.as_atom().is_some_and(is_index_or_id) {
+    if let Some(s) = l.get(j)
+        && s.as_atom().is_some_and(is_index_or_id) {
             table = resolve_by_name(ctx.table_names, s)?;
             j += 1;
         }
-    }
     // The type annotation: `(type $t)` and/or an inline signature — the same **type use** grammar a
     // block type reads, through the same function. This had its own copy of the loop and therefore its
     // own copy of all three defects: clause order, named parameters, and an inline signature silently
@@ -3964,15 +3957,14 @@ fn emit_folded_try(ctx: &mut Ctx, l: &[Sexpr]) -> Result<()> {
     // handlers, and TERMINATES the try in place of its `end`. ⚠️ Its label resolves in the scope
     // OUTSIDE the try, so the try's own label comes off before it is read — the same rule
     // `try_table`'s catch labels follow, and for the same reason: the form closes the block.
-    if let Some(d) = l.get(j).and_then(Sexpr::as_list) {
-        if d.first().map(|s| eq_atom(s, "delegate")) == Some(true) {
+    if let Some(d) = l.get(j).and_then(Sexpr::as_list)
+        && d.first().map(|s| eq_atom(s, "delegate")) == Some(true) {
             ctx.labels.pop();
             ctx.out.push(0x18);
             let target = ctx.resolve_label(nth(d, 1)?)?;
             uleb(&mut ctx.out, u64::from(target));
             return Ok(());
         }
-    }
 
     // `(catch_all …)` is the LAST handler if present: `(catch x …)* (catch_all …)?`.
     let mut seen_catch_all = false;
@@ -4971,8 +4963,8 @@ fn read_type_use(
             _ => break,
         }
     }
-    if let Some(ti) = type_ref {
-        if seen_param || seen_result {
+    if let Some(ti) = type_ref
+        && (seen_param || seen_result) {
             match types.get(ti as usize) {
                 Some(TypeDef::Func(d)) => {
                     if d.params != sig.params || d.results != sig.results {
@@ -4985,7 +4977,6 @@ fn read_type_use(
                 Some(_) => return Err(Error::UnexpectedToken),
             }
         }
-    }
     Ok((type_ref, sig))
 }
 

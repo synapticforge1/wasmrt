@@ -28,6 +28,8 @@
 # dependency was an artifact of the target, which is exactly the kind of thing that regresses unnoticed
 # if it is left to whoever types the build command. See `cmem/releasing.md` for the file-by-file
 # distribution manifest this guarantees.
+# The gnu host (Windows' host since 2026-11-24) needs no flag: its binaries import only Windows' own
+# DLLs (measured; cmem/platforms.md). This stays for a gnullvm build.
 # platform: win-x64 — the gnullvm host only (cmem/platforms.md)
 [target.x86_64-pc-windows-gnullvm]
 rustflags = ["-C", "target-feature=+crt-static"]

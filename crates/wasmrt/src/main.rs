@@ -635,11 +635,19 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         }
     }
     files.sort();
+    files.dedup(); // the same path named twice in one run is pinned once (review B1)
 
     let mut lines = String::new();
     let mut n = 0usize;
     for f in &files {
         let name = f.to_string_lossy().to_string();
+        // A name is written into the DB as text, one entry per line: a control character in it (a newline, on
+        // Unix) would split it into lines of its own — a forged pin or a `# mode:` line the user never wrote
+        // (review S1, 2026-11-24). Such a file is skipped, before anything is printed or written.
+        if name.chars().any(char::is_control) {
+            eprintln!("wasmrt: warning: skipping {name:?}: a control character in its name");
+            continue;
+        }
         match load_module(&name) {
             Ok(l) => {
                 lines.push_str(&format!("{}  {name}\n", pin::to_hex(&l.digest)));
@@ -653,30 +661,46 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         eprintln!("wasmrt: nothing to pin");
         return ExitCode::FAILURE;
     }
-    // Always PRINT the lines; append only when a DB is named. Matches wazmrt, so an installer
-    // script written for either runtime does the same thing under both (`interop.md` §2.1).
-    print!("{lines}");
+    // The lines are PRINTED (as wazmrt prints them, `interop.md` §2.1); with a DB named, only once they are recorded,
+    // so a run that fails to record them prints none (review note, 2026-11-24).
     let Some(db_path) = db else {
+        print!("{lines}");
         return ExitCode::SUCCESS;
     };
-    // The DB's directory must exist: creating it made a mistyped `--db` path a new directory tree (wazmrt refuses too).
-    if let Some(parent) = std::path::Path::new(&db_path).parent().filter(|p| !p.as_os_str().is_empty()) {
-        if !parent.is_dir() {
-            eprintln!("wasmrt: pin DB directory {} does not exist", parent.display());
+    // The DB is a regular file, or does not exist yet: a device (`NUL`) or a directory "pinned" nothing.
+    match std::fs::metadata(&db_path) {
+        Ok(m) if m.is_file() => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        _ => {
+            eprintln!("wasmrt: pin DB {db_path} is not a regular file");
             return ExitCode::FAILURE;
         }
     }
+    // The DB's directory must exist: creating it made a mistyped `--db` path a new directory tree (wazmrt refuses too).
+    if let Some(parent) = std::path::Path::new(&db_path).parent().filter(|p| !p.as_os_str().is_empty())
+        && !parent.is_dir() {
+            eprintln!("wasmrt: pin DB directory {parent:?} does not exist");
+            return ExitCode::FAILURE;
+        }
+    // The DB's own file — through a symlink — is what the lock and its temporary files are keyed on, so two names
+    // for one DB share one lock (security re-review, 2026-11-24).
+    let real_db = match resolve_link(&db_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("wasmrt: cannot write {db_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     // Held until this function returns: the read, the check and the write below are one step.
-    let _lock = match PinLock::acquire(&db_path) {
+    let _lock = match PinLock::acquire(&real_db) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("wasmrt: {e}");
             return ExitCode::FAILURE;
         }
     };
-    // A temporary file a killed run left beside the DB (`<db>.wasmrt-tmp-<pid>`) is removed: under the lock no other
-    // run is writing one.
-    remove_stale_temps(&db_path);
+    // A temporary file a killed run left beside the DB is removed: under the lock no other run is writing one.
+    remove_dead_temps(&real_db);
     // Only a MISSING DB starts empty: one that exists but cannot be read (a UTF-16 file, a permission error) is
     // refused, not overwritten with just the new lines (review H2, 2026-11-24).
     let existing = match std::fs::read_to_string(&db_path) {
@@ -689,16 +713,16 @@ fn pin_modules(rest: &[String]) -> ExitCode {
     };
     // Parse what is there before appending: writing into a DB we cannot read would corrupt it
     // further, and the gate fails closed on a malformed DB.
-    if !existing.is_empty() {
-        if let Err(e) = pin::Db::parse(&existing) {
+    if !existing.is_empty()
+        && let Err(e) = pin::Db::parse(&existing) {
             eprintln!("wasmrt: pin DB {db_path} is malformed: {e}");
             return ExitCode::FAILURE;
         }
-    }
     // A line already in the DB (the same digest and path) is not appended again — pinning twice changed nothing
     // the gate reads, and only grew the file.
-    let present: std::collections::HashSet<&str> = existing.lines().map(str::trim_end).collect();
-    let new_lines: Vec<&str> = lines.lines().filter(|l| !present.contains(l.trim_end())).collect();
+    let mut present: std::collections::HashSet<&str> = existing.lines().map(str::trim_end).collect();
+    // `insert` is false for a line already seen — in the DB, or earlier in this run (review B1).
+    let new_lines: Vec<&str> = lines.lines().filter(|l| present.insert(l.trim_end())).collect();
     let already = lines.lines().count() - new_lines.len();
     let mut out = existing.clone();
     if !out.is_empty() && !out.ends_with('\n') {
@@ -708,12 +732,12 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         out.push_str(l);
         out.push('\n');
     }
-    if !new_lines.is_empty() {
-        if let Err(e) = write_replacing(&db_path, out.as_bytes()) {
+    if !new_lines.is_empty()
+        && let Err(e) = write_replacing(&db_path, out.as_bytes(), &pin_temp_tag(&real_db)) {
             eprintln!("wasmrt: cannot write {db_path}: {e}");
             return ExitCode::FAILURE;
         }
-    }
+    print!("{lines}");
     if already == 0 {
         println!("pinned {n} module(s) into {db_path}");
     } else {
@@ -724,14 +748,28 @@ fn pin_modules(rest: &[String]) -> ExitCode {
 
 /// Every `.wasm` / `.wat` under `dir`, for `pin`'s directory form.
 fn collect_modules(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    collect_modules_to(dir, out, 0);
+}
+
+/// The walk under `collect_modules`: a symlinked DIRECTORY is not entered (it could leave the named tree, or loop
+/// back into it and recurse until the stack overflowed — review, 2026-11-24), and the depth is bounded.
+fn collect_modules_to(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>, depth: u32) {
+    if depth > 64 {
+        eprintln!("wasmrt: warning: not descending past 64 directories at {dir:?}");
+        return;
+    }
     let Ok(entries) = std::fs::read_dir(dir) else {
-        eprintln!("wasmrt: warning: cannot read directory {}", dir.display());
+        eprintln!("wasmrt: warning: cannot read directory {dir:?}");
         return;
     };
     for e in entries.flatten() {
         let p = e.path();
-        if p.is_dir() {
-            collect_modules(&p, out);
+        // `DirEntry::file_type` does not follow a symlink: a link to a directory is neither entered nor pinned.
+        let Ok(kind) = e.file_type() else { continue };
+        if kind.is_dir() {
+            collect_modules_to(&p, out, depth + 1);
+        } else if kind.is_symlink() && p.is_dir() {
+            eprintln!("wasmrt: warning: not following the linked directory {p:?}");
         } else if p
             .extension()
             .is_some_and(|x| x.eq_ignore_ascii_case("wasm") || x.eq_ignore_ascii_case("wat"))
@@ -1400,7 +1438,7 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
                 eprintln!("wasmrt: refusing to write the output over the input {path}");
                 return ExitCode::FAILURE;
             }
-            if let Err(e) = write_replacing(o, &bytes) {
+            if let Err(e) = write_replacing(o, &bytes, "") {
                 eprintln!("wasmrt: cannot write {o}: {e}");
                 return ExitCode::FAILURE;
             }
@@ -1413,7 +1451,7 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
 
 /// Write `bytes` to `path` whole or not at all: into a temporary file beside it, then renamed over it, so an
 /// interrupted or failed run leaves the old file intact (review H2 / H3, 2026-11-24).
-fn write_replacing(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+fn write_replacing(path: &str, bytes: &[u8], tag: &str) -> std::io::Result<()> {
     use std::io::Write as _;
     // A path that exists and is not a regular file — a device such as `NUL` or `/dev/null` — is written in place:
     // renaming over it fails on Windows and would replace a device node on Unix (re-review N1, 2026-11-24).
@@ -1427,78 +1465,194 @@ fn write_replacing(path: &str, bytes: &[u8]) -> std::io::Result<()> {
         return std::fs::write(path, bytes);
     }
     // A symlink is written THROUGH: its file is the one replaced, and the link stays (a rename over the link
-    // replaced the link itself). A read-only file is refused, on every OS — a rename on Unix ignores the file's own
-    // permission bits, where Windows refuses (re-review notes, 2026-11-24).
-    let real;
-    let path = if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
-        real = std::fs::canonicalize(path)?.to_string_lossy().into_owned();
-        real.as_str()
-    } else {
-        path
-    };
+    // replaced the link itself); a dangling one is refused. A read-only file is refused, on every OS — a rename on
+    // Unix ignores the file's own permission bits, where Windows refuses (re-review notes, 2026-11-24).
+    let real = resolve_link(path)?;
+    let path = real.as_path();
     let old = std::fs::metadata(path).ok();
     if old.as_ref().is_some_and(|m| m.permissions().readonly()) {
         return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the file is read-only"));
     }
-    let tmp = format!("{path}.wasmrt-tmp-{}", std::process::id());
-    // Created NEW, so a file or link already at that name is never written through (security re-review note).
-    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
-    let done = f.write_all(bytes).and_then(|()| f.sync_all());
+    // The file is REPLACED, so it is never seen half-written: a hard link elsewhere keeps the old contents (the
+    // README says so). A short name of its own beside the target — `.wasmrt-tmp-<tag><pid>-<n>` — not the target's
+    // name plus a suffix, which could pass the file-name length limit.
+    static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+    // Created NEW, so a file or link already at that name is never written through (security re-review note); one
+    // there already — left by a killed run that had this process id — moves on to the next name rather than failing
+    // (re-review, 2026-11-24). On Unix it is private (0600) until `prepare_temp` gives it the old file's mode.
+    let mut tries = 0;
+    let (tmp, mut f) = loop {
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = dir.join(format!("{TEMP_PREFIX}{tag}{}-{n}", std::process::id()));
+        let mut open = std::fs::OpenOptions::new();
+        open.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+        match open.open(&tmp) {
+            Ok(f) => break (tmp, f),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < 64 => tries += 1,
+            Err(e) => return Err(e),
+        }
+    };
+    let written = f.write_all(bytes).and_then(|()| f.sync_all());
     drop(f);
-    // The replaced file keeps the old one's permissions (a rename would leave the new file's defaults).
-    let done = done.and_then(|()| match &old {
-        Some(m) => std::fs::set_permissions(&tmp, m.permissions()),
-        None => Ok(()),
-    });
-    let done = done.and_then(|()| std::fs::rename(&tmp, path));
-    if done.is_err() {
-        let _ = std::fs::remove_file(&tmp); // ours: this run created it
+    match written.and_then(|()| prepare_temp(&tmp, old.as_ref())) {
+        Ok(Ready::Rename) => std::fs::rename(&tmp, path).inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp); // ours: this run created it
+        }),
+        #[cfg(unix)]
+        Ok(Ready::InPlace) => {
+            let _ = std::fs::remove_file(&tmp);
+            match &old {
+                Some(m) => write_in_place(path, m, bytes),
+                None => Err(std::io::Error::other("the file vanished while it was being written")),
+            }
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e)
+        }
     }
-    done
 }
 
-/// Remove temporary files a killed run left beside `path` (`<name>.wasmrt-tmp-<pid>`). Only under `PinLock`.
-fn remove_stale_temps(path: &str) {
+/// How `write_replacing` puts its temporary file in place.
+enum Ready {
+    /// Renamed over the target.
+    Rename,
+    /// The target's owner cannot be given to the temporary file (Unix, not permitted): the target is written in place
+    /// instead, keeping its owner, at the cost of atomicity.
+    #[cfg(unix)]
+    InPlace,
+}
+
+/// Give the temporary file the old file's owner (Unix) and then its permissions — in that order, because a `chown`
+/// clears the setuid and setgid bits (re-review N3, 2026-11-24). The owner is changed only where it differs, so a
+/// user replacing their own file never needs a permission they lack.
+fn prepare_temp(tmp: &std::path::Path, old: Option<&std::fs::Metadata>) -> std::io::Result<Ready> {
+    let Some(old) = old else { return Ok(Ready::Rename) };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        let new = std::fs::metadata(tmp)?;
+        if (new.uid(), new.gid()) != (old.uid(), old.gid())
+            && std::os::unix::fs::chown(tmp, Some(old.uid()), Some(old.gid())).is_err()
+        {
+            return Ok(Ready::InPlace);
+        }
+    }
+    std::fs::set_permissions(tmp, old.permissions())?;
+    Ok(Ready::Rename)
+}
+
+/// Write `bytes` over the file `old` describes, in place. It is opened without truncating and checked to be that
+/// same file (device and inode) before anything is changed: a name swapped for another file or a link between the
+/// check and the open is refused, not written through (security re-review, 2026-11-24).
+#[cfg(unix)]
+fn write_in_place(path: &std::path::Path, old: &std::fs::Metadata, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::MetadataExt as _;
+    let mut f = std::fs::OpenOptions::new().write(true).open(path)?;
+    let now = f.metadata()?;
+    if (now.dev(), now.ino()) != (old.dev(), old.ino()) {
+        return Err(std::io::Error::other("the file was replaced while it was being written"));
+    }
+    f.set_len(0)?;
+    f.write_all(bytes)?;
+    f.sync_all()
+}
+
+/// The temporary files `write_replacing` makes beside a target.
+const TEMP_PREFIX: &str = ".wasmrt-tmp-";
+
+/// `path` itself, or — when it is a symlink — the file it names. A symlink to nothing is refused: following it
+/// would create a file wherever it points (security re-review, 2026-11-24).
+fn resolve_link(path: &str) -> std::io::Result<std::path::PathBuf> {
     let p = std::path::Path::new(path);
-    let (Some(name), dir) = (p.file_name().and_then(|n| n.to_str()), p.parent().filter(|d| !d.as_os_str().is_empty())) else {
-        return;
-    };
-    let prefix = format!("{name}.wasmrt-tmp-");
-    let dir = dir.unwrap_or(std::path::Path::new("."));
+    if !std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Ok(p.to_path_buf());
+    }
+    std::fs::canonicalize(p).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => std::io::Error::new(e.kind(), "it is a symlink to a file that does not exist"),
+        _ => e,
+    })
+}
+
+/// The tag in the name of a pin DB's temporary files: `pin-` and a hash of the DB's file name. Only the run holding
+/// that DB's `PinLock` writes one, so under the lock any file with the tag was left by a run that died.
+fn pin_temp_tag(db: &std::path::Path) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a, 64-bit
+    for b in db.file_name().unwrap_or_default().as_encoded_bytes() {
+        h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("pin-{h:016x}-")
+}
+
+/// Remove the temporary files a killed run left beside the pin DB `db` — those with its `pin_temp_tag`. Run under
+/// `PinLock`; another target's temporary files, which may be mid-write, are not touched (re-review N5).
+fn remove_dead_temps(db: &std::path::Path) {
+    let dir = db.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+    let ours = format!("{TEMP_PREFIX}{}", pin_temp_tag(db));
     if let Ok(entries) = std::fs::read_dir(dir) {
         for e in entries.flatten() {
-            if e.file_name().to_str().is_some_and(|n| n.starts_with(&prefix)) {
+            if e.file_name().to_str().is_some_and(|n| n.starts_with(&ours)) && e.file_type().is_ok_and(|t| t.is_file()) {
                 let _ = std::fs::remove_file(e.path());
             }
         }
     }
 }
 
-/// An exclusive lock on a pin DB for one read-modify-write: `<db>.lock`, created new (so two runs cannot both hold
-/// it) and removed when dropped. Concurrent `wasmrt pin` runs each read the DB, added their lines and wrote it, and
-/// one run's pins could vanish while every run exited 0 (re-review N3, 2026-11-24).
-struct PinLock(String);
-
-impl PinLock {
-    /// Wait up to ten seconds for the lock, then refuse rather than hang on a lock a crashed run left behind.
-    fn acquire(db: &str) -> Result<PinLock, String> {
-        let lock = format!("{db}.lock");
-        for _ in 0..500 {
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&lock) {
-                Ok(_) => return Ok(PinLock(lock)),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                Err(e) => return Err(format!("cannot lock pin DB {db}: {e}")),
-            }
-        }
-        Err(format!("pin DB {db} is locked by another run (remove {lock} if no wasmrt is running)"))
-    }
+/// An exclusive lock on a pin DB for one read-modify-write: the operating system's lock on `<db>.lock`, which is
+/// released when the file is closed — when this is dropped, or when the process dies — so a killed run leaves no
+/// lock to guess about (re-review N1, 2026-11-24). Concurrent `wasmrt pin` runs each read the DB, added their lines
+/// and wrote it, and one run's pins could vanish while every run exited 0. The file itself stays beside the DB:
+/// removing it would let two runs lock two different files of that name.
+struct PinLock {
+    _file: std::fs::File,
 }
 
-impl Drop for PinLock {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+impl PinLock {
+    /// Wait up to ten seconds for the lock, then refuse rather than hang. A filesystem without file locks (some
+    /// network mounts) is refused with its error.
+    fn acquire(db: &std::path::Path) -> Result<PinLock, String> {
+        let mut lock = db.as_os_str().to_owned();
+        lock.push(".lock");
+        let lock = std::path::PathBuf::from(lock);
+        // A symlink at the lock's name is refused: opening it would create a file wherever it points (security
+        // re-review, 2026-11-24).
+        if std::fs::symlink_metadata(&lock).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(format!("cannot lock pin DB {db:?}: {lock:?} is a symlink"));
+        }
+        // A lock file another user created may not be writable by this one: a read-only handle locks as well.
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock)
+            .or_else(|e| match e.kind() {
+                std::io::ErrorKind::PermissionDenied => std::fs::File::open(&lock),
+                _ => Err(e),
+            })
+            .map_err(|e| format!("cannot lock pin DB {db:?}: {e}"))?;
+        // …and the file opened is the one at that name, not a link swapped in after the check.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            let opened = file.metadata().map(|m| (m.dev(), m.ino())).ok();
+            let named = std::fs::symlink_metadata(&lock).map(|m| (m.dev(), m.ino())).ok();
+            if opened.is_none() || opened != named {
+                return Err(format!("cannot lock pin DB {db:?}: {lock:?} changed while it was opened"));
+            }
+        }
+        for _ in 0..500 {
+            match file.try_lock() {
+                Ok(()) => return Ok(PinLock { _file: file }),
+                Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(std::time::Duration::from_millis(20)),
+                Err(std::fs::TryLockError::Error(e)) => return Err(format!("cannot lock pin DB {db:?}: {e}")),
+            }
+        }
+        Err(format!("pin DB {db:?} is locked by another run"))
     }
 }
 

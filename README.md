@@ -124,7 +124,8 @@ scripts/c-gate.ts                # compile + run the C-ABI gates against the shi
 scripts/miri-gate.ts             # the C ABI under Miri (needs: rustup component add miri)
 ```
 
-On Windows, use the `x86_64-pc-windows-gnullvm` toolchain host (LLVM-MinGW + UCRT — libc-free, no MSVC).
+On Windows, use the `x86_64-pc-windows-gnu` toolchain host (MinGW-w64 + UCRT, no MSVC); the
+release binaries need only DLLs Windows provides. `rust-toolchain.toml` pins the nightly CI uses.
 
 ## Versioning
 
@@ -143,6 +144,7 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 | _next release_ | **Rust API (`wasmrt-core`):** `opcode::Instr` has `imm_at` and `imm_len` (where its immediates start, and their length), `opcode::CallIndirect` has `table_at`, `opcode::MemArg` has `memory_flag`; `validate::ValidateError` has `ZeroByteExpected` and `MemopReservedFlags`; `types::DecodeError` speaks wasmtime's words: it gains a variant per wasmtime message wasmrt's errors used to share (`IllegalOpcode`, `UnknownSubopcode`, `InvalidLeadingByte`, `BadRefType`, `BadHeapType`, `OutsideBlock`, `UnknownExported`, `TrailingBytes`, `SectionContent`, `FunctionWithoutCode`, `CodeWithoutFunction`, `DataCountWithoutData`, `ExprFramesRemain`, `SimdIndexOutOfBounds`, `InvalidCastFlags`, `MultipleSupertypes`, `SupertypeNotBefore`, `NotAFuncType`, `UnknownType`, and for the limits `LimitExceeded`, `SizeOutOfBounds`, `DataCountTooLarge`, `TooManyElements`, `TypeSizeTooLarge`); `BadType`, `UnsupportedOpcode` and `UnknownExternKind` are gone, and `MalformedFlag`, `LebOverflow`, `InvalidSectionId` and `UnsupportedVersion` now carry what they refused. New: `module::last_decode_offset()` | give the new fields in a struct literal; match the new variants, and the data four of them carry |
 | _next release_ | **Implementation limits (wasmtime's values, the measured-needed ones):** a module past one is refused at decode — 1,000,000 functions, imports, exports, globals, tags or types; 100,000 tables, element or data segments; 50,000 locals per function (params included; the validator already refused more, now the decoder does, at the entry that crosses); 1,000 params or results; 7,654,321-byte bodies; 10,000,000 elements per segment; an effective type size of imports and exports below 1,000,000; and the rest listed in the CHANGELOG. A count equal to its limit is accepted | keep a module within the limits, as wasmtime requires |
 | _next release_ | **Validation, with a proposal disabled (as wasm-tools):** without multi-memory, `memory.size` / `memory.grow` need the single byte `0x00` as their memory index (an overlong `80 00` was accepted) and a memarg may not carry the memory-index flag (it was accepted); without reference-types, an overlong `return_call_indirect` table index is now ACCEPTED (binaryang D2 and wasm-tools gate only `call_indirect`'s). With every proposal on, the default, nothing changes | enable the proposal, or encode the index as `0x00` |
+| _next release_ | **Minimum Rust version 1.100** (was 1.85), the stable toolchain wasmrt is tested on | build with Rust 1.100 or later |
 | _next release_ | **Diagnostics:** a refusal of one immediate byte reports that byte's offset and wasmtime's words (`invalid module at offset 604 (function 6): zero byte expected`, where it said `offset 598 … uses the disabled proposal`), and a decode failure now carries its offset (`decode failed at offset 10: …`), on the CLI and in the C ABI's error strings | a tool that parses wasmrt's messages: read the new forms |
 | 2.0.0 | **Validation:** an `exact` reference type, `(ref null (exact $t))`, now needs reference-types (and function-references or gc) as well as custom-descriptors, as D2's type rules and wasm-tools say; 1.0.0 accepted it with reference-types off. With every proposal on, the default, nothing changes | enable reference-types: `--features …,reference-types` |
 | 1.0.0 | **CLI:** a `--dir` / `--ro-dir` host path must say it is relative (`./data`, `../data`, `.`) or be absolute; a bare `data` or `C:` is an error | write `./data` |
@@ -159,7 +161,10 @@ conformance clear-out: the official spec testsuite with zero failures, zero skip
 
 wasmrt collects nothing and makes no network requests: no telemetry, no update checks. The CLI
 writes only the files you name (`wat … -o <file>`, `pin … --db <file>`) and what a guest writes
-inside a directory you pass with `--dir`. It reads the pin database from its fixed paths
+inside a directory you pass with `--dir` — plus, while it writes a file, a short-lived
+`.wasmrt-tmp-…` file beside it, and a `<db>.lock` file kept beside a pin DB. A pin DB records each
+module's path as you gave it: pin with relative paths to keep a shared DB free of local directory
+names. It reads the pin database from its fixed paths
 (`%ProgramData%\…\pins` on Windows, `/etc/…/pins` elsewhere) or the file you name with `--pins`,
 reading the `ProgramData` variable on Windows to find it, and nothing else from the environment. A guest sees only the variables you pass
 with `--env`.

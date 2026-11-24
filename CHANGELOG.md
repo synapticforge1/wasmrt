@@ -19,9 +19,9 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-**A breaking release** (the Rust API gains fields and new error variants, and modules past wasmtime's
-implementation limits are refused; see Breaking Changes in the README). Refusals now name the byte
-wasmtime names.
+**A breaking release** (the Rust API gains fields and new error variants, modules past wasmtime's
+implementation limits are refused, and the minimum Rust version is 1.100; see Breaking Changes in the
+README). Refusals now name the byte wasmtime names.
 
 ### Added
 
@@ -44,12 +44,21 @@ wasmtime names.
 - **The CLI never destroys a file it was given.** `wasmrt pin --db` treated a pin DB it could not
   read (a UTF-16 file, a permission error) as empty and overwrote it, and concurrent `pin` runs could
   drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the
-  binary. Now an unreadable DB is refused, `pin` holds `<db>.lock` across its read and write (a lock
-  left by a killed run is named in the refusal after 10 s), and both commands write a regular file
-  whole or not at all (a temporary file renamed over it, keeping its permissions; a symlink is
-  written through; a read-only file is refused on every OS; a device such as `/dev/null` is written
-  in place). `pin --db` into a directory that does not exist is an error (it was created), and a line
-  already in the DB is not appended again.
+  binary. Now an unreadable DB is refused, `pin` holds the operating system's lock on `<db>.lock`
+  across its read and write (released when the run ends, however it ends; the file stays beside the
+  DB; on a filesystem without file locks, `pin --db` refuses), and both commands write a regular file whole or not at all (a temporary file renamed over it,
+  keeping its permissions and, on Unix, its owner; a symlink is written through, and a dangling one
+  is refused; a read-only file is refused on every OS; a device such as `/dev/null` is written in
+  place). The file is replaced, so another hard link to it keeps the old contents. `pin --db` into a
+  directory that does not exist is an error (it was created), and a line already in the DB is not
+  appended again.
+- **A file name could forge a pin.** `wasmrt pin <dir>` wrote each module's name into the pin DB as
+  text, so on Unix a name containing a newline could add a line of its own — a digest the user never
+  pinned, or a `# mode:` line. A name with a control character is now skipped with a warning. Also:
+  `pin <dir>` no longer follows a symlinked directory (a link back into the tree recursed until the
+  stack overflowed); with `--db`, the digest lines are printed only once recorded; a DB path that is
+  not a regular file (`NUL`, a FIFO) is refused; a file whose owner cannot be kept (Unix) is written
+  in place, once checked to be the same file.
 - **A refusal points at the offending byte, in wasmtime's words.** With reference-types disabled,
   `call_indirect`'s table index must be the single byte `0x00`. wasmrt reported such a module at the
   instruction (`offset 598 … uses the disabled proposal`); it now reports the byte itself
@@ -89,6 +98,8 @@ wasmtime names.
 
 ### Changed
 
+- **Minimum Rust version 1.100** (was 1.85): the stable toolchain wasmrt is tested on. `pin` now
+  holds the standard library's file lock on its DB.
 - **Faster calls, a faster start, and far less memory** (an efficiency review, 2026-11-24; measured on
   one Windows x64 machine, release build). A call reuses its frame's buffers instead of allocating
   eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s. The cold start on the 48 KB benchmark
@@ -100,7 +111,9 @@ wasmtime names.
   functions 990 → 329 MB, a million types 190 → 100 MB.
 - `opcode::Instr` is 64 bytes, down from 80, with the new fields included.
 - Release tooling: the crates.io read-back reads tar long-name and pax headers; the CLI tests keep
-  their fixtures in cargo's build folder rather than the system temp folder.
+  their fixtures in cargo's build folder rather than the system temp folder. `rust-toolchain.toml`
+  pins `nightly-2026-11-04`, the nightly CI builds with, instead of the moving `nightly`; on Windows
+  the build host is `x86_64-pc-windows-gnu` (it was `x86_64-pc-windows-gnullvm`).
 
 ## [2.0.2] — 2026-11-19 — licence texts in every crate, and a five-class review before every release
 

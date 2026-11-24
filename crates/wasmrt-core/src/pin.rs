@@ -101,15 +101,12 @@ fn compress(h: &mut [u32; 8], block: &[u8; 64]) {
 #[must_use]
 pub fn hash(bytes: &[u8]) -> Digest {
     let mut h = H0;
-    let mut chunks = bytes.chunks_exact(64);
-    for c in &mut chunks {
-        let mut block = [0u8; 64];
-        block.copy_from_slice(c);
-        compress(&mut h, &block);
+    let (blocks, rest) = bytes.as_chunks::<64>();
+    for block in blocks {
+        compress(&mut h, block);
     }
     // The tail, its `0x80` terminator, and the 64-bit BIT length — which needs two blocks when the
     // remainder leaves no room for the length field.
-    let rest = chunks.remainder();
     let mut block = [0u8; 64];
     block[..rest.len()].copy_from_slice(rest);
     block[rest.len()] = 0x80;

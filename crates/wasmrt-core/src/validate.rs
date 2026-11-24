@@ -311,11 +311,10 @@ pub fn validate_with_features(module: &Module, features: &Features) -> ValidateR
         if tt.limits.min > ceiling || tt.limits.max.is_some_and(|mx| mx > ceiling) {
             return Err(ValidateError::InvalidLimits);
         }
-        if let Some(mx) = tt.limits.max {
-            if tt.limits.min > mx {
+        if let Some(mx) = tt.limits.max
+            && tt.limits.min > mx {
                 return Err(ValidateError::InvalidLimits);
             }
-        }
         // A table's initializer expression must produce its element type (function-references).
         //
         // ⚠️⚠️ **Only the IMPORTED globals are in scope here, and the reason is section order,
@@ -594,16 +593,14 @@ fn check_declared_subtyping(module: &Module) -> ValidateResult<()> {
         // Only the subtype gaining a DESCRIPTOR its supertype lacks is allowed.
         let own = module.type_links.get(i).copied().unwrap_or_default();
         let parent = module.type_links.get(s).copied().unwrap_or_default();
-        if let Some(pd) = parent.descriptor {
-            if !own.descriptor.is_some_and(|od| module.is_subtype(od, pd)) {
+        if let Some(pd) = parent.descriptor
+            && !own.descriptor.is_some_and(|od| module.is_subtype(od, pd)) {
                 return Err(ValidateError::SubType);
             }
-        }
-        if let Some(px) = parent.describes {
-            if !own.describes.is_some_and(|ox| module.is_subtype(ox, px)) {
+        if let Some(px) = parent.describes
+            && !own.describes.is_some_and(|ox| module.is_subtype(ox, px)) {
                 return Err(ValidateError::SubType);
             }
-        }
         if own.describes.is_some() && parent.describes.is_none() {
             return Err(ValidateError::SubType);
         }
@@ -668,25 +665,23 @@ fn check_descriptor_links(module: &Module) -> ValidateResult<()> {
     let links = |t: u32| module.type_links.get(t as usize).copied().unwrap_or_default();
     for (i, l) in module.type_links.iter().enumerate() {
         let t = i as u32;
-        if let Some(d) = l.descriptor {
-            if group_of(d) != group_of(t)
+        if let Some(d) = l.descriptor
+            && (group_of(d) != group_of(t)
                 || !is_struct(t)
                 || !is_struct(d)
-                || links(d).describes != Some(t)
+                || links(d).describes != Some(t))
             {
                 return Err(ValidateError::InvalidDescriptor);
             }
-        }
-        if let Some(x) = l.describes {
-            if group_of(x) != group_of(t)
+        if let Some(x) = l.describes
+            && (group_of(x) != group_of(t)
                 || x >= t
                 || !is_struct(t)
                 || !is_struct(x)
-                || links(x).descriptor != Some(t)
+                || links(x).descriptor != Some(t))
             {
                 return Err(ValidateError::InvalidDescriptor);
             }
-        }
     }
     Ok(())
 }
@@ -984,11 +979,10 @@ fn validate_const_expr(
                 if module.func_type(fi).is_none() {
                     return Err(ValidateError::UndefinedFunc);
                 }
-                if let Some(set) = refs.as_deref_mut() {
-                    if (fi as usize) < set.len() {
+                if let Some(set) = refs.as_deref_mut()
+                    && (fi as usize) < set.len() {
                         set[fi as usize] = true; // ref.func outside a body DECLARES it (C.refs)
                     }
-                }
                 // Exact for a DEFINED function, inexact for an import — the body rule's twin (see
                 // `Op::RefFunc`); a constant expression is a second copy of the same typing.
                 if let Some(ti) = module.declared_func_type_index(fi) {
@@ -1303,15 +1297,14 @@ impl<'a> FuncValidator<'a> {
     }
     fn pop_expect(&mut self, expect: V) -> ValidateResult<StackType> {
         let actual = self.pop_val()?;
-        if let StackType::Val(t) = actual {
-            if !subtype_of(self.module, t, expect) {
+        if let StackType::Val(t) = actual
+            && !subtype_of(self.module, t, expect) {
                 // The one place that knows BOTH types, which is what makes "expected i32, found
                 // i64" possible at all — wasmtime's wording, captured here rather than
                 // reconstructed by a caller that no longer has the operand.
                 note_types(expect, t);
                 return Err(ValidateError::TypeMismatch);
             }
-        }
         Ok(actual)
     }
     fn pop_vals(&mut self, ts: &[V]) -> ValidateResult<()> {
@@ -1324,11 +1317,10 @@ impl<'a> FuncValidator<'a> {
     }
     fn pop_ref(&mut self) -> ValidateResult<StackType> {
         let st = self.pop_val()?;
-        if let StackType::Val(v) = st {
-            if !v.is_ref() {
+        if let StackType::Val(v) = st
+            && !v.is_ref() {
                 return Err(ValidateError::TypeMismatch);
             }
-        }
         Ok(st)
     }
 
@@ -1600,14 +1592,12 @@ impl<'a> FuncValidator<'a> {
             // the memory-index flag was accepted outright.
             // Only `call_indirect`: `return_call_indirect` (tail-call) reads its table index as a plain
             // LEB, so wasm-tools accepts an overlong one there — wasmrt refused it until 2026-11-23.
-            if !self.features.reference_types && instr.op == Op::CallIndirect {
-                if let Imm::CallIndirect(ci) = &instr.imm {
-                    if ci.overlong || ci.table != 0 {
+            if !self.features.reference_types && instr.op == Op::CallIndirect
+                && let Imm::CallIndirect(ci) = &instr.imm
+                    && (ci.overlong || ci.table != 0) {
                         note_offset(self.body_offset.saturating_add(ci.table_at));
                         return Err(ValidateError::ZeroByteExpected);
                     }
-                }
-            }
             if !self.features.multi_memory {
                 let at = self.body_offset.saturating_add(instr.imm_at);
                 match &instr.imm {
@@ -2077,11 +2067,10 @@ impl<'a> FuncValidator<'a> {
                 self.push_val_t(vt);
             }
             Op::RefIsNull => {
-                if let StackType::Val(v) = self.pop_val()? {
-                    if !v.is_ref() {
+                if let StackType::Val(v) = self.pop_val()?
+                    && !v.is_ref() {
                         return Err(ValidateError::TypeMismatch);
                     }
-                }
                 self.push_val_t(V::I32);
             }
             Op::RefFunc => {
@@ -2089,11 +2078,10 @@ impl<'a> FuncValidator<'a> {
                 if self.module.func_type(fi).is_none() {
                     return Err(ValidateError::UndefinedFunc);
                 }
-                if let Some(set) = self.refs {
-                    if !set.get(fi as usize).copied().unwrap_or(false) {
+                if let Some(set) = self.refs
+                    && !set.get(fi as usize).copied().unwrap_or(false) {
                         return Err(ValidateError::UndeclaredFuncRef);
                     }
-                }
                 // custom-descriptors: `ref.func` of a DEFINED function is EXACT — the function is known
                 // to have exactly its declared type. Of an IMPORT it is not: the exporter's function may be
                 // a strict subtype ("References to inexact imports are not exact", exact-func-import.wast).

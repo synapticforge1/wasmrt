@@ -340,11 +340,10 @@ thread_local! {
 
 /// Render a trap, preferring a host callback's own message when it produced one.
 fn trap_message(t: &Trap) -> CString {
-    if matches!(t, Trap::HostTrap) {
-        if let Some(m) = HOST_TRAP.with_borrow_mut(Option::take) {
+    if matches!(t, Trap::HostTrap)
+        && let Some(m) = HOST_TRAP.with_borrow_mut(Option::take) {
             return m;
         }
-    }
     cstring(format!("{t}"))
 }
 

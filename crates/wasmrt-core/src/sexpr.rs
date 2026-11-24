@@ -276,8 +276,8 @@ impl Parser<'_> {
     /// is ignored.
     fn skip_trivia_into(&mut self, mut into: Option<&mut Vec<Annot>>, before: usize) -> Result<()> {
         while self.pos < self.src.len() {
-            if self.peek(0) == b'(' && self.peek(1) == b'@' {
-                if let Some(v) = into.as_deref_mut() {
+            if self.peek(0) == b'(' && self.peek(1) == b'@'
+                && let Some(v) = into.as_deref_mut() {
                     let mark = self.pos;
                     self.pos += 2;
                     let id = self.read_annotation_id()?;
@@ -295,7 +295,6 @@ impl Parser<'_> {
                     }
                     self.pos = mark;
                 }
-            }
             if !self.skip_one_trivia()? {
                 break;
             }

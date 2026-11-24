@@ -762,8 +762,8 @@ impl Runner {
         match self.build(node) {
             Ok(inst) => {
                 // Track by textual `$name` for later `$M` references.
-                if let Some(name) = list.get(1).and_then(Sexpr::as_atom) {
-                    if name.starts_with('$') {
+                if let Some(name) = list.get(1).and_then(Sexpr::as_atom)
+                    && name.starts_with('$') {
                         self.named.push((name.to_string(), inst));
                         // The most recent module is also `current`; clone-free by
                         // re-building is wasteful, so `current` tracks "the last one" via
@@ -771,7 +771,6 @@ impl Runner {
                         self.current = None;
                         return;
                     }
-                }
                 self.current = Some(inst);
             }
             Err(e) => {

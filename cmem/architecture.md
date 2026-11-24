@@ -164,6 +164,10 @@ classic `libgcc`, which fits the libc-free / no-MSVC ethos carried from wazmrt. 
 `x86_64-pc-windows-gnu` host fails to link here (missing `libgcc`/`libgcc_eh`), and `-msvc` would
 reintroduce the MSVC dependency wazmrt deliberately avoided. `rust-toolchain.toml` pins bare `nightly`
 (portable across OSes); the machine's rustup **default-host** selects gnullvm on Windows.
+🔁 *Superseded 2026-11-24 (owner): the Windows host is **`x86_64-pc-windows-gnu`**, as on Linux — one
+toolchain family on both OSes, the same stable (1.100.0) and nightly (`nightly-2026-11-04`, now pinned
+in `rust-toolchain.toml`). The gnu host links here today, and its binaries need only Windows' own DLLs
+(`platforms.md`, win-x64).*
 
 ## Interpreter shape — Option A (carried from wazmrt)
 

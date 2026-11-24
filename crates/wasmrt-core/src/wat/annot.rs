@@ -498,11 +498,10 @@ pub(super) fn body_marks(body: &[Sexpr], annots: &[Annot]) -> BodyMarks {
                     m.hints.insert(addr(it), v);
                     m.expected_hints += 1;
                 }
-            } else if a.id == NAME {
-                if let (Some(at), Ok(n)) = (label_anchor(items, a.before), name_value(&a.body)) {
+            } else if a.id == NAME
+                && let (Some(at), Ok(n)) = (label_anchor(items, a.before), name_value(&a.body)) {
                     m.labels.insert(addr(&items[at]), n);
                 }
-            }
         }
         for c in items {
             if let Some(ci) = c.as_list() {
@@ -592,11 +591,10 @@ pub(super) fn lay_out(
             Some(a) => flush(&mut out, slot_before(a)),
             None => flush(&mut out, slot_after(A_ELEM)),
         }
-        if id == 10 {
-            if let Some(h) = hints {
+        if id == 10
+            && let Some(h) = hints {
                 push_custom(&mut out, super::BRANCH_HINT_SECTION, h);
             }
-        }
         out.extend_from_slice(&module[start..end]);
         if let Some(a) = anchor_of(id) {
             flush(&mut out, slot_after(a));

@@ -8,7 +8,7 @@ is **tier 3, the full matrix** (native by nature). Machine names stay in `local/
 
 | Platform | Status | Target name (Rust) | Tested on |
 | --- | --- | --- | --- |
-| `win-x64` | `tested` | `x86_64-pc-windows-gnu` (dev host); `x86_64-pc-windows-gnullvm` | dev machine |
+| `win-x64` | `tested` | `x86_64-pc-windows-gnu` (the host, both stable and nightly) | dev machine |
 | `win-arm64` | `pending` | `aarch64-pc-windows-gnullvm` | — (arm64 Mac, not yet) |
 | `mac-x64` | `pending` | `x86_64-apple-darwin` | — (Intel Mac, not yet) |
 | `mac-arm64` | `pending` | `aarch64-apple-darwin` | — (arm64 Mac, not yet) |
@@ -43,9 +43,17 @@ gate on its `GLIBC_` symbols, plus a musl build for Alpine (workspace `platforms
 
 ## win-x64
 
+- **Toolchains (owner, 2026-11-24): gnu on both OSes, the same versions** — stable 1.100.0
+  (`0ef1bc386`, the MSRV) and one nightly, `nightly-2026-11-04` (`708c94ef0`, pinned in
+  `rust-toolchain.toml` and release.yml, and the default: rsxtk's `cargo -Z script` takes the default).
+  The gnullvm toolchain is gone; cargo-zigbuild (0.24.1) is built on the gnu nightly.
+- **The gnu host's binaries are standalone with no flag** (measured 2026-11-24): release `wasmrt.exe`
+  and `wasmrt_capi.dll` import only `KERNEL32`, `ntdll`, `bcryptprimitives` and the `api-ms-win-*`
+  UCRT set; a copied `wasmrt.exe` printed its version on a system-only `PATH`. 872 KiB.
 - **The gnullvm host links `libunwind.dll` from the toolchain** unless the CRT is static: a copied
   `wasmrt.exe` died before `main` (exit 127) on a system-only `PATH`. Setting: `.cargo/config.toml`,
   `[target.x86_64-pc-windows-gnullvm] rustflags = +crt-static` (~33 KiB). Why: one standalone file.
+  Kept for a gnullvm build (win-arm64's target is gnullvm).
 - **Entropy:** no `/dev/urandom`; `os_entropy` hashes under `RandomState` keys, which `std` seeds
   from `BCryptGenRandom` (`crates/wasmrt-core/src/rng.rs`, the `not(unix)` twin). No `unsafe`.
 - **Raw OS error codes** differ: `ERROR_DIRECTORY` 267, `ERROR_ACCESS_DENIED` 5 (Windows has no
