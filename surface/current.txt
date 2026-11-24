@@ -2633,29 +2633,62 @@ rust:wasmrt-core	pub wasmrt_core::sexpr::Sexpr::Atom(alloc::string::String)
 rust:wasmrt-core	pub wasmrt_core::sexpr::Sexpr::List(alloc::vec::Vec<wasmrt_core::sexpr::Sexpr>, alloc::vec::Vec<wasmrt_core::sexpr::Annot>)
 rust:wasmrt-core	pub wasmrt_core::sexpr::Sexpr::Str(alloc::vec::Vec<u8>)
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadFuncType
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadHeapType
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadMagic
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadType
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadRefType
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::BadValType
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::CodeWithoutFunction
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::DataCountMismatch
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::DataCountRequired
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::DataCountTooLarge
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::DataCountWithoutData
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::ExprFramesRemain
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::FuncCodeCountMismatch
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::FunctionWithoutCode
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::IllegalOpcode(u8)
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::IndexOutOfRange
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidCastFlags(u8)
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidLeadingByte
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidLeadingByte::byte: u8
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidLeadingByte::what: &'static str
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidPageSize
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidSectionId
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidSectionId(u8)
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::InvalidUtf8
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LebOverflow
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::MalformedFlag
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LebOverflow::too_long: bool
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LebOverflow::ty: &'static str
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LimitExceeded
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LimitExceeded::limit: u32
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::LimitExceeded::what: &'static str
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::MalformedFlag(&'static str)
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::MalformedMemopFlags
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::MissingEnd
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::MultipleSupertypes
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::NotAFuncType(u32)
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::OutsideBlock
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::OutsideBlock::found: &'static str
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::OutsideBlock::frame: &'static str
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SectionContent(&'static str)
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SectionOrder
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SectionSizeMismatch
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SimdIndexOutOfBounds
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SizeOutOfBounds(&'static str)
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::SupertypeNotBefore
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::TooManyElements
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::TooManyLocals
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::TrailingBytes
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::TypeSizeTooLarge
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnbalancedEnd
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnexpectedEof
 rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnimplementedProposal
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownExternKind
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnsupportedOpcode
-rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnsupportedVersion
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownExported
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownExported::index: u32
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownExported::what: &'static str
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownSubopcode
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownSubopcode::code: u32
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownSubopcode::prefix: u8
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnknownType(u32)
+rust:wasmrt-core	pub wasmrt_core::types::DecodeError::UnsupportedVersion(u32)
 rust:wasmrt-core	pub wasmrt_core::types::ExternKind::Func = 0
 rust:wasmrt-core	pub wasmrt_core::types::ExternKind::Global = 3
 rust:wasmrt-core	pub wasmrt_core::types::ExternKind::Memory = 2
