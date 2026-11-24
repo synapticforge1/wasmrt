@@ -7,20 +7,21 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 ## Open
 
 - **W1 — the open review issues**, in the gitignored `review-issues.md` (never on GitHub, letter H37): I1–I10
-  fixed or closed in the working tree (2026-11-23, re-review pending); open: basic 1 (I11, the locals limit).
-- **W2 — the review stages T9–T12** (T9 hardening, T10 bug hunt, T11 optimization, T12 security) predate
-  the five-class review. 🔒 **Not published** (owner, 2026-11-23: "we will not publish the review ladder in
-  the public space"): their rows left `ROADMAP.md` that day; they are tracked here only. 🗓️ The owner decides
-  whether they become those reviews or stay separate stages. Their version numbers come from the gate.
-  T11 holds the contest's open measurements: the CLI's 3.4 ms on the 48 KB module, in-process cold start,
-  the unattributed ~5% loop regression, the CLI's +31% since 0.9.0 (≈33 KiB attributed), the interpreter
-  ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap, the rlib never measured, and whether to pin a
-  dated nightly locally (the floating `nightly` moves the sizes with no source change). Records:
-  [vision.md](vision.md), `bench/README.md`, `CHANGELOG.md` [1.0.0] "Size and speed".
+  fixed or closed (2026-11-23, review complete at `820669f`). Since then, UNCOMMITTED and REVIEWED (W2's five-class
+  review, complete 2026-11-24 on win-x64 and linux-x64; `Review complete: <commit>` written at the owner's commit):
+  I11, wasmtime's implementation limits — measured and decided (🔒 owner, 2026-11-24: "accept the measured limits
+  that keep the program as robust as needed and as small as possible": the needed ones kept, type size adopted,
+  `MAX_CTRL_DEPTH` kept); I12–I14, decode refusals in wasmtime's words and offsets; the efficiency review's fixes
+  (calls 3.1×, memory roughly halved); the review's own fixes (CLI writes, pin lock). Open: the opt-level speed /
+  size decision (F2), the efficiency items not done (see the archive's W2 entry), and the structural difference
+  (wasmtime validates a body while reading it).
+  🔒 The five `--features` changes are DECIDED (owner, 2026-11-24: "I agree with the recommendations"): the three
+  verdict changes are approved as implemented (multi-memory off: `memory.size`/`memory.grow` need `0x00`, a memarg's
+  `0x40` flag is refused; reference-types off: an overlong `return_call_indirect` index is accepted); the `wasm3`
+  preset keeps following binaryang (no threads, contract v32's rule); `atomic.fence` with a nonzero byte stays
+  refused until shared-everything-threads is in scope.
 - **W3 — split `interop.md`** (187 KB, the one file over the memory guide's limits). Co-owned with wazmrt
   (owner, 2026-11-20), byte-identical in both: one split, agreed through "Coordinate", made in both copies.
-- **W4 — 🗓️ owner: revoke the workstation's `cargo login` token.** CI publishes by trusted publishing now
-  (first used for 2.0.2), so the token is no longer needed.
 
 ## To relay — wasmrt cannot write there
 
@@ -36,5 +37,7 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
   wasm-tools and binaryang D2 — without multi-memory wasmrt now refuses `memory.size`/`memory.grow`'s overlong `80 00`
   index and a memarg's memory-index flag; without reference-types it now accepts an overlong `return_call_indirect`
   table index (D2 gates only `call_indirect`'s). The `--features` row is a contract surface: tell wazmrt before release.
+  ✅ Relayed with the implementation limits and the refusal wording as workspace letter **C50** (owner, 2026-11-24:
+  "relay the changes to wazmrt via the workspace"); open until wazmrt answers and wasmrt, its creator, closes it.
 - **R4 — GitHub:** commit ids from wasmrt's two history rewrites stay retrievable until GitHub's garbage
   collection; a full purge is a support request (the owner's call).

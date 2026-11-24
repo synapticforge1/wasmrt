@@ -13,9 +13,10 @@ license compliance. (Mirrors the source project `wazmrt`'s compliance scaffold.)
 > needs one.
 >
 > **wasmrt status:** the engine is 100% original Rust. The port of `wazmrt` is
-> the owner's own code (not a third-party adoption). **One component is
-> recorded** (2026-10-23): the instruction-table DATA vendored for the
-> shared-definitions cross-check, which binaryang derived from WebAssembly/wabt.
+> the owner's own code (not a third-party adoption). **Two components are
+> recorded**: the instruction-table DATA vendored for the shared-definitions
+> cross-check, which binaryang derived from WebAssembly/wabt (2026-10-23), and
+> wasmtime's implementation-limit VALUES, from wasmparser (2026-11-24).
 > 🔁 Since 2026-10-24 part of it SHIPS (owner: shipping is cleared, with this
 > attribution, until binaryang's rewrite addresses it): the generated
 > `tables.rs`. wasmrt still ships its **own**
@@ -75,6 +76,25 @@ allowed, and did we document it?).
 ## Component Ledger
 
 Newest first. Copy the template below for each future adopted component.
+
+### bytecodealliance/wasm-tools `wasmparser` — implementation-limit values (2026-11-24)
+- **Source:** https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser
+- **Version / commit:** crate `wasmparser` 0.263.0 (crates.io), `src/limits.rs`.
+- **License (SPDX):** `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` (the crate's `license` field,
+  confirmed against its licence files); **used under MIT**. Copyright notice retained: *Copyright 2017
+  Mozilla Foundation* (the header of `limits.rs`).
+- **License file:** `third_party/wasmparser/LICENSE-MIT` (verbatim). The crate ships no `NOTICE` file.
+- **What we reused:** DATA, not code: the limit values (the counts, sizes and depths wasmtime refuses
+  past), their order, and the error wording wasmparser reports for them.
+- **Where it lives in wasmrt:** `crates/wasmrt-core/src/limits.rs` (compiled into every binary); the
+  checks that use it are wasmrt's own (`module.rs`, `opcode.rs`).
+- **Modifications:** renamed without the `MAX_WASM_` prefix, given wasmrt's types, and a measured subset
+  kept (owner, 2026-11-24). The file's header says so.
+- **Obligations satisfied:** [x] license copied  [x] NOTICE (none upstream; attribution in ours)
+  [x] change-note in the source  [x] SPDX header in the source
+- **Benefit / drawback note:** the owner's decision (2026-11-23) to refuse exactly what wasmtime refuses,
+  at the same offsets; a module wasmtime rejects for size is no longer accepted by wasmrt. Review L1
+  (2026-11-24) found the table transcribed without this entry.
 
 ### WebAssembly/wabt — instruction-table data, via binaryang's shared definitions (2026-10-23)
 - **Source:** https://github.com/WebAssembly/wabt, by way of the owner's own

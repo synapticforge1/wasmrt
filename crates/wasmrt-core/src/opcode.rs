@@ -832,7 +832,7 @@ pub fn read_heap_type(r: &mut Reader) -> DecodeResult<HeapType> {
         }
         return Ok(HeapType::Exact(ti));
     }
-    abstract_heap_type(v).ok_or(DecodeError::UnsupportedOpcode)
+    abstract_heap_type(v).ok_or(DecodeError::BadHeapType)
 }
 
 /// The abstract heap type a negative s33 encodes, if any — THE table of abstract heap-type codes,
@@ -926,7 +926,7 @@ fn read_prefixed_immediate(r: &mut Reader, op: Op, nullable: bool) -> DecodeResu
         }
         Op::TableGrow | Op::TableSize | Op::TableFill => Imm::Table(r.read_var_u32()?),
         // `fb_op` / `fc_op` name no other op; reaching here is a generator/decoder mismatch.
-        _ => return Err(DecodeError::UnsupportedOpcode),
+        _ => return Err(DecodeError::IllegalOpcode(0xfc)),
     })
 }
 
@@ -945,7 +945,7 @@ fn read_br_cast(r: &mut Reader) -> DecodeResult<Imm> {
     // rest thrown away, so `br_on_cast 0xff` decoded as `br_on_cast 0x03` and RAN — wasm-tools
     // answers "invalid cast flags: 11111111". Verified against it across `0x00..=0xff`.
     if flags & !0b11 != 0 {
-        return Err(DecodeError::MalformedFlag);
+        return Err(DecodeError::InvalidCastFlags(flags)); // at the flags byte
     }
     let label = r.read_var_u32()?;
     let src_ht = read_heap_type(r)?;
@@ -1012,7 +1012,7 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             s.mem = read_mem_arg(r)?;
             s.lane = r.read_byte()?;
             if s.lane >= simd_lane_count(sub) {
-                return Err(DecodeError::UnsupportedOpcode);
+                return Err(DecodeError::SimdIndexOutOfBounds);
             }
         }
         0x0c | 0x0d => {
@@ -1023,7 +1023,7 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
                 // shuffle's bytes are lane indices selecting from two 16-byte operands,
                 // so each must be < 32; v128.const bytes are literal data.
                 if sub == 0x0d && b >= 32 {
-                    return Err(DecodeError::UnsupportedOpcode);
+                    return Err(DecodeError::SimdIndexOutOfBounds);
                 }
                 v |= (b as u128) << (i * 8);
             }
@@ -1033,7 +1033,7 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             // extract_lane / replace_lane.
             s.lane = r.read_byte()?;
             if s.lane >= simd_lane_count(sub) {
-                return Err(DecodeError::UnsupportedOpcode);
+                return Err(DecodeError::SimdIndexOutOfBounds);
             }
         }
         _ => {
@@ -1041,7 +1041,7 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             // 0xFD space is not dense. A ceiling alone accepted 20 unassigned sub-opcodes, each
             // decoding to an `Op::Simd` the interpreter would then be asked to run.
             if sub > MAX_SIMD_SUB || UNASSIGNED_SIMD.contains(&sub) {
-                return Err(DecodeError::UnsupportedOpcode);
+                return Err(DecodeError::UnknownSubopcode { prefix: 0xfd, code: sub });
             }
         }
     }
@@ -1074,11 +1074,11 @@ fn decode_atomic(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
             // (threads §5.4.9). Reading it and discarding it accepted `0xFE 0x03 0x01`, which
             // wasm-tools calls "nonzero byte after `atomic.fence`".
             if r.read_byte()? != 0x00 {
-                return Err(DecodeError::MalformedFlag);
+                return Err(DecodeError::MalformedFlag("nonzero byte after `atomic.fence`"));
             }
         }
         0x00 | 0x01 | 0x02 | 0x10..=MAX_ATOMIC_SUB => at.mem = read_mem_arg(r)?,
-        _ => return Err(DecodeError::UnsupportedOpcode),
+        _ => return Err(DecodeError::UnknownSubopcode { prefix: 0xfe, code: sub }),
     }
     Ok(Instr {
         op: Op::Atomic,
@@ -1092,15 +1092,15 @@ fn decode_atomic(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
 /// Read a `try_table` immediate: a block type followed by a vector of catch clauses.
 fn read_try_table(r: &mut Reader) -> DecodeResult<Imm> {
     let block_type = read_block_type(r)?;
-    let n = r.read_vec_len()?;
-    let mut catches = Vec::with_capacity(n as usize);
+    let n = r.read_count_with(crate::module::bounded(crate::module::limits::CATCHES, "catches"))?;
+    let mut catches = Vec::with_capacity(r.cap(n));
     for _ in 0..n {
         let kind = match r.read_byte()? {
             0x00 => CatchKind::Catch,
             0x01 => CatchKind::CatchRef,
             0x02 => CatchKind::CatchAll,
             0x03 => CatchKind::CatchAllRef,
-            _ => return Err(DecodeError::UnsupportedOpcode),
+            byte => return Err(DecodeError::InvalidLeadingByte { byte, what: "catch" }),
         };
         let tag = match kind {
             CatchKind::Catch | CatchKind::CatchRef => r.read_var_u32()?,
@@ -1127,11 +1127,14 @@ pub fn decode_body(body: &[u8]) -> DecodeResult<Vec<Instr>> {
 /// noted at its absolute offset (`module::last_decode_offset`, 3.0.0).
 pub(crate) fn decode_body_at(body: &[u8], origin: usize) -> DecodeResult<Vec<Instr>> {
     let mut r = Reader::with_origin(body, origin);
-    let list = decode_expr(&mut r)?;
+    let mut list = decode_expr(&mut r)?;
     if !r.at_end() {
         crate::reader::note_decode_at(r.abs_pos());
         return Err(DecodeError::UnbalancedEnd);
     }
+    // Trimmed: the growing vector kept up to twice its length, and a one-instruction body held four slots
+    // (efficiency review, 2026-11-24).
+    list.shrink_to_fit();
     Ok(list)
 }
 
@@ -1159,30 +1162,46 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
     // start of the value just read (a block type, a `br_table` count, an opcode), at the LEB byte that
     // overflowed, where the next byte was needed when the input ran out, and at the INSTRUCTION for
     // `atomic.fence`'s nonzero reserved byte (wasmtime: "nonzero byte after `atomic.fence`" at the 0xFE).
+    decode_expr_mode(r, false)
+}
+
+/// Decode a CONSTANT expression (a global's, an element's or a data segment's): wasmtime ends one at its first
+/// `end`, at any depth — an `end` that leaves a block open is "control frames remain at end of expression" — and
+/// its bytes running out is the section's end ("unexpected end-of-file").
+pub(crate) fn decode_const_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
+    decode_expr_mode(r, true)
+}
+
+fn decode_expr_mode(r: &mut Reader, is_const: bool) -> DecodeResult<Vec<Instr>> {
     let mut cur = r.abs_pos();
-    let res = decode_expr_from(r, &mut cur);
+    let res = decode_expr_from(r, &mut cur, is_const);
     if let Err(e) = &res {
         match e {
-            DecodeError::MalformedFlag => crate::reader::note_decode_at(cur),
-            DecodeError::MissingEnd => crate::reader::note_decode_at(r.abs_pos()),
+            // wasmtime reports these at the INSTRUCTION
+            DecodeError::MalformedFlag(_) | DecodeError::UnknownSubopcode { .. } | DecodeError::SimdIndexOutOfBounds => {
+                crate::reader::note_decode_at(cur);
+            }
+            // …this just after its opcode byte
+            DecodeError::OutsideBlock { .. } => crate::reader::note_decode_at(cur + 1),
+            DecodeError::MissingEnd | DecodeError::ExprFramesRemain => crate::reader::note_decode_at(r.abs_pos()),
             other => crate::reader::note_failure(r, other),
         }
     }
     res
 }
 
-fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>> {
+fn decode_expr_from(r: &mut Reader, cur: &mut usize, is_const: bool) -> DecodeResult<Vec<Instr>> {
     let mut list: Vec<Instr> = Vec::new();
-    // Open control structures, counting the expression itself. `end` (and the legacy `delegate`,
-    // which terminates a `try` in place of one) closes one; reaching zero ends the expression.
-    let mut depth: usize = 1;
+    // The structures open inside the expression, innermost last (see [`control`]); empty — and so never
+    // allocated — for a flat expression such as almost every constant one.
+    let mut frames: Vec<u8> = Vec::new();
+    let mut open = true;
 
-    while depth != 0 {
-        // `depth` is still open, so the expression's terminator has not been read: running out of
-        // bytes here is a MISSING end, which is the distinction the tail of this function used to
-        // draw after the loop.
+    while open {
+        // The expression's terminator has not been read. A body's bytes ending here leave blocks open
+        // ("control frames remain"); a constant expression's run on into its section, which has ended.
         if r.at_end() {
-            return Err(DecodeError::MissingEnd);
+            return Err(if is_const { DecodeError::UnexpectedEof } else { DecodeError::MissingEnd });
         }
         // Where this instruction starts, for trap backtraces. Captured before the opcode byte is
         // consumed, so it points at the instruction rather than its first immediate.
@@ -1199,9 +1218,9 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
             // op numbering was written here by hand, and again in the assembler.)*
             let sub = r.read_var_u32()?;
             let (op, nullable) = if b0 == 0xfb {
-                crate::tables::fb_op(sub).ok_or(DecodeError::UnsupportedOpcode)?
+                crate::tables::fb_op(sub).ok_or(DecodeError::UnknownSubopcode { prefix: 0xfb, code: sub })?
             } else {
-                (crate::tables::fc_op(sub).ok_or(DecodeError::UnsupportedOpcode)?, false)
+                (crate::tables::fc_op(sub).ok_or(DecodeError::UnknownSubopcode { prefix: 0xfc, code: sub })?, false)
             };
             let imm_at = u32::try_from(r.pos()).unwrap_or(u32::MAX);
             let imm = read_prefixed_immediate(&mut *r, op, nullable)?;
@@ -1225,6 +1244,11 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
             continue;
         }
 
+        // A single-byte opcode, and its effect on the open structures — judged BEFORE its immediates, as
+        // wasmtime judges `else` / `catch` / `delegate` (so `delegate`'s label is not read outside a `try`).
+        let op = Op::from_u8(b0).ok_or(DecodeError::IllegalOpcode(b0))?;
+        open = control(&mut frames, op, is_const)?;
+
         // ✅ **THE RAW-INTERNAL-TAG GUARD IS GONE, and it cannot come back.** It listed five
         // disjoint byte ranges by hand and had to be extended every time an internal tag was
         // added — the GC array ops needed it in 2026-08-19, the externref bridge in 2026-08-20,
@@ -1240,8 +1264,8 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
             ImmKind::BlockType => Imm::BlockType(read_block_type(&mut *r)?),
             ImmKind::Label => Imm::Label(r.read_var_u32()?),
             ImmKind::BrTable => {
-                let n = r.read_vec_len()?;
-                let mut labels = Vec::with_capacity(n as usize);
+                let n = r.read_count()?; // no separate limit: a target takes a byte, and the body's size bounds them
+                let mut labels = Vec::with_capacity(r.cap(n));
                 for _ in 0..n {
                     labels.push(r.read_var_u32()?);
                 }
@@ -1265,8 +1289,8 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
             ImmKind::F32c => Imm::F32(r.read_f32_bits()?),
             ImmKind::F64c => Imm::F64(r.read_f64_bits()?),
             ImmKind::SelectTypes => {
-                let n = r.read_vec_len()?;
-                let mut tys = Vec::with_capacity(n as usize);
+                let n = r.read_count()?; // more than one is invalid; the bytes bound the count
+                let mut tys = Vec::with_capacity(r.cap(n));
                 for _ in 0..n {
                     // A value type's first byte is one LEB byte in `0x40..=0x7f` — a negative
                     // s33 — so it reads exactly as a block type's does, minus the index and
@@ -1286,11 +1310,9 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
             ImmKind::TryTable => read_try_table(&mut *r)?,
             // These kinds belong to `0xFB`/`0xFC`-prefixed ops decoded above; reaching
             // here means a raw synthetic-tag byte, which is malformed.
-            ImmKind::Unsupported => return Err(DecodeError::UnsupportedOpcode),
+            ImmKind::Unsupported => return Err(DecodeError::IllegalOpcode(b0)),
         };
 
-        let op = Op::from_u8(b0).ok_or(DecodeError::UnsupportedOpcode)?;
-        depth = control_depth(depth, op)?;
         list.push(Instr { op, offset: at, imm_at, imm_len: u32::try_from(r.pos()).unwrap_or(u32::MAX) - imm_at, imm });
     }
 
@@ -1309,16 +1331,45 @@ fn decode_expr_from(r: &mut Reader, cur: &mut usize) -> DecodeResult<Vec<Instr>>
     Ok(list)
 }
 
-/// Track open control structures across one instruction. `Err` means the expression's `end` has
-/// already been matched, so this instruction is outside any control structure.
-fn control_depth(depth: usize, op: Op) -> DecodeResult<usize> {
-    Ok(match op {
-        // `else` and the legacy `catch`/`catch_all` divide a structure; they do not open or close.
-        Op::Block | Op::Loop | Op::If | Op::TryLegacy | Op::TryTable => depth + 1,
-        // `delegate` terminates a legacy `try` in place of its `end`.
-        Op::End | Op::Delegate => depth.checked_sub(1).ok_or(DecodeError::UnbalancedEnd)?,
-        _ => depth,
-    })
+// Kinds of open structure, for [`control`].
+const F_BLOCK: u8 = 0; // block, loop, try_table
+const F_IF: u8 = 1;
+const F_ELSE: u8 = 2;
+const F_TRY: u8 = 3; // legacy try
+const F_CATCH: u8 = 4; // legacy catch
+const F_CATCH_ALL: u8 = 5; // legacy catch_all
+
+/// One instruction's effect on the open structures, by wasmtime's rules: `else` needs an `if`, `catch` and
+/// `catch_all` a legacy `try` (or its `catch`), `delegate` a legacy `try` (which it closes). Returns whether
+/// the expression is still open: an `end` with nothing open closes it — and in a constant expression the first
+/// `end` does, at any depth.
+fn control(frames: &mut Vec<u8>, op: Op, is_const: bool) -> DecodeResult<bool> {
+    let outside = |found, frame| Err(DecodeError::OutsideBlock { found, frame });
+    match op {
+        Op::Block | Op::Loop | Op::TryTable => frames.push(F_BLOCK),
+        Op::If => frames.push(F_IF),
+        Op::TryLegacy => frames.push(F_TRY),
+        Op::Else => match frames.last_mut() {
+            Some(k) if *k == F_IF => *k = F_ELSE,
+            _ => return outside("else", "If"),
+        },
+        Op::CatchLegacy | Op::CatchAll => match frames.last_mut() {
+            Some(k) if *k == F_TRY || *k == F_CATCH => *k = if op == Op::CatchLegacy { F_CATCH } else { F_CATCH_ALL },
+            _ => return outside(if op == Op::CatchLegacy { "catch" } else { "catch_all" }, "LegacyTry"),
+        },
+        Op::Delegate => match frames.last() {
+            Some(&F_TRY) => {
+                frames.pop();
+            }
+            _ => return outside("delegate", "LegacyTry"),
+        },
+        Op::End if is_const => {
+            return if frames.is_empty() { Ok(false) } else { Err(DecodeError::ExprFramesRemain) };
+        }
+        Op::End => return Ok(frames.pop().is_some()),
+        _ => {}
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -1372,10 +1423,10 @@ mod tests {
         // block with an s33 whose bit 32 is set but higher bits don't sign-extend it —
         // 2^32 is out of s33 range, so readVarS33 rejects it as malformed.
         let body = [0x02, 0x80, 0x80, 0x80, 0x80, 0x10];
-        assert_eq!(decode_body(&body), Err(DecodeError::LebOverflow));
+        assert_eq!(decode_body(&body), Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true }));
         // An over-long (>5-byte) s33 encoding of a small index is also rejected.
         let overlong = [0x02, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00];
-        assert_eq!(decode_body(&overlong), Err(DecodeError::LebOverflow));
+        assert_eq!(decode_body(&overlong), Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true }));
     }
 
     #[test]
@@ -1453,7 +1504,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_opcode() {
-        assert_eq!(decode_body(&[0xff]), Err(DecodeError::UnsupportedOpcode));
+        assert_eq!(decode_body(&[0xff]), Err(DecodeError::IllegalOpcode(0xff)));
     }
 
     /// An expression's control structures must BALANCE, and its last `end` is the expression's own
@@ -1507,7 +1558,7 @@ mod tests {
         ] {
             assert_eq!(
                 decode_body(&[b]),
-                Err(DecodeError::UnsupportedOpcode),
+                Err(DecodeError::IllegalOpcode(b)),
                 "raw byte {b:#04x} must not be an opcode"
             );
         }

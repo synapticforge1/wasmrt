@@ -58,6 +58,9 @@ mod definitions_check;
 #[rustfmt::skip]
 mod tables;
 
+// wasmtime's implementation limits (review I11), whose values are wasmparser's (MIT; review L1).
+pub(crate) mod limits;
+
 // WASI + the secure sandbox resolve real OS paths → they require `std`.
 pub mod rng;
 #[cfg(feature = "std")]

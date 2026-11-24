@@ -19,15 +19,41 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-**A breaking release** (the Rust API gains fields and two error variants; see Breaking Changes in the
-README). Refusals now name the byte wasmtime names.
+**A breaking release** (the Rust API gains fields and new error variants, and modules past wasmtime's
+implementation limits are refused; see Breaking Changes in the README). Refusals now name the byte
+wasmtime names.
+
+### Added
+
+- **Implementation limits**, wasmtime's values, each kept only where a measurement showed it
+  needed. A module past one is refused at decode, at the offset wasmtime reports and in its words
+  (`decode failed at offset 10: functions count exceeds limit of 1000000`). The limits: 1,000,000
+  types, functions, imports, exports, globals and tags; 100,000 tables, element segments and data
+  segments; 50,000 locals per function (params included); 1,000 params and 1,000 results per type;
+  function bodies of 7,654,321 bytes; 10,000,000 elements per segment; 10,000 struct fields and
+  `try_table` catches; and an effective type size below 1,000,000 for imports and exports together
+  (a function or tag counts 2 plus its params and results, anything else 1). A count equal to its
+  limit is accepted. Without them, a module of a few bytes or megabytes could claim gigabytes
+  (100,000,000 locals in a 33-byte module claimed 1.5 GB). wasmtime's limits on name length,
+  memory count, subtype depth, supertype count and type-index size are not enforced: measured, they
+  protect nothing in wasmrt. The values are wasmparser's, credited in NOTICE and
+  `third_party/LICENSES.md`.
 
 ### Fixed
 
+- **The CLI never destroys a file it was given.** `wasmrt pin --db` treated a pin DB it could not
+  read (a UTF-16 file, a permission error) as empty and overwrote it, and concurrent `pin` runs could
+  drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the
+  binary. Now an unreadable DB is refused, `pin` holds `<db>.lock` across its read and write (a lock
+  left by a killed run is named in the refusal after 10 s), and both commands write a regular file
+  whole or not at all (a temporary file renamed over it, keeping its permissions; a symlink is
+  written through; a read-only file is refused on every OS; a device such as `/dev/null` is written
+  in place). `pin --db` into a directory that does not exist is an error (it was created), and a line
+  already in the DB is not appended again.
 - **A refusal points at the offending byte, in wasmtime's words.** With reference-types disabled,
   `call_indirect`'s table index must be the single byte `0x00`. wasmrt reported such a module at the
   instruction (`offset 598 … uses the disabled proposal`); it now reports the byte itself
-  (`offset 604 … zero byte expected`), as wasmtime 51 and wasm-tools do. The same holds for
+  (`offset 604 … zero byte expected`), as wasmtime and wasm-tools do. The same holds for
   `memory.size` / `memory.grow` with multi-memory disabled.
 - **Two invalid encodings were accepted with multi-memory disabled:** an overlong memory index on
   `memory.size` / `memory.grow` (`80 00`), and a memarg carrying the memory-index flag. Both are now
@@ -35,9 +61,27 @@ README). Refusals now name the byte wasmtime names.
 - **A valid encoding was refused with reference-types disabled:** an overlong table index on
   `return_call_indirect`, which binaryang's shared definitions and wasm-tools both accept.
 - **Every decode failure carries its byte offset** (`decode failed at offset 10: unexpected end of
-  input`), on the CLI and in the C ABI's error strings, at the offsets wasmtime reports: 16 of 17
-  measured malformed modules agree exactly (the exception is a local count past wasmtime's lower
-  limit).
+  input`), on the CLI and in the C ABI's error strings, at the offsets wasmtime reports. A vector
+  whose count runs past its section, entry or body is read item by item, as wasmtime reads it: a
+  malformed item is reported at itself, and otherwise the failure is where the bytes run out. A
+  code section whose count differs from the function section's is refused at that count.
+- **A malformed type is reported in wasmtime's words**, where wasmrt said `invalid composite type
+  entry` for all of them: `invalid leading byte (0x99) for type`, `multiple supertypes`, `supertypes
+  must be defined before subtypes` (at the rec group's start, once the group is read), `type index 0
+  is not a function type`, and `unknown type 5: type index out of bounds` (an import's at the
+  import's start).
+- **Every decode refusal is worded as wasmtime words it**, where wasmrt had one message for several
+  of wasmtime's: `unexpected end-of-file`, `invalid value type` / `malformed reference type` /
+  `invalid heap type` by context, `malformed section id`, `illegal opcode: 0x27`, `unknown 0xfc
+  subopcode: 0x71`, the flag bytes of memories, tables, globals, tags and segments each in its own
+  words, `invalid var_u32: integer representation too long`, and the others. Compared with
+  wasm-tools on 4,000 one-byte corruptions of the behaviour corpus: every decode-stage refusal now
+  agrees in words and offset, except where wasmtime's validator reaches a function body's type error
+  first (it validates while it reads; wasmrt decodes a body, then validates it).
+- **A function body's decode error waits for the rest of the module**, as in wasmtime: a structural
+  fault later in the file (a section past the end, a count mismatch) is reported first. `else`,
+  `catch` and `delegate` outside their block are refused while decoding, and a constant expression
+  ends at its first `end`.
 - **WASI on macOS:** removing a non-empty directory reported a generic I/O error, because the error
   codes were compared as raw numbers and macOS's differs from Linux's. They are now matched by kind.
 - **`wasmrt wast`** chose a spec file's proposals from the path as typed, so running from inside
@@ -45,6 +89,15 @@ README). Refusals now name the byte wasmtime names.
 
 ### Changed
 
+- **Faster calls, a faster start, and far less memory** (an efficiency review, 2026-11-24; measured on
+  one Windows x64 machine, release build). A call reuses its frame's buffers instead of allocating
+  eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s. The cold start on the 48 KB benchmark
+  module 3.1–3.3 ms → 2.35 ms; the steady loop 243–254 → 255–278 Mops/s. The CLI decodes a module once
+  (it decoded the bare-path form twice), links WASI without copying the module, and does not free an
+  instance it is about to exit from (about 1.5 ms off a small WASI program's run). An instance no
+  longer holds two copies of every instruction, its per-instruction jump tables are a sixth of their
+  size, and a decoded body keeps no spare capacity: a 7.3 MB function 1,861 → 828 MB, a million
+  functions 990 → 329 MB, a million types 190 → 100 MB.
 - `opcode::Instr` is 64 bytes, down from 80, with the new fields included.
 - Release tooling: the crates.io read-back reads tar long-name and pax headers; the CLI tests keep
   their fixtures in cargo's build folder rather than the system temp folder.

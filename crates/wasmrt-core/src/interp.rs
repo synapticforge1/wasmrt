@@ -542,9 +542,61 @@ struct Pools {
     /// call whether or not anything ever traps, and calls are hot. This costs nothing until something
     /// actually goes wrong. Also placed last, for the reason above.
     backtrace: Vec<TrapFrame>,
+    /// Spare vectors for call frames — locals, value stacks, arguments, results — and their label stacks,
+    /// reused call after call: a call allocated eight times (efficiency review F1, 2026-11-24: 474 ns a call
+    /// measured; ≥ 2.5× with reuse). Bounded in number and in each one's capacity, so a deep recursion or a
+    /// huge frame does not keep its memory. Placed last, with the other fields not read per instruction.
+    spare_values: Vec<Vec<Value>>,
+    spare_labels: Vec<Vec<Label>>,
 }
 
 impl Pools {
+    /// At most this many spares of each kind are kept…
+    const SPARE_MAX: usize = 256;
+    /// …and no value vector with more capacity than this: 4,096 values (16 B each) = 64 KiB…
+    const SPARE_CAP: usize = 4096;
+    /// …nor a label vector past 1,024 labels (≤ 64 B each) = 64 KiB. So a store keeps at most ~32 MiB of spares in all
+    /// (re-review N2, 2026-11-24: one count for both allowed ~16 MiB of values plus ~60 MiB of labels).
+    const SPARE_LABEL_CAP: usize = 1024;
+
+    /// An empty value vector, reused if one is spare.
+    #[inline]
+    fn take_values(&mut self) -> Vec<Value> {
+        self.spare_values.pop().unwrap_or_default()
+    }
+
+    /// Give a value vector back for reuse (dropped instead past the bounds).
+    #[inline]
+    fn give_values(&mut self, mut v: Vec<Value>) {
+        if self.spare_values.len() < Self::SPARE_MAX && v.capacity() <= Self::SPARE_CAP {
+            v.clear();
+            self.spare_values.push(v);
+        }
+    }
+
+    /// An empty label vector, reused if one is spare.
+    #[inline]
+    fn take_labels(&mut self) -> Vec<Label> {
+        self.spare_labels.pop().unwrap_or_default()
+    }
+
+    /// Give a label vector back for reuse.
+    #[inline]
+    fn give_labels(&mut self, mut v: Vec<Label>) {
+        if self.spare_labels.len() < Self::SPARE_MAX && v.capacity() <= Self::SPARE_LABEL_CAP {
+            v.clear();
+            self.spare_labels.push(v);
+        }
+    }
+
+    /// Give a finished frame's three vectors back.
+    #[inline]
+    fn recycle(&mut self, frame: Frame<'_>) {
+        self.give_values(frame.locals);
+        self.give_values(frame.vstack);
+        self.give_labels(frame.labels);
+    }
+
     /// Spend one iteration. Called on a **loop back-edge** and on a **tail-call hop** — the two
     /// ways a guest runs forever without growing the native stack, which is exactly why the
     /// call-depth ceiling cannot see either of them.
@@ -770,14 +822,19 @@ struct FuncBody {
     /// hot path keeps its `vec![0; n]` and pays one length check. Non-null reference locals are not
     /// defaultable at all, so the validator has already refused those.
     null_locals: Vec<u32>,
-    ir: Vec<Instr>,
-    /// For each `block`/`loop`/`if`/`else` index: the matching `end` index.
-    end_of: Vec<usize>,
+    // The instructions are NOT held here: they are the module's (`InstanceData.module.code[i].ir`, the same
+    // instance), borrowed by each frame — a copy here held every instruction twice (efficiency review, 2026-11-24),
+    // and moving them out of the module emptied `Instance::module()` (review H1).
+    /// For each `block`/`loop`/`if`/`else` index: the matching `end` index. `u32`: a body's instruction
+    /// count is bounded by the function-size limit (efficiency review, 2026-11-24: `usize` cost 8 B more per
+    /// instruction).
+    end_of: Vec<u32>,
     /// For each `if` index: the `else` index, or `ir.len()` if none.
-    else_of: Vec<usize>,
-    /// For each legacy `try` index: its inline catch handlers + optional `delegate` label;
-    /// `None` elsewhere (EH, legacy encoding).
-    try_info: Vec<Option<LegacyTry>>,
+    else_of: Vec<u32>,
+    /// The legacy `try`s (EH, legacy encoding), by their index, ascending: each one's inline catch handlers
+    /// and optional `delegate` label. SPARSE — a dense per-instruction `Option` cost 32 B for every
+    /// instruction to describe the rare `try` (efficiency review); looked up only when a throw unwinds.
+    try_info: Vec<(u32, LegacyTry)>,
     /// Absolute module offset of this body's first instruction, so a trap frame can report a
     /// module offset rather than a body-relative one the consumer would have to rebase.
     body_offset: u32,
@@ -2069,8 +2126,10 @@ impl Store {
 
         // Prepare each defined function: decode its body + precompute control flow.
         let mut func_bodies = Vec::with_capacity(module.functions.len());
-        for (&type_index, code) in module.functions.iter().zip(&module.code) {
+        for k in 0..module.code.len().min(module.functions.len()) {
+            let type_index = module.functions[k];
             let ty = module.func_sig(type_index).ok_or(Trap::UndefinedFunc)?;
+            let code = &module.code[k];
             let num_locals = ty.params.len() + code.local_count() as usize;
             // Declared locals follow the parameters in the index space.
             let mut null_locals = Vec::new();
@@ -2081,20 +2140,17 @@ impl Store {
                 }
                 li += l.count;
             }
-            // Cloned, not re-decoded: the module carries the decoded body already (a clone of the
-            // instruction vector is cheaper than walking the bytes again, and this ran once per
-            // instantiation).
-            let ir = code.ir.clone();
-            let cf = precompute_control_flow(&ir)?;
+            let body_offset = code.body_offset;
+            // The body's control-flow tables only; its instructions stay the module's (borrowed by each frame).
+            let cf = precompute_control_flow(&code.ir)?;
             func_bodies.push(FuncBody {
                 ty,
                 num_locals,
                 null_locals,
-                ir,
                 end_of: cf.end_of,
                 else_of: cf.else_of,
                 try_info: cf.try_info,
-                body_offset: code.body_offset,
+                body_offset,
             });
         }
 
@@ -2358,9 +2414,9 @@ impl Store {
 /// The per-body control-flow tables computed once at instantiation (see
 /// [`precompute_control_flow`]), each indexed by instruction pc.
 struct ControlFlow {
-    end_of: Vec<usize>,
-    else_of: Vec<usize>,
-    try_info: Vec<Option<LegacyTry>>,
+    end_of: Vec<u32>,
+    else_of: Vec<u32>,
+    try_info: Vec<(u32, LegacyTry)>,
 }
 
 /// Match every `block`/`loop`/`if`/`try`/`try_table` with its `end`, every `if` with its
@@ -2440,10 +2496,18 @@ fn precompute_control_flow(ir: &[Instr]) -> Result<ControlFlow> {
             _ => {}
         }
     }
+    // Narrowed once here: every index is below the function-size limit, far below 2^32.
+    let narrow = |v: Vec<usize>| v.into_iter().map(|x| u32::try_from(x).unwrap_or(u32::MAX)).collect();
+    let mut sparse: Vec<(u32, LegacyTry)> = try_info
+        .into_iter()
+        .enumerate()
+        .filter_map(|(pc, t)| t.map(|t| (u32::try_from(pc).unwrap_or(u32::MAX), t)))
+        .collect();
+    sparse.shrink_to_fit();
     Ok(ControlFlow {
-        end_of,
-        else_of,
-        try_info,
+        end_of: narrow(end_of),
+        else_of: narrow(else_of),
+        try_info: sparse,
     })
 }
 
@@ -2487,6 +2551,8 @@ fn plain_label(is_loop: bool, arity: u32, target: usize, stack_base: usize) -> L
 
 struct Frame<'a> {
     body: &'a FuncBody,
+    /// The body's instructions — the module's own, borrowed.
+    ir: &'a [Instr],
     locals: Vec<Value>,
     vstack: Vec<Value>,
     labels: Vec<Label>,
@@ -2610,7 +2676,7 @@ impl Frame<'_> {
         tags: &[usize],
         exn: &Exception,
     ) -> Result<Option<usize>> {
-        let body = self.body;
+        let (body, ir) = (self.body, self.ir);
         let resolve = |t: u32| IndexMaps::get(tags, t as usize);
         // Depths a `delegate` has skipped past. Kept as a floor rather than by advancing the loop
         // variable, so every `continue` in the body below still steps outward by one on its own —
@@ -2624,7 +2690,7 @@ impl Frame<'_> {
 
             // --- try_table (exnref encoding) ---
             if let Some(tpc) = self.labels[idx].try_table_pc {
-                let catches: &[Catch] = match &body.ir[tpc].imm {
+                let catches: &[Catch] = match &ir[tpc].imm {
                     Imm::TryTable(tt) => &tt.catches,
                     _ => &[],
                 };
@@ -2680,7 +2746,8 @@ impl Frame<'_> {
             let Some(lpc) = self.labels[idx].legacy_pc else {
                 continue;
             };
-            let Some(lt) = body.try_info.get(lpc).and_then(Option::as_ref) else {
+            let found = body.try_info.binary_search_by_key(&u32::try_from(lpc).unwrap_or(u32::MAX), |(pc, _)| *pc);
+            let Some(lt) = found.ok().map(|k| &body.try_info[k].1) else {
                 continue;
             };
             // `delegate l` re-raises **at label `l`**, skipping the handlers of every try
@@ -2849,8 +2916,10 @@ fn call_function(
     }
     let defined = (func_index - imported) as usize;
     let body = data.func_bodies.get(defined).ok_or(Trap::UndefinedFunc)?;
+    let ir: &[Instr] = &data.module.code.get(defined).ok_or(Trap::UndefinedFunc)?.ir;
 
-    let mut locals = vec![0 as Value; body.num_locals];
+    let mut locals = store.take_values();
+    locals.resize(body.num_locals, 0 as Value);
     let n_args = args.len().min(locals.len());
     locals[..n_args].copy_from_slice(&args[..n_args]);
     // A reference local defaults to `ref.null`, not zero — zero is GC heap object 0.
@@ -2861,11 +2930,14 @@ fn call_function(
     }
 
 
+    let mut labels = store.take_labels();
+    labels.push(plain_label(false, body.ty.results.len() as u32, ir.len(), 0));
     let mut frame = Frame {
         body,
+        ir,
         locals,
-        vstack: Vec::new(),
-        labels: vec![plain_label(false, body.ty.results.len() as u32, body.ir.len(), 0)],
+        vstack: store.take_values(),
+        labels,
     };
     let ctx = Ctx {
         module: &data.module,
@@ -2881,8 +2953,7 @@ fn call_function(
     if let Err(e) = run(&mut frame, &ctx, store, depth, &mut pc, &mut tail) {
         // `pc` can sit one past the end if the body ran off its own `end`; clamp rather than
         // index, so a malformed frame degrades to a missing offset instead of a panic.
-        let offset = body
-            .ir
+        let offset = ir
             .get(pc)
             .map_or(body.body_offset, |i| body.body_offset.saturating_add(i.offset));
         // Bounded: a backtrace cannot outgrow the call stack that produced it, and that is already
@@ -2892,6 +2963,7 @@ fn call_function(
             func_index,
             offset,
         });
+        store.recycle(frame);
         return Err(e);
     }
 
@@ -2905,6 +2977,7 @@ fn call_function(
         // 🔒 THE TAIL-CALL TICK. A hop replaces the frame instead of stacking one, so it grows no
         // native stack and makes no back-edge — `(func $f (return_call $f))` would otherwise run
         // forever past every other ceiling (`interop.md` §3.7a).
+        store.recycle(frame);
         store.tick()?;
         inst = tc.inst;
         func_index = tc.func;
@@ -2914,7 +2987,10 @@ fn call_function(
 
     let n = body.ty.results.len();
     let base = frame.stack_base(n)?;
-    return Ok(frame.vstack[base..].to_vec());
+    let mut results = store.take_values();
+    results.extend_from_slice(&frame.vstack[base..]);
+    store.recycle(frame);
+    return Ok(results);
     }
 }
 
@@ -2947,7 +3023,7 @@ fn run(
     // register and the same benchmark does not move.
     let mut body_loop = || -> Result<()> {
         let body = frame.body;
-        let ir = &body.ir;
+        let ir = frame.ir;
         while pc < ir.len() {
             let instr = &ir[pc];
             match instr.op {
@@ -3039,7 +3115,7 @@ fn run(
                     let stack_base = frame.stack_base(params as usize)?;
                     frame
                         .labels
-                        .push(plain_label(false, arity, body.end_of[pc] + 1, stack_base));
+                        .push(plain_label(false, arity, body.end_of[pc] as usize + 1, stack_base));
                     pc += 1;
                 }
                 Op::Loop => {
@@ -3059,19 +3135,19 @@ fn run(
                     let stack_base = frame.stack_base(params as usize)?;
                     frame
                         .labels
-                        .push(plain_label(false, arity, body.end_of[pc] + 1, stack_base));
+                        .push(plain_label(false, arity, body.end_of[pc] as usize + 1, stack_base));
                     if c != 0 {
                         pc += 1;
                     } else {
-                        let else_idx = body.else_of[pc];
+                        let else_idx = body.else_of[pc] as usize;
                         pc = if else_idx != ir.len() {
                             else_idx + 1
                         } else {
-                            body.end_of[pc]
+                            body.end_of[pc] as usize
                         };
                     }
                 }
-                Op::Else => pc = body.end_of[pc], // end of then-branch: skip to matching end
+                Op::Else => pc = body.end_of[pc] as usize, // end of then-branch: skip to matching end
                 Op::End => {
                     frame.labels.pop();
                     pc += 1;
@@ -3088,7 +3164,7 @@ fn run(
                     frame.labels.push(Label {
                         is_loop: false,
                         arity,
-                        target: body.end_of[pc] + 1,
+                        target: body.end_of[pc] as usize + 1,
                         stack_base,
                         try_table_pc: Some(pc),
                         legacy_pc: None,
@@ -3129,7 +3205,7 @@ fn run(
                     frame.labels.push(Label {
                         is_loop: false,
                         arity,
-                        target: body.end_of[pc] + 1,
+                        target: body.end_of[pc] as usize + 1,
                         stack_base,
                         try_table_pc: None,
                         legacy_pc: Some(pc),
@@ -3139,7 +3215,7 @@ fn run(
                 }
                 // Reached only by normal control flow (the body, or a prior handler, completed):
                 // skip the remaining handlers to the `end`.
-                Op::CatchLegacy | Op::CatchAll => pc = body.end_of[pc],
+                Op::CatchLegacy | Op::CatchAll => pc = body.end_of[pc] as usize,
                 // `delegate` reached by normal flow just ends its try, like `end`.
                 Op::Delegate => {
                     frame.labels.pop();
@@ -3213,7 +3289,8 @@ fn run(
                     let ft = ctx.module.func_type(f).ok_or(Trap::UndefinedFunc)?;
                     let np = ft.params.len();
                     let base = frame.stack_base(np)?;
-                    let args = frame.vstack[base..].to_vec();
+                    let mut args = store.take_values();
+                    args.extend_from_slice(&frame.vstack[base..]);
                     let results = match call_function(ctx.code, ctx.host_funcs, store, ctx.inst, f, &args, depth + 1) {
                         Ok(r) => r,
                         Err(e) => {
@@ -3224,6 +3301,8 @@ fn run(
                     };
                     frame.vstack.truncate(base);
                     frame.vstack.extend_from_slice(&results);
+                    store.give_values(results);
+                    store.give_values(args);
                     pc += 1;
                 }
 
@@ -3394,7 +3473,8 @@ fn run(
                         pc = ir.len();
                         continue;
                     }
-                    let args = frame.vstack[base..].to_vec();
+                    let mut args = store.take_values();
+                    args.extend_from_slice(&frame.vstack[base..]);
                     let results = match call_function(ctx.code, ctx.host_funcs, store, owner, f, &args, depth + 1) {
                         Ok(r) => r,
                         Err(e) => {
@@ -3404,6 +3484,8 @@ fn run(
                     };
                     frame.vstack.truncate(base);
                     frame.vstack.extend_from_slice(&results);
+                    store.give_values(results);
+                    store.give_values(args);
                     pc += 1;
                 }
 
@@ -3491,7 +3573,8 @@ fn run(
                         pc = ir.len();
                         continue;
                     }
-                    let args = frame.vstack[base..].to_vec();
+                    let mut args = store.take_values();
+                    args.extend_from_slice(&frame.vstack[base..]);
                     // Into the funcref's OWN instance, so the callee runs against its own memory,
                     // globals and tables. `ctx.inst` here was the silent-wrong-call.
                     let results = match call_function(ctx.code, ctx.host_funcs, store, owner, f, &args, depth + 1) {
@@ -3503,6 +3586,8 @@ fn run(
                     };
                     frame.vstack.truncate(base);
                     frame.vstack.extend_from_slice(&results);
+                    store.give_values(results);
+                    store.give_values(args);
                     pc += 1;
                 }
 
@@ -9133,4 +9218,65 @@ mod start_tests {
         assert_eq!(call(&mut store, "mul_s", &[-1, -1]), (1, 0), "signed: (-1)*(-1) = 1");
         assert_eq!(call(&mut store, "mul_u", &[-1, -1]), (1, -2), "unsigned: the same bits, widened");
     }
+
+    /// Review H1 (2026-11-24): an instance's module stays whole — its functions' instructions are BORROWED by the
+    /// frames, not moved out — so instantiating it again runs the real bodies. (Moving them out made a second
+    /// instance's void functions silently do nothing.)
+    #[test]
+    fn an_instances_module_instantiates_again_with_its_bodies() {
+        let m = decode(
+            &crate::wat::assemble(
+                br#"(module (global $g (mut i32) (i32.const 0))
+                      (func (export "set") (global.set $g (i32.const 42)))
+                      (func (export "get") (result i32) (global.get $g)))"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let first = Instance::new(m).unwrap();
+        assert!(first.module().code.iter().all(|c| !c.ir.is_empty()), "the module keeps its instructions");
+        let mut second = Instance::new(first.module().clone()).unwrap();
+        second.invoke("set", &[]).unwrap();
+        assert_eq!(second.invoke("get", &[]).unwrap(), [42], "the second instance ran the real body");
+    }
+
+    /// The frame pools (efficiency review F1, 2026-11-24): a call reuses a spare vector, and a reused one must look
+    /// new — a callee's locals start at zero even after a previous frame left values in the same buffer, and
+    /// results come back right through deep recursion, traps and legacy `try`.
+    #[test]
+    fn a_reused_frame_starts_clean() {
+        let m = decode(
+            &crate::wat::assemble(
+                br#"(module
+                      (func $dirty (param i32) (local i32 i32 i32)
+                        (local.set 1 (i32.const 7)) (local.set 2 (i32.const 8)) (local.set 3 (i32.const 9))
+                        (if (local.get 0) (then (call $dirty (i32.sub (local.get 0) (i32.const 1))))))
+                      (func $clean (result i32) (local i32 i32 i32)
+                        (i32.add (local.get 0) (i32.add (local.get 1) (local.get 2))))
+                      (func $fib (export "fib") (param i32) (result i32)
+                        (if (result i32) (i32.lt_u (local.get 0) (i32.const 2))
+                          (then (local.get 0))
+                          (else (i32.add (call $fib (i32.sub (local.get 0) (i32.const 1)))
+                                         (call $fib (i32.sub (local.get 0) (i32.const 2)))))))
+                      (func (export "run") (result i32)
+                        (call $dirty (i32.const 10))
+                        (call $clean))
+                      (func (export "trap") (local i32 i32 i32)
+                        (local.set 0 (i32.const 5)) (local.set 1 (i32.const 6)) (local.set 2 (i32.const 7))
+                        (unreachable))
+                      (func (export "clean") (result i32) (call $clean)))"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut inst = Instance::new(m).unwrap();
+        for _ in 0..3 {
+            assert_eq!(inst.invoke("run", &[]).unwrap(), [0], "a reused frame's locals start at zero");
+        }
+        assert_eq!(inst.invoke("fib", &[20]).unwrap(), [6765]);
+        // a trap abandons its frame mid-call; the next call still starts clean
+        assert!(inst.invoke("trap", &[]).is_err());
+        assert_eq!(inst.invoke("clean", &[]).unwrap(), [0], "after a trap, a reused frame's locals start at zero");
+    }
+
 }

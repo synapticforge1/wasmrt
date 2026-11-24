@@ -3606,13 +3606,21 @@ mod tests {
 
     #[test]
     fn resource_cap_rejects_huge_locals() {
-        // (func) with one locals run of count 0xFFFFFFFF.
+        // (func) with one locals run of count 0xFFFFFFFF: the DECODER refuses it now (I11, wasmtime's
+        // limit), so the validator's cap is checked on a decoded module whose count is then raised.
         let bytes = m(&[
             0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
             0x03, 0x02, 0x01, 0x00,
             0x0a, 0x0a, 0x01, 0x08, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x7f, 0x0b,
         ]);
-        let md = decode(&bytes).unwrap();
+        assert_eq!(decode(&bytes), Err(crate::types::DecodeError::TooManyLocals));
+        let mut md = decode(&m(&[
+            0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+            0x03, 0x02, 0x01, 0x00,
+            0x0a, 0x06, 0x01, 0x04, 0x01, 0x01, 0x7f, 0x0b,
+        ]))
+        .unwrap();
+        md.code[0].locals[0].count = u32::MAX;
         assert_eq!(validate(&md), Err(ValidateError::TooManyLocals));
     }
 
@@ -3883,15 +3891,15 @@ mod tests {
         let table = |flag: u8| m(&[0x04, 0x04, 0x01, 0x70, flag, 0x01]);
         // 0x04 = i64 index — now VALID.
         assert!(decode(&table(0x04)).is_ok(), "a 64-bit table is in scope since T13");
-        // 0x02 = shared — still malformed; no proposal wasmrt targets has a shared table,
-        // and keeping this beside the change is what stops "we un-refused the flag byte".
+        // 0x02 = shared — still refused: a shared table is shared-everything-threads, which wasmtime parses
+        // and wasmrt does not implement. Keeping this beside the change stops "we un-refused the flag byte".
         assert_eq!(
             decode(&table(0x02)),
-            Err(crate::types::DecodeError::MalformedFlag),
-            "a shared table is still malformed"
+            Err(crate::types::DecodeError::UnimplementedProposal),
+            "a shared table is still refused"
         );
         // 0x06 = shared + i64 — the shared half still decides it.
-        assert_eq!(decode(&table(0x06)), Err(crate::types::DecodeError::MalformedFlag));
+        assert_eq!(decode(&table(0x06)), Err(crate::types::DecodeError::UnimplementedProposal));
     }
 
     // --- the previously deferred typing arms: SIMD / atomics / GC / EH ---
@@ -4138,11 +4146,12 @@ mod tests {
         ];
         assert_eq!(check(&eh_mod(&ok, &[0x7f])), Ok(()));
 
-        // A bare `catch` whose enclosing opener is a plain block, not a `try`.
+        // A bare `catch` whose enclosing opener is a plain block, not a `try`: refused while DECODING, as
+        // wasmtime refuses it while parsing ("`catch` found outside `LegacyTry` block"; I13, 2026-11-24).
         let bare = [0x00, 0x02, 0x40, 0x07, 0x00, 0x0b, 0x0b];
         assert_eq!(
-            check(&eh_mod(&bare, &[])),
-            Err(ValidateError::MismatchedCatch)
+            decode(&eh_mod(&bare, &[])),
+            Err(crate::types::DecodeError::OutsideBlock { found: "catch", frame: "LegacyTry" })
         );
     }
 
@@ -4174,8 +4183,8 @@ mod tests {
         // `end` is the last byte.
         let not_a_try = [0x00, 0x02, 0x40, 0x18, 0x00, 0x0b];
         assert_eq!(
-            check(&eh_mod(&not_a_try, &[])),
-            Err(ValidateError::MismatchedCatch)
+            decode(&eh_mod(&not_a_try, &[])),
+            Err(crate::types::DecodeError::OutsideBlock { found: "delegate", frame: "LegacyTry" })
         );
     }
 

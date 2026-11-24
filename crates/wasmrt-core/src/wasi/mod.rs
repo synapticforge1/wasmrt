@@ -505,14 +505,12 @@ pub fn link(module: &Module, ctx: &SharedCtx) -> Result<Imports, Trap> {
     add_to_linker(&mut linker, ctx);
     // A WASI module imports only functions; if it also imports a global or a memory, that
     // is the caller's to supply, and `Linker::resolve` would refuse. Keep the historical
-    // behaviour — skip the non-function imports — by resolving against a module view that
-    // has none. (`wasmrt wasi` runs preview-1 programs, which import functions only.)
-    let mut view = module.clone();
-    view.imports
-        .retain(|i| i.ty.kind() == crate::types::ExternKind::Func);
+    // behaviour — skip the non-function imports — by resolving the function imports alone, read in
+    // place (a deep copy of the whole module did this: ~0.33 ms and ~1 MB a run; efficiency review F3).
+    // (`wasmrt wasi` runs preview-1 programs, which import functions only.)
     let store = crate::interp::Store::new();
     linker
-        .resolve(&store, &view)
+        .resolve_imports(&store, module, module.imports.iter().filter(|i| i.ty.kind() == crate::types::ExternKind::Func))
         // Unreachable with a fallback installed — every function import resolves — but
         // mapped rather than unwrapped so a future change cannot turn into a panic.
         .map_err(|_| Trap::MissingImport)

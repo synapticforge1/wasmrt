@@ -1280,7 +1280,7 @@ fn module_new_errors_carry_the_byte_offset() {
     let mut module: *mut wasmrt_module = core::ptr::null_mut();
     let truncated = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x80];
     let e = wasmrt_module_new(engine, truncated.as_ptr(), truncated.len(), &raw mut module);
-    assert_eq!(msg_of_err(e), "decode failed at offset 10: unexpected end of input");
+    assert_eq!(msg_of_err(e), "decode failed at offset 10: unexpected end-of-file");
     wasmrt_error_delete(e); // each error is the caller's to free (Miri caught the leak)
     let invalid = wasm("(module (func (result i32) i64.const 1))");
     let e = wasmrt_module_new(engine, invalid.as_ptr(), invalid.len(), &raw mut module);

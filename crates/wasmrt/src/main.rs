@@ -659,10 +659,34 @@ fn pin_modules(rest: &[String]) -> ExitCode {
     let Some(db_path) = db else {
         return ExitCode::SUCCESS;
     };
-    if let Some(parent) = std::path::Path::new(&db_path).parent() {
-        let _ = std::fs::create_dir_all(parent);
+    // The DB's directory must exist: creating it made a mistyped `--db` path a new directory tree (wazmrt refuses too).
+    if let Some(parent) = std::path::Path::new(&db_path).parent().filter(|p| !p.as_os_str().is_empty()) {
+        if !parent.is_dir() {
+            eprintln!("wasmrt: pin DB directory {} does not exist", parent.display());
+            return ExitCode::FAILURE;
+        }
     }
-    let existing = std::fs::read_to_string(&db_path).unwrap_or_default();
+    // Held until this function returns: the read, the check and the write below are one step.
+    let _lock = match PinLock::acquire(&db_path) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("wasmrt: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // A temporary file a killed run left beside the DB (`<db>.wasmrt-tmp-<pid>`) is removed: under the lock no other
+    // run is writing one.
+    remove_stale_temps(&db_path);
+    // Only a MISSING DB starts empty: one that exists but cannot be read (a UTF-16 file, a permission error) is
+    // refused, not overwritten with just the new lines (review H2, 2026-11-24).
+    let existing = match std::fs::read_to_string(&db_path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            eprintln!("wasmrt: cannot read pin DB {db_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     // Parse what is there before appending: writing into a DB we cannot read would corrupt it
     // further, and the gate fails closed on a malformed DB.
     if !existing.is_empty() {
@@ -671,16 +695,30 @@ fn pin_modules(rest: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    let mut out = existing;
+    // A line already in the DB (the same digest and path) is not appended again — pinning twice changed nothing
+    // the gate reads, and only grew the file.
+    let present: std::collections::HashSet<&str> = existing.lines().map(str::trim_end).collect();
+    let new_lines: Vec<&str> = lines.lines().filter(|l| !present.contains(l.trim_end())).collect();
+    let already = lines.lines().count() - new_lines.len();
+    let mut out = existing.clone();
     if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
     }
-    out.push_str(&lines);
-    if let Err(e) = std::fs::write(&db_path, out) {
-        eprintln!("wasmrt: cannot write {db_path}: {e}");
-        return ExitCode::FAILURE;
+    for l in &new_lines {
+        out.push_str(l);
+        out.push('\n');
     }
-    println!("pinned {n} module(s) into {db_path}");
+    if !new_lines.is_empty() {
+        if let Err(e) = write_replacing(&db_path, out.as_bytes()) {
+            eprintln!("wasmrt: cannot write {db_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    if already == 0 {
+        println!("pinned {n} module(s) into {db_path}");
+    } else {
+        println!("pinned {n} module(s) into {db_path} ({already} already present)");
+    }
     ExitCode::SUCCESS
 }
 
@@ -983,17 +1021,23 @@ fn run_wasi_argv(rest: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    run_wasi_loaded(&loaded, &flags, &guest_argv)
+    run_wasi_loaded(&loaded, &flags, &guest_argv, None)
 }
 
-/// Run a loaded WASI command module under `flags`.
-fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String]) -> ExitCode {
+/// Run a loaded WASI command module under `flags`. `decoded` is the module when the caller has already
+/// decoded it (the bare path, to choose a mode): decoding it again cost ~1 ms and a second copy of its
+/// instructions (efficiency review F4, 2026-11-24).
+fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String], decoded: Option<module::Module>) -> ExitCode {
     let path = loaded.path.as_str();
-    // 🔒 Authorization BEFORE validation, and before anything is decoded (`interop.md` §3.2).
+    // 🔒 Authorization BEFORE validation, and before anything is decoded here (`interop.md` §3.2).
     if !verify_gate(loaded, &flags.verify) {
         return ExitCode::FAILURE;
     }
-    let md = match module::decode(&loaded.bytes) {
+    let decoded = match decoded {
+        Some(m) => Ok(m),
+        None => module::decode(&loaded.bytes),
+    };
+    let md = match decoded {
         Ok(m) => m,
         Err(e) => {
             // The same report as `run` and the bare path (review P1, 2026-11-23: this one had no offset).
@@ -1057,17 +1101,23 @@ fn run_wasi_loaded(loaded: &Loaded, flags: &HostFlags, guest_argv: &[String]) ->
     let r = inst.invoke("_start", &[]);
     // `proc_exit` unwinds as a host trap, so consult the recorded code before treating the
     // error as a failure — an exit is a normal way for a WASI program to finish.
-    if let Some(code) = shared.borrow().exit_code() {
-        return ExitCode::from(u8::try_from(code & 0xff).unwrap_or(1));
-    }
-    match r {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("wasmrt: {path}: trap: {e}");
-            print_backtrace(&inst);
-            ExitCode::FAILURE
+    let exit = shared.borrow().exit_code();
+    let code = if let Some(code) = exit {
+        ExitCode::from(u8::try_from(code & 0xff).unwrap_or(1))
+    } else {
+        match r {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("wasmrt: {path}: trap: {e}");
+                print_backtrace(&inst);
+                ExitCode::FAILURE
+            }
         }
-    }
+    };
+    // The process ends next: freeing the instance's memory piece by piece cost ~0.4 ms for nothing (efficiency
+    // review F5). Its output is already written (stdout is flushed when `main` returns; files are unbuffered).
+    core::mem::forget(inst);
+    code
 }
 
 /// The **bare-path run modes** — `wasmrt <module> …`, the sibling runtime's shape
@@ -1179,15 +1229,16 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
             .any(|e| e.name == n && matches!(e.ty, Extern::Func(_)))
     };
     let has_start = exports_func("_start");
+    let first_is_export = tail.first().is_some_and(|f| exports_func(f));
 
     match tail.first() {
         // A word follows the path: an export name, or — when the module is a WASI command — the
         // guest's own argv (`prog.wasm install --yes`).
         // An export name only when the user did NOT mark the rest as the guest's.
-        Some(first) if !guest_argv_forced && exports_func(first) => {
-            call_export(&loaded, &flags, first, &tail[1..])
+        Some(first) if !guest_argv_forced && first_is_export => {
+            call_export(&loaded, &flags, first, &tail[1..], Some(md))
         }
-        Some(_) if has_start => run_wasi_loaded(&loaded, &flags, &tail),
+        Some(_) if has_start => run_wasi_loaded(&loaded, &flags, &tail, Some(md)),
         // `--` was given, so these are guest arguments — but there is no `_start` to give them to.
         Some(_) if guest_argv_forced => {
             eprintln!(
@@ -1201,7 +1252,7 @@ fn run_bare_path(path: &str, rest: &[String], lead: HostFlags) -> ExitCode {
             );
             ExitCode::FAILURE
         }
-        None if has_start => run_wasi_loaded(&loaded, &flags, &[]),
+        None if has_start => run_wasi_loaded(&loaded, &flags, &[], Some(md)),
         // Nothing to execute: inspect it, exactly as before, and do not gate.
         None => summarize_loaded(&loaded, &md, &flags),
     }
@@ -1343,7 +1394,13 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
         .and_then(|i| rest.get(i + 1));
     match out {
         Some(o) => {
-            if let Err(e) = std::fs::write(o, &bytes) {
+            // Never the input itself: `wat x.wat -o x.wat` replaced the source with the binary (review H3).
+            let same = std::fs::canonicalize(o).ok().is_some_and(|out| std::fs::canonicalize(path).ok() == Some(out));
+            if same {
+                eprintln!("wasmrt: refusing to write the output over the input {path}");
+                return ExitCode::FAILURE;
+            }
+            if let Err(e) = write_replacing(o, &bytes) {
                 eprintln!("wasmrt: cannot write {o}: {e}");
                 return ExitCode::FAILURE;
             }
@@ -1352,6 +1409,97 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
         None => println!("{path}: assembled {} bytes", bytes.len()),
     }
     ExitCode::SUCCESS
+}
+
+/// Write `bytes` to `path` whole or not at all: into a temporary file beside it, then renamed over it, so an
+/// interrupted or failed run leaves the old file intact (review H2 / H3, 2026-11-24).
+fn write_replacing(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    // A path that exists and is not a regular file — a device such as `NUL` or `/dev/null` — is written in place:
+    // renaming over it fails on Windows and would replace a device node on Unix (re-review N1, 2026-11-24).
+    // Only a regular file, or a path that does not exist yet, is replaced via a temporary file; `NUL` on Windows
+    // answers no metadata at all, so "not known to be a regular file or absent" is what writes in place.
+    let replaceable = match std::fs::metadata(path) {
+        Ok(m) => m.is_file(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+    };
+    if !replaceable {
+        return std::fs::write(path, bytes);
+    }
+    // A symlink is written THROUGH: its file is the one replaced, and the link stays (a rename over the link
+    // replaced the link itself). A read-only file is refused, on every OS — a rename on Unix ignores the file's own
+    // permission bits, where Windows refuses (re-review notes, 2026-11-24).
+    let real;
+    let path = if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        real = std::fs::canonicalize(path)?.to_string_lossy().into_owned();
+        real.as_str()
+    } else {
+        path
+    };
+    let old = std::fs::metadata(path).ok();
+    if old.as_ref().is_some_and(|m| m.permissions().readonly()) {
+        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the file is read-only"));
+    }
+    let tmp = format!("{path}.wasmrt-tmp-{}", std::process::id());
+    // Created NEW, so a file or link already at that name is never written through (security re-review note).
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+    let done = f.write_all(bytes).and_then(|()| f.sync_all());
+    drop(f);
+    // The replaced file keeps the old one's permissions (a rename would leave the new file's defaults).
+    let done = done.and_then(|()| match &old {
+        Some(m) => std::fs::set_permissions(&tmp, m.permissions()),
+        None => Ok(()),
+    });
+    let done = done.and_then(|()| std::fs::rename(&tmp, path));
+    if done.is_err() {
+        let _ = std::fs::remove_file(&tmp); // ours: this run created it
+    }
+    done
+}
+
+/// Remove temporary files a killed run left beside `path` (`<name>.wasmrt-tmp-<pid>`). Only under `PinLock`.
+fn remove_stale_temps(path: &str) {
+    let p = std::path::Path::new(path);
+    let (Some(name), dir) = (p.file_name().and_then(|n| n.to_str()), p.parent().filter(|d| !d.as_os_str().is_empty())) else {
+        return;
+    };
+    let prefix = format!("{name}.wasmrt-tmp-");
+    let dir = dir.unwrap_or(std::path::Path::new("."));
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            if e.file_name().to_str().is_some_and(|n| n.starts_with(&prefix)) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
+/// An exclusive lock on a pin DB for one read-modify-write: `<db>.lock`, created new (so two runs cannot both hold
+/// it) and removed when dropped. Concurrent `wasmrt pin` runs each read the DB, added their lines and wrote it, and
+/// one run's pins could vanish while every run exited 0 (re-review N3, 2026-11-24).
+struct PinLock(String);
+
+impl PinLock {
+    /// Wait up to ten seconds for the lock, then refuse rather than hang on a lock a crashed run left behind.
+    fn acquire(db: &str) -> Result<PinLock, String> {
+        let lock = format!("{db}.lock");
+        for _ in 0..500 {
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&lock) {
+                Ok(_) => return Ok(PinLock(lock)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                Err(e) => return Err(format!("cannot lock pin DB {db}: {e}")),
+            }
+        }
+        Err(format!("pin DB {db} is locked by another run (remove {lock} if no wasmrt is running)"))
+    }
+}
+
+impl Drop for PinLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 /// `wasmrt wast <file.wast | dir>...` — run spec scripts and report the pass profile.
@@ -1654,18 +1802,22 @@ fn run_export(rest: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    call_export(&loaded, &flags, func, &rest[2..])
+    call_export(&loaded, &flags, func, &rest[2..], None)
 }
 
-/// Call `func` on a loaded module. Shared by `wasmrt run` and the bare-path form.
-fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String]) -> ExitCode {
+/// Call `func` on a loaded module. Shared by `wasmrt run` and the bare-path form, which hands in the
+/// module it already decoded (`decoded`; efficiency review F4).
+fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String], decoded: Option<module::Module>) -> ExitCode {
     let path = loaded.path.as_str();
     // 🔒 Authorization first (`interop.md` §3.2).
     if !verify_gate(loaded, &flags.verify) {
         return ExitCode::FAILURE;
     }
-    let bytes = loaded.bytes.clone();
-    let module = match module::decode(&bytes) {
+    let decoded = match decoded {
+        Some(m) => Ok(m),
+        None => module::decode(&loaded.bytes),
+    };
+    let module = match decoded {
         Ok(m) => m,
         Err(e) => {
             eprintln!("wasmrt: {path}: decode failed{}: {e}", at_offset());
@@ -1725,7 +1877,7 @@ fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String]) 
             return ExitCode::FAILURE;
         }
     };
-    match inst.invoke_index(index, &args) {
+    let code = match inst.invoke_index(index, &args) {
         Ok(results) => {
             let printed: Vec<String> = results
                 .iter()
@@ -1740,7 +1892,10 @@ fn call_export(loaded: &Loaded, flags: &HostFlags, func: &str, args: &[String]) 
             print_backtrace(&inst);
             ExitCode::FAILURE
         }
-    }
+    };
+    // The process ends next: skip freeing the instance piece by piece (efficiency review F5).
+    core::mem::forget(inst);
+    code
 }
 
 fn parse_arg(s: &str, ty: ValType) -> Result<Value, ()> {

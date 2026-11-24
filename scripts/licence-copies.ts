@@ -8,7 +8,7 @@ import { join } from "node:path";
 import process from "node:process";
 
 export const CRATES = ["wasmrt-core", "wasmrt-capi", "wasmrt"];
-export const FILES = ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "third_party/LICENSES.md", "third_party/wabt/LICENSE"];
+export const FILES = ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "third_party/LICENSES.md", "third_party/wabt/LICENSE", "third_party/wasmparser/LICENSE-MIT"];
 
 /** The problems in `root` (empty when every crate holds an exact copy of every file). */
 export function problems(root: string): string[] {

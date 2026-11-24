@@ -536,35 +536,87 @@ pub enum DecodeError {
     UnexpectedEof,
     /// The leading 4 bytes were not the WebAssembly magic.
     BadMagic,
-    /// The binary declares a version wasmrt does not support.
-    UnsupportedVersion,
-    /// A LEB128-encoded integer did not fit in its target type (over-long or too-large).
-    LebOverflow,
-    /// A section declared an identifier outside the defined range.
-    InvalidSectionId,
+    /// The binary declares a version wasmrt does not support (the version read).
+    UnsupportedVersion(u32),
+    /// A LEB128-encoded integer did not fit its type: "invalid {ty}: integer representation too long"
+    /// when the continuation bit runs past the last allowed byte, else "integer too large".
+    LebOverflow {
+        /// wasmparser's name for the encoding: `var_u32`, `var_u64`, `var_i32`, `var_i64`, `var_s33`.
+        ty: &'static str,
+        /// The continuation bit was set on the last allowed byte.
+        too_long: bool,
+    },
+    /// A section id wasmrt does not know: "malformed section id" for a byte with the high bit set,
+    /// "malformed section id: {id}" for any other.
+    InvalidSectionId(u8),
     /// A function type did not begin with the `0x60` form byte.
     BadFuncType,
-    /// A type-section entry was not a valid composite type, or a GC sub type declared
-    /// more than one supertype.
-    BadType,
-    /// An import/export descriptor used an unknown kind byte.
-    UnknownExternKind,
+    /// A byte that starts no form of what was being read: "invalid leading byte (0x..) for {what}" —
+    /// a type entry ("type"), an import or export kind ("external kind"), a `try_table` clause ("catch").
+    InvalidLeadingByte {
+        /// The byte read.
+        byte: u8,
+        /// What it should have begun.
+        what: &'static str,
+    },
+    /// A rec group declared a sub type with more than one supertype (GC MVP allows one).
+    MultipleSupertypes,
+    /// A sub type named itself or a later type as its supertype.
+    SupertypeNotBefore,
+    /// A function, a function import or a tag named a type that is not a function type.
+    NotAFuncType(u32),
+    /// A function, a function import or a tag named a type index past the type section.
+    UnknownType(u32),
     /// A type/function/extern index referred outside the decoded space.
     IndexOutOfRange,
-    /// A single-byte flag (global mutability, limits flag) held a reserved value.
-    MalformedFlag,
+    /// An export named an item past its index space: "unknown {what} {index}: exported {what} index out of
+    /// bounds".
+    UnknownExported {
+        /// "function", "table", "memory", "global" or "tag".
+        what: &'static str,
+        /// The index named.
+        index: u32,
+    },
+    /// A flag or attribute byte held a value no form defines; carries wasmtime's words for the place
+    /// ("invalid memory limits flags", "malformed global flags", "invalid tag attributes", …).
+    MalformedFlag(&'static str),
     /// A memory's custom page size exponent (custom-page-sizes) cannot be a page size at all —
     /// `2^e` does not fit the 64-bit address space (`e >= 64`). Malformed, as wasm-tools has it;
     /// a representable size that is not 1 or 64 KiB is merely INVALID (the validator's call).
     InvalidPageSize,
-    /// A value-type byte was not one of the defined value types.
+    /// A value-type byte was not one of the defined value types: "invalid value type".
     BadValType,
+    /// A reference-type byte (a table's or element segment's type) was not one: "malformed reference type".
+    BadRefType,
+    /// A heap-type immediate (`ref.null`, `ref.test`, …) was not one: "invalid heap type".
+    BadHeapType,
     /// A name (import module/field, export, custom-section id) was not valid UTF-8.
     InvalidUtf8,
     /// The data-count section disagreed with the number of data segments.
     DataCountMismatch,
-    /// An instruction opcode wasmrt does not decode (or a raw internal-tag byte).
-    UnsupportedOpcode,
+    /// A nonzero data count with no data section.
+    DataCountWithoutData,
+    /// A byte that is no single-byte opcode: "illegal opcode: 0x..".
+    IllegalOpcode(u8),
+    /// A prefixed opcode's sub-opcode that names nothing: "unknown 0x.. subopcode: 0x..".
+    UnknownSubopcode {
+        /// The prefix byte (`0xfb`, `0xfc`, `0xfd`, `0xfe`).
+        prefix: u8,
+        /// The sub-opcode read.
+        code: u32,
+    },
+    /// A SIMD lane index past the lanes of its shape.
+    SimdIndexOutOfBounds,
+    /// A `br_on_cast` flags byte with a bit above the two defined: "invalid cast flags: {bits}".
+    InvalidCastFlags(u8),
+    /// `else`, `catch`, `catch_all` or `delegate` outside the block it belongs to: "`{found}` found outside
+    /// `{frame}` block".
+    OutsideBlock {
+        /// The instruction found.
+        found: &'static str,
+        /// The block it needs (wasmparser's name: `If`, `LegacyTry`).
+        frame: &'static str,
+    },
     /// A well-formed encoding from a proposal wasmrt does not implement (today: custom-descriptors'
     /// exact function import, `0x20`). A gap of OURS — scored as a skip, never as "malformed".
     UnimplementedProposal,
@@ -578,15 +630,26 @@ pub enum DecodeError {
     /// inside a section are never harmless — they mean the producer and the decoder disagree about
     /// where the section ends.
     SectionSizeMismatch,
+    /// A single-item section (start, data count) held more than its item: "unexpected content in the {name}
+    /// section".
+    SectionContent(&'static str),
+    /// The code section held bytes after its last entry.
+    TrailingBytes,
     /// The function and code sections declare different numbers of functions (§5.5.13). A
     /// structural disagreement between two sections, so it is *malformed*, not invalid.
     FuncCodeCountMismatch,
+    /// A function section with a nonzero count and no code section.
+    FunctionWithoutCode,
+    /// A code section with a nonzero count and no function section.
+    CodeWithoutFunction,
     /// A body uses `memory.init` or `data.drop` but the module has no data-count section. The
     /// count is what makes those instructions decodable without reading the data section, so its
     /// absence is a decode-stage failure (bulk-memory, §5.5.16).
     DataCountRequired,
-    /// An expression's bytes ran out before its terminating `end` (§5.4.9).
+    /// A function body's bytes ended between instructions with blocks still open (§5.4.9).
     MissingEnd,
+    /// A constant expression's first `end` closed an inner block, leaving the expression open.
+    ExprFramesRemain,
     /// A function's declared locals sum to more than 2^32−1, so the count cannot be represented.
     /// A *malformed* encoding, distinct from the validator's `TooManyLocals` resource ceiling:
     /// this says "these bytes cannot mean anything", that one says "we decline to allocate it".
@@ -607,37 +670,81 @@ pub enum DecodeError {
     /// say "larger than natural" is the right verdict at the wrong STAGE, which
     /// `align.wast` distinguishes: those two cases are `assert_malformed`, not `assert_invalid`.
     MalformedMemopFlags,
+    // ---- wasmtime's implementation limits (wasmparser 0.263 `limits.rs`; 🆕 3.0.0, owner 2026-11-23:
+    // "adopt wasmtime's implementation limits"). Each refusal uses wasmparser's words. ----
+    /// A count past one of the module-wide limits — functions, imports, exports, globals, tables,
+    /// memories, tags, types, element or data segments, or a function body's byte size:
+    /// "{what} count exceeds limit of {limit}".
+    LimitExceeded {
+        /// What was counted, as wasmparser names it ("functions", "function body size", …).
+        what: &'static str,
+        /// The limit.
+        limit: u32,
+    },
+    /// One vector longer than its limit — a type's params or results, a struct's fields, a rec
+    /// group's types, a `try_table`'s catches: "{what} size is out of bounds".
+    SizeOutOfBounds(&'static str),
+    /// The imports' and exports' summed type sizes reached 1,000,000 (wasmtime's effective type size; a
+    /// function or tag counts 2 + its params + results, a table, memory or global 1, the module itself 1).
+    TypeSizeTooLarge,
+    /// A data-count section above 100,000 segments.
+    DataCountTooLarge,
+    /// An element segment with more than 10,000,000 elements.
+    TooManyElements,
 }
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DecodeError::UnexpectedEof => "unexpected end of input",
+            DecodeError::LimitExceeded { what, limit } => return write!(f, "{what} count exceeds limit of {limit}"),
+            DecodeError::SizeOutOfBounds(what) => return write!(f, "{what} size is out of bounds"),
+            DecodeError::InvalidLeadingByte { byte, what } => return write!(f, "invalid leading byte (0x{byte:x}) for {what}"),
+            DecodeError::UnsupportedVersion(v) => return write!(f, "unknown binary version: {v:#x}"),
+            DecodeError::LebOverflow { ty, too_long: true } => return write!(f, "invalid {ty}: integer representation too long"),
+            DecodeError::LebOverflow { ty, too_long: false } => return write!(f, "invalid {ty}: integer too large"),
+            DecodeError::InvalidSectionId(id) if id & 0x80 != 0 => "malformed section id",
+            DecodeError::InvalidSectionId(id) => return write!(f, "malformed section id: {id}"),
+            DecodeError::UnknownExported { what, index } => return write!(f, "unknown {what} {index}: exported {what} index out of bounds"),
+            DecodeError::MalformedFlag(words) => words,
+            DecodeError::IllegalOpcode(b) => return write!(f, "illegal opcode: 0x{b:x}"),
+            DecodeError::UnknownSubopcode { prefix, code } => return write!(f, "unknown 0x{prefix:x} subopcode: 0x{code:x}"),
+            DecodeError::InvalidCastFlags(b) => return write!(f, "invalid cast flags: {b:08b}"),
+            DecodeError::SectionContent(name) => return write!(f, "unexpected content in the {name} section"),
+            DecodeError::OutsideBlock { found, frame } => return write!(f, "`{found}` found outside `{frame}` block"),
+            DecodeError::NotAFuncType(i) => return write!(f, "type index {i} is not a function type"),
+            DecodeError::UnknownType(i) => return write!(f, "unknown type {i}: type index out of bounds"),
+            DecodeError::MultipleSupertypes => "multiple supertypes",
+            DecodeError::SupertypeNotBefore => "supertypes must be defined before subtypes",
+            DecodeError::TypeSizeTooLarge => "effective type size exceeds the limit of 1000000",
+            DecodeError::DataCountTooLarge => "data count section specifies too many data segments",
+            DecodeError::TooManyElements => "number of elements is out of bounds",
+            DecodeError::UnexpectedEof => "unexpected end-of-file",
             DecodeError::BadMagic => "not a WebAssembly binary (bad magic)",
-            DecodeError::UnsupportedVersion => "unsupported binary format version",
-            DecodeError::LebOverflow => "malformed LEB128 (over-long or out of range)",
-            DecodeError::InvalidSectionId => "section id outside the defined range",
             DecodeError::BadFuncType => "function type missing the 0x60 form byte",
-            DecodeError::BadType => "invalid composite type entry",
-            DecodeError::UnknownExternKind => "unknown import/export kind byte",
             DecodeError::IndexOutOfRange => "index outside the decoded space",
-            DecodeError::MalformedFlag => "reserved value in a single-byte flag",
             DecodeError::InvalidPageSize => "invalid custom page size",
-            DecodeError::BadValType => "byte is not a defined value type",
-            DecodeError::InvalidUtf8 => "name is not valid UTF-8",
-            DecodeError::DataCountMismatch => "data count disagrees with data segments",
-            DecodeError::UnsupportedOpcode => "unsupported instruction opcode",
+            DecodeError::BadValType => "invalid value type",
+            DecodeError::BadRefType => "malformed reference type",
+            DecodeError::BadHeapType => "invalid heap type",
+            DecodeError::InvalidUtf8 => "malformed UTF-8 encoding",
+            DecodeError::DataCountMismatch => "data count and data section have inconsistent lengths",
+            DecodeError::DataCountWithoutData => "data count is non-zero but data section is absent",
+            DecodeError::SimdIndexOutOfBounds => "SIMD index out of bounds",
             DecodeError::UnimplementedProposal => "encoding from a proposal wasmrt does not implement",
-            DecodeError::SectionOrder => "section repeated or out of order",
-            DecodeError::SectionSizeMismatch => "section size mismatch",
+            DecodeError::SectionOrder => "section out of order",
+            DecodeError::SectionSizeMismatch => "section size mismatch: unexpected data at the end of the section",
+            DecodeError::TrailingBytes => "trailing bytes at end of section",
+            DecodeError::FunctionWithoutCode => "function section has non-zero count but code section is absent",
+            DecodeError::CodeWithoutFunction => "function section is absent but code section has non-zero count",
             DecodeError::FuncCodeCountMismatch => {
                 "function and code section have inconsistent lengths"
             }
             DecodeError::DataCountRequired => "data count section required",
-            DecodeError::TooManyLocals => "too many locals",
-            DecodeError::MissingEnd => "unexpected end of section or function (missing END)",
+            DecodeError::TooManyLocals => "too many locals: locals exceed maximum",
+            DecodeError::MissingEnd => "control frames remain at end of function body or expression",
+            DecodeError::ExprFramesRemain => "control frames remain at end of expression",
             DecodeError::MalformedMemopFlags => "malformed memop flags",
-            DecodeError::UnbalancedEnd => "END opcode outside a matching control structure",
+            DecodeError::UnbalancedEnd => "operators remaining after end of function body or expression",
         };
         f.write_str(s)
     }

@@ -46,7 +46,7 @@ fn a_truncated_module_is_reported_where_the_next_byte_was_needed() {
     let m = file("truncated.wasm", &[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x80]);
     let text = stderr_of(&[m.to_str().unwrap()]);
     assert!(
-        text.contains("decode failed at offset 10: unexpected end of input"),
+        text.contains("decode failed at offset 10: unexpected end-of-file"),
         "as wasmtime: `unexpected end-of-file (at offset 0xa)`; got:\n{text}"
     );
 }
@@ -57,5 +57,5 @@ fn a_truncated_module_is_reported_where_the_next_byte_was_needed() {
 fn the_wasi_path_reports_the_offset_too() {
     let m = file("truncated_wasi.wasm", &[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x80]);
     let text = stderr_of(&["wasi", m.to_str().unwrap()]);
-    assert!(text.contains("decode failed at offset 10: unexpected end of input"), "got:\n{text}");
+    assert!(text.contains("decode failed at offset 10: unexpected end-of-file"), "got:\n{text}");
 }

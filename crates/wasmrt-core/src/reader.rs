@@ -53,11 +53,15 @@ pub(crate) fn note_failure(r: &Reader, e: &DecodeError) {
         // end of the module for a disagreement between two sections' counts
         DecodeError::UnexpectedEof
         | DecodeError::SectionSizeMismatch
+        | DecodeError::SectionContent(_)
         | DecodeError::FuncCodeCountMismatch
-        | DecodeError::DataCountMismatch => r.abs_pos(),
+        | DecodeError::FunctionWithoutCode
+        | DecodeError::CodeWithoutFunction
+        | DecodeError::DataCountMismatch
+        | DecodeError::DataCountWithoutData => r.abs_pos(),
         DecodeError::InvalidUtf8 => r.abs_pos().saturating_sub(1),
         // the LEB byte that overflowed (`80 80 80 80 80 00` as a section size: offset 13, its 5th byte)
-        DecodeError::LebOverflow => r.abs_pos().saturating_sub(1),
+        DecodeError::LebOverflow { .. } => r.abs_pos().saturating_sub(1),
         _ => r.last_abs(),
     });
 }
@@ -184,12 +188,41 @@ impl<'a> Reader<'a> {
     pub fn read_vec_len(&mut self) -> DecodeResult<u32> {
         let n = self.read_var_u32()?;
         if n as usize > self.remaining() {
-            // Back to the count, so the failure is located at it (wasmtime: "… size is out of bounds"
-            // at the count's first byte; review P3, 2026-11-23). The reader is not used after an error.
-            self.pos = self.last;
+            // located at the END of this reader's input, where reading the items would run out. The
+            // reader is not used after an error. (wasmrt's own decoders use `read_count`, which reads
+            // the items first, so a malformed one is reported at itself — review F1, 2026-11-24.)
+            self.pos = self.bytes.len();
             return Err(DecodeError::UnexpectedEof);
         }
         Ok(n)
+    }
+
+    /// Read a vector's count for the decoders, in wasmtime's order: `check(count, count_offset)`
+    /// refuses a count past an implementation limit (3.0.0, I11: `module::limits`), and nothing else is
+    /// judged here. The items are then read one by one, so a malformed item is reported at itself and
+    /// a count past the bytes ends where they run out — as wasmtime reports both (review F1,
+    /// 2026-11-24: a count-past-the-bytes refusal made up front hid an earlier malformed item).
+    ///
+    /// 🔒 The count is UNTRUSTED: size any allocation from it with [`Reader::cap`], never directly.
+    pub(crate) fn read_count_with(
+        &mut self,
+        check: impl FnOnce(u32, usize) -> DecodeResult<()>,
+    ) -> DecodeResult<u32> {
+        let at = self.abs_pos();
+        let n = self.read_var_u32()?;
+        check(n, at)?;
+        Ok(n)
+    }
+
+    /// [`Reader::read_count_with`] with no limit to check.
+    pub(crate) fn read_count(&mut self) -> DecodeResult<u32> {
+        self.read_count_with(|_, _| Ok(()))
+    }
+
+    /// A capacity for `n` items read from here: at most the bytes left, since every item takes at
+    /// least one byte — so an untrusted count cannot drive an allocation past the input's size.
+    pub(crate) fn cap(&self, n: u32) -> usize {
+        (n as usize).min(self.remaining())
     }
 
     /// Read a fixed 32-bit little-endian integer (used for the format version).
@@ -210,7 +243,7 @@ impl<'a> Reader<'a> {
             if shift == 28 {
                 // 5th byte: only 4 value bits fit, and there must be no 6th byte.
                 if byte >> 4 != 0 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_u32", too_long: byte & 0x80 != 0 });
                 }
                 return Ok(result | ((byte as u32) << 28));
             }
@@ -233,7 +266,7 @@ impl<'a> Reader<'a> {
             if shift == 63 {
                 // 10th byte: only 1 value bit fits, and there must be no 11th byte.
                 if byte >> 1 != 0 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_u64", too_long: byte & 0x80 != 0 });
                 }
                 return Ok(result | (((byte as u64) & 0x01) << 63));
             }
@@ -256,11 +289,11 @@ impl<'a> Reader<'a> {
             if shift == 28 {
                 // 5th byte: bits 4..6 must sign-extend bit 3 (value bit 31), no 6th byte.
                 if byte & 0x80 != 0 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_i32", too_long: true });
                 }
                 let hi = byte & 0x78;
                 if hi != 0 && hi != 0x78 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_i32", too_long: false });
                 }
                 return Ok((result | (((byte & 0x7f) as u32) << 28)) as i32);
             }
@@ -286,11 +319,11 @@ impl<'a> Reader<'a> {
             if shift == 63 {
                 // 10th byte: only bit 63 fits; bits 1..6 must sign-extend it, no 11th byte.
                 if byte & 0x80 != 0 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_i64", too_long: true });
                 }
                 let v = byte & 0x7f;
                 if v != 0x00 && v != 0x7f {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_i64", too_long: false });
                 }
                 return Ok((result | (((byte as u64) & 0x01) << 63)) as i64);
             }
@@ -321,13 +354,14 @@ impl<'a> Reader<'a> {
             if shift == 28 {
                 // 5th byte: payload bit 4 (0x10) is value bit 32 = the sign; the higher
                 // payload bits (0x60) must sign-extend it, and there is no 6th byte.
+                // wasmparser words both faults of an s33 as "representation too long"
                 if byte & 0x80 != 0 {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true });
                 }
                 let sign = byte & 0x10;
                 let hi = byte & 0x60;
                 if (sign == 0 && hi != 0) || (sign != 0 && hi != 0x60) {
-                    return Err(DecodeError::LebOverflow);
+                    return Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true });
                 }
                 let mut r = result | (((byte & 0x1f) as u64) << 28);
                 if sign != 0 {
@@ -359,7 +393,8 @@ impl<'a> Reader<'a> {
                 break;
             }
             if n >= max_bytes {
-                return Err(DecodeError::LebOverflow);
+                let ty = if max_bytes > 5 { "var_u64" } else { "var_u32" };
+                return Err(DecodeError::LebOverflow { ty, too_long: true });
             }
         }
         Ok(())
@@ -414,9 +449,9 @@ mod tests {
         let mut pad = Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x00]); // 0, padded to 5 bytes
         assert_eq!(pad.read_var_u32().unwrap(), 0);
         let mut toolong = Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x00]); // 6 bytes
-        assert_eq!(toolong.read_var_u32(), Err(DecodeError::LebOverflow));
+        assert_eq!(toolong.read_var_u32(), Err(DecodeError::LebOverflow { ty: "var_u32", too_long: true }));
         let mut toobig = Reader::new(&[0xff, 0xff, 0xff, 0xff, 0x1f]); // 5th byte > 0x0f
-        assert_eq!(toobig.read_var_u32(), Err(DecodeError::LebOverflow));
+        assert_eq!(toobig.read_var_u32(), Err(DecodeError::LebOverflow { ty: "var_u32", too_long: false }));
     }
 
     #[test]
@@ -427,10 +462,10 @@ mod tests {
         assert_eq!(neg.read_var_i64().unwrap(), -1); // 10-byte -1
         let mut toolong =
             Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
-        assert_eq!(toolong.read_var_i64(), Err(DecodeError::LebOverflow)); // 11 bytes
+        assert_eq!(toolong.read_var_i64(), Err(DecodeError::LebOverflow { ty: "var_i64", too_long: true })); // 11 bytes
         let mut toobig =
             Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x40]);
-        assert_eq!(toobig.read_var_i64(), Err(DecodeError::LebOverflow)); // 10th byte not sign-consistent
+        assert_eq!(toobig.read_var_i64(), Err(DecodeError::LebOverflow { ty: "var_i64", too_long: false })); // 10th byte not sign-consistent
     }
 
     #[test]
@@ -443,7 +478,7 @@ mod tests {
         // 11th byte → over-long
         let mut toolong =
             Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
-        assert_eq!(toolong.read_var_u64(), Err(DecodeError::LebOverflow));
+        assert_eq!(toolong.read_var_u64(), Err(DecodeError::LebOverflow { ty: "var_u64", too_long: true }));
     }
 
     #[test]
@@ -455,10 +490,10 @@ mod tests {
         assert_eq!(Reader::new(&[0x08]).read_var_s33().unwrap(), 8);
         // 2^32 (0x80 0x80 0x80 0x80 0x10) is out of s33 range.
         let mut over = Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x10]);
-        assert_eq!(over.read_var_s33(), Err(DecodeError::LebOverflow));
+        assert_eq!(over.read_var_s33(), Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true }));
         // 6 bytes → over-long.
         let mut toolong = Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
-        assert_eq!(toolong.read_var_s33(), Err(DecodeError::LebOverflow));
+        assert_eq!(toolong.read_var_s33(), Err(DecodeError::LebOverflow { ty: "var_s33", too_long: true }));
     }
 
     #[test]
@@ -478,7 +513,7 @@ mod tests {
         r.skip_leb(5).unwrap();
         assert_eq!(r.read_byte().unwrap(), 0xAA);
         let mut over = Reader::new(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
-        assert_eq!(over.skip_leb(5), Err(DecodeError::LebOverflow));
+        assert_eq!(over.skip_leb(5), Err(DecodeError::LebOverflow { ty: "var_u32", too_long: true }));
     }
 
     #[test]

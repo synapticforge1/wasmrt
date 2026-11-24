@@ -243,8 +243,19 @@ impl Linker {
     /// if the definition is the wrong kind, or [`LinkError::UnsupportedImportKind`] for an
     /// imported table/tag.
     pub fn resolve(&self, store: &Store, md: &Module) -> Result<Imports, LinkError> {
+        self.resolve_imports(store, md, md.imports.iter())
+    }
+
+    /// [`Linker::resolve`] over a chosen sequence of `md`'s imports (`md` itself is read only for its types), so a
+    /// caller can resolve a subset without copying the module (efficiency review F3, 2026-11-24).
+    pub(crate) fn resolve_imports<'m>(
+        &self,
+        store: &Store,
+        md: &Module,
+        list: impl Iterator<Item = &'m crate::module::Import>,
+    ) -> Result<Imports, LinkError> {
         let mut imports = Imports::new();
-        for imp in &md.imports {
+        for imp in list {
             let kind = imp.ty.kind();
             let unknown = || LinkError::UnknownImport {
                 module: imp.module.clone(),

@@ -28,6 +28,18 @@ source file, as required by Section 4(b).
 
 Incorporated components (see third_party/LICENSES.md for the full ledger):
 
+  * bytecodealliance/wasm-tools wasmparser — implementation-limit values
+
+    Copyright 2017 Mozilla Foundation
+    Used under the MIT license, one of the three wasmparser offers
+    (third_party/wasmparser/LICENSE-MIT).
+
+    The limit values in crates/wasmrt-core/src/limits.rs (the counts, sizes
+    and depths wasmtime refuses past), and the error wording reported for
+    them, are wasmparser's, renamed and given wasmrt's types; the file
+    carries this attribution and a change note.
+    wasmparser ships no NOTICE file of its own.
+
   * WebAssembly/wabt — instruction-table data
 
     Copyright 2016 WebAssembly Community Group participants

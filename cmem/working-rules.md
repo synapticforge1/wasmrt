@@ -210,3 +210,10 @@ The rule in full: `../workspace/cmem/tooling-rules.md` rule 15. For wasmrt:
 - `best-practices-shared.md` line 114 (201 characters): the workspace's ★ rules, copied unchanged under
   their stamp (owner, 2026-11-19: keep the ★ copy as it is).
 - Every other live note holds the limits: `bun scripts/check-cmem.ts` reports only these.
+
+## Tool versions in documents (owner, 2026-11-23)
+
+- 🔒 "I do not think that we need to have version information in the documents for non dependent parts of the code."
+  Public documents and generated files (README, CHANGELOG, `tests/behaviour/MANIFEST.txt`) name a reference or build
+  tool the code does not depend on (wasmtime, wasm-tools) without its version. Pinned dependencies keep theirs
+  (binaryang's pin, the toolchain). Dated measurements in `cmem/` records still say what was measured with what.

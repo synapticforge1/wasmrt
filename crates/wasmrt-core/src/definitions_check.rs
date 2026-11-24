@@ -283,7 +283,7 @@ fn wasmrt_agrees_with_the_shared_definitions() {
             let mut body = vec![prefix];
             body.extend(leb(sub));
             body.extend([0u8; 40]); // zero immediates: lane 0, align 0, index 0; then `unreachable`s
-            let recognised = !matches!(decode_body(&body), Err(DecodeError::UnsupportedOpcode));
+            let recognised = !matches!(decode_body(&body), Err(DecodeError::UnknownSubopcode { .. }));
             let listed = in_d1(Some(prefix), sub);
             if recognised && !listed {
                 found.push(("membership", hex(&body[..body.len() - 40]), String::from("wasmrt decodes it; D1 has no such opcode")));
