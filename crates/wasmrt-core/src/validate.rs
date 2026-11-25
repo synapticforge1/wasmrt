@@ -30,7 +30,7 @@ use core::fmt;
 
 use crate::features::{op_feature, simd_sub_feature, Feature, Features};
 use crate::module::{Code, CompType, FuncType, Module, StorageType};
-use crate::opcode::{self, Atomic, HeapType, Imm, Instr, MemArg, Op, RefType, Simd};
+use crate::opcode::{self, HeapType, Imm, Instr, MemArg, Op, RefType};
 use crate::reader::Reader;
 use crate::types::{DecodeError, RefHeap, ValType};
 
@@ -2001,7 +2001,7 @@ impl<'a> FuncValidator<'a> {
                         return Err(ValidateError::ZeroByteExpected);
                     }
             if !self.features.multi_memory {
-                let at = self.body_offset.saturating_add(instr.imm_at);
+                let at = self.body_offset.saturating_add(instr.imm_at());
                 match &instr.imm {
                     Imm::MemIndex(m)
                         if matches!(instr.op, Op::MemorySize | Op::MemoryGrow)
@@ -2010,9 +2010,15 @@ impl<'a> FuncValidator<'a> {
                         note_offset(at);
                         return Err(ValidateError::ZeroByteExpected);
                     }
-                    Imm::Mem(MemArg { memory_flag: true, .. })
-                    | Imm::Simd(Simd { mem: MemArg { memory_flag: true, .. }, .. })
-                    | Imm::Atomic(Atomic { mem: MemArg { memory_flag: true, .. }, .. }) => {
+                    Imm::Mem(MemArg { memory_flag: true, .. }) => {
+                        note_offset(at);
+                        return Err(ValidateError::MemopReservedFlags);
+                    }
+                    Imm::Simd(s) if s.mem.memory_flag => {
+                        note_offset(at);
+                        return Err(ValidateError::MemopReservedFlags);
+                    }
+                    Imm::Atomic(a) if a.mem.memory_flag => {
                         note_offset(at);
                         return Err(ValidateError::MemopReservedFlags);
                     }
@@ -2858,7 +2864,7 @@ impl<'a> FuncValidator<'a> {
                     // A memory-touching SIMD op needs a memory to exist, its memarg index in
                     // range (multi-memory), and its alignment within the natural maximum.
                     let mi = s.mem.memory;
-                    if s.mem.alignment > opcode::simd_natural_align_log2(s.sub) {
+                    if u32::from(s.mem.alignment) > opcode::simd_natural_align_log2(s.sub) {
                         return Err(ValidateError::InvalidAlignment);
                     }
                     self.require_memory(mi)?;
@@ -2900,7 +2906,7 @@ impl<'a> FuncValidator<'a> {
                 }
                 // Every other atomic op touches memory and MUST be naturally aligned — the
                 // alignment is exact here, not a maximum as it is for scalar/SIMD access.
-                if a.mem.alignment != opcode::atomic_natural_align_log2(sub) {
+                if u32::from(a.mem.alignment) != opcode::atomic_natural_align_log2(sub) {
                     return Err(ValidateError::InvalidAlignment);
                 }
                 self.require_memory(a.mem.memory)?;
@@ -2986,9 +2992,10 @@ impl<'a> FuncValidator<'a> {
             // was once wrong on one of two copies (see its note), and a third copy would be a third
             // chance.
             Op::BrOnCast | Op::BrOnCastFail | Op::BrOnCastDescEq | Op::BrOnCastDescEqFail => {
-                let Imm::BrCast { label, src, dst } = instr.imm else {
+                let Imm::BrCast(bc) = &instr.imm else {
                     return Err(ValidateError::UnsupportedValidation);
                 };
+                let opcode::BrCast { label, src, dst } = **bc;
                 if matches!(instr.op, Op::BrOnCastDescEq | Op::BrOnCastDescEqFail) {
                     self.pop_expect(desc_operand_type(self.module, dst)?)?;
                 }
@@ -3147,7 +3154,7 @@ impl<'a> FuncValidator<'a> {
             _ => match &instr.imm {
                 Imm::Mem(ma) => {
                     // the alignment first, then the memory — wasmparser's order (`check_memarg`)
-                    if ma.alignment > opcode::natural_align_log2(instr.op) {
+                    if u32::from(ma.alignment) > opcode::natural_align_log2(instr.op) {
                         return Err(ValidateError::InvalidAlignment);
                     }
                     self.require_memory(ma.memory)?;

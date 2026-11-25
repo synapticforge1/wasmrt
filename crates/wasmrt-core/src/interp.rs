@@ -4118,9 +4118,10 @@ fn run(
                     pc += 1;
                 }
                 Op::BrOnCast => {
-                    let Imm::BrCast { label, dst, .. } = instr.imm else {
+                    let Imm::BrCast(ref bc) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
+                    let crate::opcode::BrCast { label, dst, .. } = **bc;
                     let v = *frame.vstack.last().ok_or(Trap::StackUnderflow)?;
                     pc = if ref_matches(ctx.module, ctx.code, store, ctx.inst, v, dst) {
                         frame.branch(label, store)?
@@ -4129,9 +4130,10 @@ fn run(
                     };
                 }
                 Op::BrOnCastFail => {
-                    let Imm::BrCast { label, dst, .. } = instr.imm else {
+                    let Imm::BrCast(ref bc) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
+                    let crate::opcode::BrCast { label, dst, .. } = **bc;
                     let v = *frame.vstack.last().ok_or(Trap::StackUnderflow)?;
                     pc = if ref_matches(ctx.module, ctx.code, store, ctx.inst, v, dst) {
                         pc + 1
@@ -4156,9 +4158,10 @@ fn run(
                     pc += 1;
                 }
                 Op::BrOnCastDescEq | Op::BrOnCastDescEqFail => {
-                    let Imm::BrCast { label, dst, .. } = instr.imm else {
+                    let Imm::BrCast(ref bc) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
+                    let crate::opcode::BrCast { label, dst, .. } = **bc;
                     let desc = frame.pop();
                     if desc == NULL_REF {
                         return Err(Trap::NullDescriptor);
@@ -4174,19 +4177,19 @@ fn run(
 
                 // --- SIMD (v128, 0xFD family) ---
                 Op::Simd => {
-                    let Imm::Simd(s) = instr.imm else {
+                    let Imm::Simd(ref s) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
-                    exec_simd(frame, store, ctx.maps, s)?;
+                    exec_simd(frame, store, ctx.maps, **s)?;
                     pc += 1;
                 }
 
                 // --- Threads / atomics (0xFE family) ---
                 Op::Atomic => {
-                    let Imm::Atomic(at) = instr.imm else {
+                    let Imm::Atomic(ref at) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
-                    exec_atomic(frame, store, ctx.maps, at)?;
+                    exec_atomic(frame, store, ctx.maps, **at)?;
                     pc += 1;
                 }
 

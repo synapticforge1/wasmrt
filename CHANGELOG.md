@@ -70,6 +70,21 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
   as a 16-byte value for the instance's life, even for segments already applied or dropped. An
   active segment's evaluated items are now freed once applied, and a declarative segment's are
   discarded. One passive segment of 5M functions: peak memory 104–105 → 28 MB.
+- ⚠️ **Breaking (Rust API): a decoded instruction is 32 bytes, half its old 64.** `Imm` is 24 bytes
+  (was 48): its large, rare payloads are boxed (a SIMD or atomic op, `br_table`'s labels,
+  `try_table`'s clauses, a cast branch, now `opcode::BrCast`), a typed `select`'s types are a boxed
+  slice, and `MemArg::alignment` is a `u8`. `Instr::imm_at` became a one-byte `imm_delta`, with an
+  `imm_at()` method for the offset, and `imm_len` a saturating `u8`; see Breaking Changes in the
+  README. At 40 bytes, a first attempt, the steady loop measured 4–8% slower than at 64, so the
+  position fields were narrowed to make it 32, a power of two again.
+
+  Measured on win-x64 against the build before:
+  - a 2M-instruction body peaks at 73 MB instead of 137 MB, and validates in 0.12–0.16 s instead of
+    0.17–0.20 s;
+  - 1M functions peak at 226 MB instead of 250–252 MB;
+  - the 48 KB module's cold start is 2.52–2.70 ms instead of 2.57–2.89 ms (ten rounds);
+  - the steady loop is unchanged (`sum(5e7)` 311–335 against 309–343 Mops/s), and so are a SIMD
+    loop and `fib(30)`.
 
 ### Fixed
 
