@@ -484,6 +484,7 @@ rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::clone::Clone for wasmrt_core::opcode::Catch
@@ -545,6 +546,7 @@ rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::cmp::Eq for wasmrt_core::opcode::Catch
@@ -608,6 +610,7 @@ rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::cmp::PartialEq for wasmrt_core::opcode::Catch
@@ -697,6 +700,7 @@ rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::fmt::Debug for wasmrt_core::opcode::Catch
@@ -761,6 +765,7 @@ rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::module::StorageType
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::Catch
 rust:wasmrt-core	impl core::marker::Copy for wasmrt_core::opcode::CatchKind
@@ -818,6 +823,7 @@ rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::Freeze for wasmrt_core::opcode::Catch
@@ -888,6 +894,7 @@ rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::Send for wasmrt_core::opcode::Catch
@@ -956,6 +963,7 @@ rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module:
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::StructuralPartialEq for wasmrt_core::opcode::Catch
@@ -1019,6 +1027,7 @@ rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::Sync for wasmrt_core::opcode::Catch
@@ -1094,6 +1103,7 @@ rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::TableType
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::Unpin for wasmrt_core::opcode::Catch
@@ -1169,6 +1179,7 @@ rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::TableTy
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::marker::UnsafeUnpin for wasmrt_core::opcode::Catch
@@ -1239,6 +1250,7 @@ rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::m
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::panic::unwind_safe::RefUnwindSafe for wasmrt_core::opcode::Catch
@@ -1309,6 +1321,7 @@ rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::modu
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::module::TypeLinks
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::Atomic
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::BlockType
+rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::BrCast
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::BrTable
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	impl core::panic::unwind_safe::UnwindSafe for wasmrt_core::opcode::Catch
@@ -1363,6 +1376,7 @@ rust:wasmrt-core	impl wasmrt_core::module::MemoryType
 rust:wasmrt-core	impl wasmrt_core::module::Module
 rust:wasmrt-core	impl wasmrt_core::module::Parsed<'_>
 rust:wasmrt-core	impl wasmrt_core::module::StorageType
+rust:wasmrt-core	impl wasmrt_core::opcode::Instr
 rust:wasmrt-core	impl wasmrt_core::opcode::Op
 rust:wasmrt-core	impl wasmrt_core::pin::Db
 rust:wasmrt-core	impl wasmrt_core::rng::ChaCha20Rng
@@ -1777,6 +1791,9 @@ rust:wasmrt-core	pub fn wasmrt_core::opcode::Atomic::fmt(&self, &mut core::fmt::
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BlockType::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BlockType::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BlockType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+rust:wasmrt-core	pub fn wasmrt_core::opcode::BrCast::clone(&self) -> Self
+rust:wasmrt-core	pub fn wasmrt_core::opcode::BrCast::eq(&self, &Self) -> bool
+rust:wasmrt-core	pub fn wasmrt_core::opcode::BrCast::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BrTable::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BrTable::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::opcode::BrTable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1798,6 +1815,7 @@ rust:wasmrt-core	pub fn wasmrt_core::opcode::Imm::fmt(&self, &mut core::fmt::For
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Instr::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Instr::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::opcode::Instr::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+rust:wasmrt-core	pub fn wasmrt_core::opcode::Instr::imm_at(&self) -> u32
 rust:wasmrt-core	pub fn wasmrt_core::opcode::MemArg::clone(&self) -> Self
 rust:wasmrt-core	pub fn wasmrt_core::opcode::MemArg::eq(&self, &Self) -> bool
 rust:wasmrt-core	pub fn wasmrt_core::opcode::MemArg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2048,6 +2066,7 @@ rust:wasmrt-core	pub struct wasmrt_core::module::Section
 rust:wasmrt-core	pub struct wasmrt_core::module::TableType
 rust:wasmrt-core	pub struct wasmrt_core::module::TypeLinks
 rust:wasmrt-core	pub struct wasmrt_core::opcode::Atomic
+rust:wasmrt-core	pub struct wasmrt_core::opcode::BrCast
 rust:wasmrt-core	pub struct wasmrt_core::opcode::BrTable
 rust:wasmrt-core	pub struct wasmrt_core::opcode::CallIndirect
 rust:wasmrt-core	pub struct wasmrt_core::opcode::Catch
@@ -2284,6 +2303,9 @@ rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::ExactRef::nullable: bool
 rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::ExactRef::type_index: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::TypeIndex(u32)
 rust:wasmrt-core	pub wasmrt_core::opcode::BlockType::Value(wasmrt_core::types::ValType)
+rust:wasmrt-core	pub wasmrt_core::opcode::BrCast::dst: wasmrt_core::opcode::RefType
+rust:wasmrt-core	pub wasmrt_core::opcode::BrCast::label: u32
+rust:wasmrt-core	pub wasmrt_core::opcode::BrCast::src: wasmrt_core::opcode::RefType
 rust:wasmrt-core	pub wasmrt_core::opcode::BrTable::default: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::BrTable::labels: alloc::vec::Vec<u32>
 rust:wasmrt-core	pub wasmrt_core::opcode::CallIndirect::overlong: bool
@@ -2311,13 +2333,10 @@ rust:wasmrt-core	pub wasmrt_core::opcode::HeapType::NoExtern
 rust:wasmrt-core	pub wasmrt_core::opcode::HeapType::NoFunc
 rust:wasmrt-core	pub wasmrt_core::opcode::HeapType::None
 rust:wasmrt-core	pub wasmrt_core::opcode::HeapType::Struct
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Atomic(wasmrt_core::opcode::Atomic)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Atomic(alloc::boxed::Box<wasmrt_core::opcode::Atomic>)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BlockType(wasmrt_core::opcode::BlockType)
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrCast
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrCast::dst: wasmrt_core::opcode::RefType
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrCast::label: u32
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrCast::src: wasmrt_core::opcode::RefType
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrTable(wasmrt_core::opcode::BrTable)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrCast(alloc::boxed::Box<wasmrt_core::opcode::BrCast>)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::BrTable(alloc::boxed::Box<wasmrt_core::opcode::BrTable>)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::CallIndirect(wasmrt_core::opcode::CallIndirect)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Data(u32)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Elem(u32)
@@ -2354,8 +2373,8 @@ rust:wasmrt-core	pub wasmrt_core::opcode::Imm::MemReserved(u8)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::None
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::RefCast(wasmrt_core::opcode::RefType)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::RefType(wasmrt_core::opcode::HeapType)
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::SelectTypes(alloc::vec::Vec<wasmrt_core::opcode::BlockType>)
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Simd(wasmrt_core::opcode::Simd)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::SelectTypes(alloc::boxed::Box<[wasmrt_core::opcode::BlockType]>)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Simd(alloc::boxed::Box<wasmrt_core::opcode::Simd>)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Table(u32)
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TableCopy
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TableCopy::dst: u32
@@ -2364,13 +2383,13 @@ rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TableInit
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TableInit::elem: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TableInit::table: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::Imm::Tag(u32)
-rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TryTable(wasmrt_core::opcode::TryTable)
+rust:wasmrt-core	pub wasmrt_core::opcode::Imm::TryTable(alloc::boxed::Box<wasmrt_core::opcode::TryTable>)
 rust:wasmrt-core	pub wasmrt_core::opcode::Instr::imm: wasmrt_core::opcode::Imm
-rust:wasmrt-core	pub wasmrt_core::opcode::Instr::imm_at: u32
-rust:wasmrt-core	pub wasmrt_core::opcode::Instr::imm_len: u32
+rust:wasmrt-core	pub wasmrt_core::opcode::Instr::imm_delta: u8
+rust:wasmrt-core	pub wasmrt_core::opcode::Instr::imm_len: u8
 rust:wasmrt-core	pub wasmrt_core::opcode::Instr::offset: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::Instr::op: wasmrt_core::opcode::Op
-rust:wasmrt-core	pub wasmrt_core::opcode::MemArg::alignment: u32
+rust:wasmrt-core	pub wasmrt_core::opcode::MemArg::alignment: u8
 rust:wasmrt-core	pub wasmrt_core::opcode::MemArg::memory: u32
 rust:wasmrt-core	pub wasmrt_core::opcode::MemArg::memory_flag: bool
 rust:wasmrt-core	pub wasmrt_core::opcode::MemArg::offset: u64
