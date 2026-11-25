@@ -9,8 +9,13 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 - **W5 — the owner's calls (2026-11-25: "fix items 1"), in progress:** ✅ F2 opt-level "s" (`e4ca7db`); ✅ offsets
   and words (`a0e24ed`: offset differences 234 → 56, words 9 → 2, the rest explained in the CHANGELOG); ✅ efficiency
   items 5 (function types looked up once; it also fixed validation quadratic in imports × calls) and 6 (element
-  segments hold no copy of their items). Left: item 9 (lazy per-function decode) and item 7 (a smaller `Instr`,
-  public API, 4.0.0).
+  segments hold no copy of their items) (`a7e7d48`, its `no_std` fix `c0771fd`); ✅ item 7, a 32-byte `Instr` (was
+  64; public API, the next release is MAJOR: `6373cb9`, surface `c8b70ee`). Left: **item 9, lazy per-function
+  decode — KEPT** (owner, 2026-11-25: "keep item 9. We will need to test the issue more in 9 it seems, but we will
+  do that another day"). What is measured so far (`review-issues.md` W5): on the largest real module in reach
+  (wasmtk `1_fib-rs-test.wasm`, ~22,600 instructions, peak ~6 MB) the IR is now ~0.7 MB (32 B an instruction) plus
+  ~0.18 MB of control-flow tables, so lazy decode saves at most ~15%; it costs a second decode of every called
+  function and a public change to `Code.ir`. Next: test it further — larger modules, and how much of a module runs.
 
 ## To relay — wasmrt cannot write there
 
