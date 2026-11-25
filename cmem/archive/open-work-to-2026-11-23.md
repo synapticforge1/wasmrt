@@ -183,3 +183,6 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
   COMPLETE (R1, L1 and notes fixed, re-reviewed to empty, full suite on both platforms), the notes merged; open
   until CI has published and the release is read back as a user (`release.md`).
   ✅ CLOSED 2026-11-25: 3.0.0 released (CI run 45681894710; crates.io 3.0.0 ×3; read back as a user) — release.md.
+- **W3 — split `interop.md`** (187 KB, the one file over the memory guide's limits). Co-owned with wazmrt
+  (owner, 2026-11-20), byte-identical in both: one split, agreed through "Coordinate", made in both copies.
+  ✅ CLOSED 2026-11-25 on wasmrt's side (owner: "perform the work on W3. wazmrt will follow suit"): split into 12 files, each section verbatim (rebuilt byte-identical by script), each under 25 KB; the mirror is R6.

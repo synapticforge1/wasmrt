@@ -27,7 +27,8 @@ Updated: 2026-11-25, after the 3.0.0 release (owner: "release 3.0.0")
 1. The owner's open calls: F2 (opt-level speed vs size), the remaining efficiency items; the 234 offset differences
    left (end-of-file offsets, validation refusals outside a body without an offset or wasmtime's words)
 2. W6: the C ABI linker has the store's old re-entry shape (open-work.md)
-3. `interop.md` (187 KB; co-owned with wazmrt): agree one split; the §3.7 limits rows after wazmrt answers C50
+3. `interop.md`: SPLIT 2026-11-25 into 12 files (each section verbatim, each under 25 KB); ⏳ wazmrt mirrors it
+   (R6); the §3.7 limits rows after wazmrt answers C50
 
 ## Waiting on owner
 - the workspace repo's push; the calls in Next 1

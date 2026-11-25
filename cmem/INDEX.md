@@ -9,7 +9,8 @@ Read STATE.md first. Open another file only when the task matches its line.
 - [architecture.md](architecture.md): when working in an unfamiliar part of the engine
 - [testing.md](testing.md): before running or adding tests or gates
 - [security-model.md](security-model.md): when touching WASI, the pin gate or the ceilings
-- [interop.md](interop.md): only to "coordinate" with wazmrt (a mirror of wazmrt's copy)
+- [interop.md](interop.md): only to "coordinate" with wazmrt (a mirror of wazmrt's copy); it lists its 11 parts
+  (`interop-*.md`), each section by number
 - [shared-definitions.md](shared-definitions.md): when touching binaryang's D1/D2/D3 or `tables.rs`
 - [loaders.md](loaders.md): when changing what the loaders call (`wasmrt.h`)
 - [release.md](release.md): only when releasing; every release, newest first

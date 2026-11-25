@@ -17,11 +17,12 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
   `0x40` flag is refused; reference-types off: an overlong `return_call_indirect` index is accepted); the `wasm3`
   preset keeps following binaryang (no threads, contract v32's rule); `atomic.fence` with a nonzero byte stays
   refused until shared-everything-threads is in scope.
-- **W3 — split `interop.md`** (187 KB, the one file over the memory guide's limits). Co-owned with wazmrt
-  (owner, 2026-11-20), byte-identical in both: one split, agreed through "Coordinate", made in both copies.
 
 ## To relay — wasmrt cannot write there
 
+- **R6 — wazmrt: mirror the `interop.md` split** (owner, 2026-11-25: "wazmrt will follow suit"). wasmrt's copy is
+  now `interop.md` + 11 `interop-*.md` parts, every section moved verbatim (the 12 files rebuild the old file byte for
+  byte); the CONTRACT VERSION stays 41 (no row changed). The mirror is complete when wazmrt's 12 files `cmp` equal.
 - **R1 — binaryang:** wasmrt and binaryang 2.2.0 agree on all 6,860 judgements; naming differences remain
   in D1: `select.t` (0x1c) and the `null` forms of `ref.test` / `ref.cast` / `ref.cast_desc_eq`.
 - **R2 — wasmtk:** about ten generated `tests/wasi/wasm_wasi_bundle/**/*.wat` modules `throw 0` with no tag
