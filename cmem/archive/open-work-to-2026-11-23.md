@@ -171,3 +171,15 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
   >   ladder, rsxtk on wasmtime vs wasmrt, the cdylib size gap, the rlib never measured, and whether to pin a
   >   dated nightly locally (the floating `nightly` moves the sizes with no source change). Records:
   >   [vision.md](vision.md), `bench/README.md`, `CHANGELOG.md` [1.0.0] "Size and speed".
+
+## Closed after 2026-11-23
+
+- **W1 — the 3.0.0 release review**, then the release (owner's word). Committed and pushed since 2.0.2
+  (`e54754c`): I11 (wasmtime's implementation limits, 🔒 owner 2026-11-24: "accept the measured limits that keep
+  the program as robust as needed and as small as possible"), I12–I14 (decode refusals in wasmtime's words and
+  offsets), the efficiency review (calls 3.1×, a large module's memory a third to two thirds lower), the CLI's safe writes and `pin`'s OS lock,
+  the gnu toolchains and MSRV 1.100, the one-pass load (wasmtime's structural difference, closed), validation
+  refusals in wasmtime's words, the C ABI store guard. 2026-11-25: the release review over the whole range is
+  COMPLETE (R1, L1 and notes fixed, re-reviewed to empty, full suite on both platforms), the notes merged; open
+  until CI has published and the release is read back as a user (`release.md`).
+  ✅ CLOSED 2026-11-25: 3.0.0 released (CI run 45681894710; crates.io 3.0.0 ×3; read back as a user) — release.md.

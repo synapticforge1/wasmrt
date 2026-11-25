@@ -58,6 +58,13 @@ Other platforms: not yet tested.
   sentences and limits, the one-pass load beside the kept two-pass API, the CLI's safe writes. Speed (bench, three
   A/B rounds): cold start 3.2–3.9 ms (4.1–4.4), steady 192–223 Mops/s (166–181), toy cold start within noise.
   Both binaries import only Windows-provided DLLs; the CLI runs from an empty folder on a system-only `PATH`.
+- **The run** (after the bump `6f18955`, pushed by `release.ts` after `gate --release` 26 / 26): workflow run
+  `45681894710`, all four jobs success (checks, tag, release, publish). Tag `v3.0.0` on `6f18955` (annotated,
+  read back with `ls-remote`); the Release page `v3.0.0` by `github-actions[bot]`, titled from the CHANGELOG
+  section; crates.io 3.0.0 for `wasmrt-core`, `wasmrt-capi` and `wasmrt`, none yanked (read back 2026-11-25).
+- **As a user (U10):** `cargo install wasmrt --version 3.0.0 --locked` into a scratch folder: `wasmrt --version`
+  → `wasmrt 3.0.0 (abi 1)`; `wasmrt wat` then `wasmrt run add.wasm add 2 40` → `42`. Released surface recorded
+  (`e79ed16`).
 
 ### 2.0.2 — 2026-11-19 — licence texts in every crate; the first release under the H37 review
 
