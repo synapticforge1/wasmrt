@@ -293,7 +293,9 @@ bool   wasmrt_functype_result(const wasmrt_functype_t *, size_t i, wasmrt_valkin
  * callbacks is refused -- an error "the store is in use", NULL, false or 0, as each function
  * reports misuse, so a handle check answers false for a handle that is valid -- and
  * wasmrt_store_delete leaves it as it is. Reach the guest's memory through `caller`. Another
- * store may be called.
+ * store may be called. A linker may be used -- even the one the instance was made from, from
+ * its start function: defining into it, redefining, deleting it. The instance keeps what it
+ * linked.
  */
 typedef wasmrt_trap_t *(*wasmrt_func_callback_t)(
     void *env, wasmrt_caller_t *caller,

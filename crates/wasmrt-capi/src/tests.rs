@@ -454,6 +454,107 @@ unsafe extern "C" fn reenter(
     core::ptr::null_mut()
 }
 
+/// What `use_linker` is handed: the linker its function was defined in, and how many times it ran.
+struct LinkerUse {
+    linker: *mut wasmrt_linker,
+    calls: u32,
+    defined_global: bool,
+    redefined: bool,
+}
+
+#[allow(unsafe_code, reason = "a C callback declaration; the ABI requires it")]
+unsafe extern "C" fn nothing(
+    _env: *mut c_void,
+    _caller: *mut c_void,
+    _args: *const wasmrt_val_t,
+    _nargs: usize,
+    _results: *mut wasmrt_val_t,
+    _nresults: usize,
+) -> *mut wasmrt_trap {
+    core::ptr::null_mut()
+}
+
+#[allow(unsafe_code, reason = "a C callback declaration; the ABI requires it")]
+unsafe extern "C" fn use_linker(
+    env: *mut c_void,
+    _caller: *mut c_void,
+    _args: *const wasmrt_val_t,
+    _nargs: usize,
+    _results: *mut wasmrt_val_t,
+    _nresults: usize,
+) -> *mut wasmrt_trap {
+    #[allow(unsafe_code, reason = "the callback contract, exercised as C would")]
+    // SAFETY: `env` is the test's live `LinkerUse`; its linker is live until this callback deletes it.
+    unsafe {
+        let r = &mut *env.cast::<LinkerUse>();
+        r.calls += 1;
+        if r.calls == 1 {
+            // the linker `wasmrt_linker_instantiate` was given, from inside the start function it is running
+            let (m, g, f) = (cs("env"), cs("g"), cs("use"));
+            r.defined_global = wasmrt_linker_define_global(r.linker, m.as_ptr(), g.as_ptr(), i32v(7)).is_null();
+            // redefine the very function that is running: the instance holds its own copy
+            let ty = wasmrt_functype_new(core::ptr::null(), 0, core::ptr::null(), 0);
+            r.redefined =
+                wasmrt_linker_define_func(r.linker, m.as_ptr(), f.as_ptr(), ty, Some(nothing), core::ptr::null_mut(), None)
+                    .is_null();
+            wasmrt_functype_delete(ty);
+            // …and delete it: the instance keeps what it linked
+            wasmrt_linker_delete(r.linker);
+            r.linker = core::ptr::null_mut();
+        }
+    }
+    core::ptr::null_mut()
+}
+
+/// W6 (2026-11-25): a host callback may use — and even redefine into, or delete — the LINKER that
+/// `wasmrt_linker_instantiate` was given, from inside the start function that call runs. The linker is borrowed only
+/// to resolve the imports, and that borrow ends before any guest code runs; the instance owns its copies of what it
+/// linked. Miri runs this test (`scripts/miri-gate.ts`): it is the proof that no second live `&mut` is made.
+#[test]
+fn a_start_function_callback_may_use_the_linker_being_instantiated_from() {
+    let engine = wasmrt_engine_new();
+    let store = wasmrt_store_new(engine);
+    let linker = wasmrt_linker_new(engine);
+    let ty = wasmrt_functype_new(core::ptr::null(), 0, core::ptr::null(), 0);
+    let (m, n) = (cs("env"), cs("use"));
+    let rp: *mut LinkerUse = Box::into_raw(Box::new(LinkerUse { linker, calls: 0, defined_global: false, redefined: false }));
+    assert!(wasmrt_linker_define_func(linker, m.as_ptr(), n.as_ptr(), ty, Some(use_linker), rp.cast(), None).is_null());
+    wasmrt_functype_delete(ty);
+
+    let bytes = wasm(
+        r#"(module
+            (import "env" "use" (func $u))
+            (func $s (call $u))
+            (start $s)
+            (func (export "go") (call $u)))"#,
+    );
+    let mut module: *mut wasmrt_module = core::ptr::null_mut();
+    assert!(wasmrt_module_new(engine, bytes.as_ptr(), bytes.len(), &raw mut module).is_null());
+    let mut inst = wasmrt_instance_t { id: 0 };
+    let mut trap: *mut wasmrt_trap = core::ptr::null_mut();
+    let e = wasmrt_linker_instantiate(linker, store, module, &raw mut inst, &raw mut trap);
+    assert!(e.is_null(), "{}", msg_of_err(e));
+    assert!(trap.is_null(), "{}", msg_of_trap(trap));
+
+    // the instance still calls the function it linked, though the linker that held it is gone
+    let gn = cs("go");
+    let mut go = wasmrt_func_t { id: 0 };
+    assert!(wasmrt_instance_get_func(store, inst, gn.as_ptr(), &raw mut go));
+    let e = wasmrt_func_call(store, go, core::ptr::null(), 0, core::ptr::null_mut(), 0, &raw mut trap);
+    assert!(e.is_null(), "{}", msg_of_err(e));
+
+    #[allow(unsafe_code, reason = "the test's own allocation, through its one pointer")]
+    // SAFETY: `rp` is the live box made above; every callback has returned. The linker's env holder (an `Rc` the
+    // instance shares) does not own it: it was defined with no finalizer.
+    let r = unsafe { Box::from_raw(rp) };
+    assert_eq!(r.calls, 2, "the start function's call, then go's");
+    assert!(r.defined_global && r.redefined && r.linker.is_null());
+
+    wasmrt_module_delete(module);
+    wasmrt_store_delete(store);
+    wasmrt_engine_delete(engine);
+}
+
 /// A host callback that calls back into its own store (through a pointer kept in its `env`) is refused —
 /// "the store is in use" — where it used to make a second live `&mut` to a store already in a call (undefined
 /// behaviour). Deleting the store from inside the callback is refused too. After the call the store works as

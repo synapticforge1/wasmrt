@@ -1252,9 +1252,9 @@ capi! {
         out: *mut wasmrt_instance_t,
         trap_out: *mut *mut wasmrt_trap,
     ) -> *mut wasmrt_error {
-        #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (l, m) = unsafe { (ffi::opt_mut(p), ffi::opt_ref(mp)) };
-        let (Some(l), Some(m)) = (l, m) else {
+        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
+        let m = unsafe { ffi::opt_ref(mp) };
+        let (false, Some(m)) = (p.is_null(), m) else {
             return err("wasmrt_linker_instantiate: a required argument was NULL");
         };
         let mut guard = match store_mut(sp.cast_const()) {
@@ -1262,9 +1262,20 @@ capi! {
             Err(e) => return err(format!("wasmrt_linker_instantiate: {e}")),
         };
         let s = &mut *guard;
-        let imports = match l.inner.resolve(&s.inner, &m.md) {
-            Ok(i) => i,
-            Err(e) => return err(link_error_text(&e)),
+        // 🔒 The linker is borrowed ONLY to resolve the imports, and the borrow ends with this block — BEFORE any guest
+        // code runs. The start function `instantiate` runs below may call a host callback that uses this same linker
+        // (defines into it, redefines, deletes it): sound because no `&mut` to it is live then, and the instance owns
+        // its copies of what it linked. Keep the linker out of everything after this block (W6, 2026-11-25; test
+        // `a_start_function_callback_may_use_the_linker_being_instantiated_from`, run under Miri).
+        let imports = {
+            #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
+            let Some(l) = (unsafe { ffi::opt_mut(p) }) else {
+                return err("wasmrt_linker_instantiate: a required argument was NULL");
+            };
+            match l.inner.resolve(&s.inner, &m.md) {
+                Ok(i) => i,
+                Err(e) => return err(link_error_text(&e)),
+            }
         };
         match s.inner.instantiate(m.md.clone(), imports) {
             Ok(id) => {

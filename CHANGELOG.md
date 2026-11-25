@@ -19,6 +19,14 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
+### Changed
+
+- **C ABI: using the linker from a host callback is now documented and tested as sound** — even the
+  linker an instance is being made from, from its start function (defining into it, redefining,
+  deleting it). `wasmrt_linker_instantiate` borrows the linker only to resolve the imports, and
+  that borrow ends before any guest code runs; a test run under Miri proves it. No behaviour
+  changed.
+
 ## [3.0.0] — 2026-11-25 — wasmtime's refusals in its words, one-pass load, faster and leaner
 
 Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)

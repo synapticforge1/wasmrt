@@ -186,3 +186,13 @@ the gitignored `review-issues.md`. On the local branch `review-2.0.2`, uncommitt
 - **W3 — split `interop.md`** (187 KB, the one file over the memory guide's limits). Co-owned with wazmrt
   (owner, 2026-11-20), byte-identical in both: one split, agreed through "Coordinate", made in both copies.
   ✅ CLOSED 2026-11-25 on wasmrt's side (owner: "perform the work on W3. wazmrt will follow suit"): split into 12 files, each section verbatim (rebuilt byte-identical by script), each under 25 KB; the mirror is R6.
+- **W6 — a C callback can call a linker function on a linker the outer code holds `&mut`** (2026-11-25 review
+  note, unproved): live only across `resolve` in `wasmrt_linker_instantiate` (a start function's callback). Same
+  shape as the store hole; a `RefCell` on the linker would close it the same way.
+  ✅ CLOSED 2026-11-25 (owner: "fix item W6"): not a hole. The linker is borrowed only for `resolve`, which runs no guest code; the start function runs after the borrow ends, and the instance owns its linked copies (Rc). PROVED by `a_start_function_callback_may_use_the_linker_being_instantiated_from` under Miri (a start-function callback defines into, redefines in and deletes that linker). Guarded: the borrow is confined to a block in `wasmrt_linker_instantiate`, with the reason; the header says a callback may use a linker.
+- (W1's decided note, moved here with W1:)
+  🔒 The five `--features` changes are DECIDED (owner, 2026-11-24: "I agree with the recommendations"): the three
+  verdict changes are approved as implemented (multi-memory off: `memory.size`/`memory.grow` need `0x00`, a memarg's
+  `0x40` flag is refused; reference-types off: an overlong `return_call_indirect` index is accepted); the `wasm3`
+  preset keeps following binaryang (no threads, contract v32's rule); `atomic.fence` with a nonzero byte stays
+  refused until shared-everything-threads is in scope.

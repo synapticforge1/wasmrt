@@ -9,14 +9,6 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 - **W5 — owner calls left open:** F2 (opt-level speed vs size); the efficiency items not done (the archive's W2
   entry); the 234 offset differences from wasmtime on the 4,000-corruption comparison (end-of-file offsets,
   module-level refusals with no offset) and 9 wording singletons (`review-issues.md`).
-- **W6 — a C callback can call a linker function on a linker the outer code holds `&mut`** (2026-11-25 review
-  note, unproved): live only across `resolve` in `wasmrt_linker_instantiate` (a start function's callback). Same
-  shape as the store hole; a `RefCell` on the linker would close it the same way.
-  🔒 The five `--features` changes are DECIDED (owner, 2026-11-24: "I agree with the recommendations"): the three
-  verdict changes are approved as implemented (multi-memory off: `memory.size`/`memory.grow` need `0x00`, a memarg's
-  `0x40` flag is refused; reference-types off: an overlong `return_call_indirect` index is accepted); the `wasm3`
-  preset keeps following binaryang (no threads, contract v32's rule); `atomic.fence` with a nonzero byte stays
-  refused until shared-everything-threads is in scope.
 
 ## To relay — wasmrt cannot write there
 
