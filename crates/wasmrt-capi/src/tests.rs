@@ -419,6 +419,109 @@ fn a_host_import_is_called_with_its_environment() {
     wasmrt_engine_delete(engine);
 }
 
+/// What `reenter` is handed: its own store and a function in it, and what it saw when it called back in.
+struct Reentry {
+    store: *mut wasmrt_store,
+    func: wasmrt_func_t,
+    call_error: String,
+    handle_valid: bool,
+}
+
+#[allow(unsafe_code, reason = "a C callback declaration; the ABI requires it")]
+unsafe extern "C" fn reenter(
+    env: *mut c_void,
+    _caller: *mut c_void,
+    _args: *const wasmrt_val_t,
+    _nargs: usize,
+    results: *mut wasmrt_val_t,
+    _nresults: usize,
+) -> *mut wasmrt_trap {
+    #[allow(unsafe_code, reason = "the callback contract, exercised as C would")]
+    // SAFETY: `env` is the test's live `Reentry`; `results` holds the one declared result.
+    unsafe {
+        let r = &mut *env.cast::<Reentry>();
+        let mut out = [i32v(0)];
+        let mut trap: *mut wasmrt_trap = core::ptr::null_mut();
+        // back into the store this call is running in: refused, not a second `&mut` to it
+        let e = wasmrt_func_call(r.store, r.func, core::ptr::null(), 0, out.as_mut_ptr(), 1, &raw mut trap);
+        r.call_error = msg_of_err(e);
+        wasmrt_error_delete(e);
+        r.handle_valid = wasmrt_func_is_valid(r.store, r.func);
+        // …and it cannot be freed under the call
+        wasmrt_store_delete(r.store);
+        *results = i32v(7);
+    }
+    core::ptr::null_mut()
+}
+
+/// A host callback that calls back into its own store (through a pointer kept in its `env`) is refused —
+/// "the store is in use" — where it used to make a second live `&mut` to a store already in a call (undefined
+/// behaviour). Deleting the store from inside the callback is refused too. After the call the store works as
+/// before. Miri runs this test (`scripts/miri-gate.ts`).
+#[test]
+fn a_callback_cannot_reenter_or_delete_its_own_store() {
+    let engine = wasmrt_engine_new();
+    let store = wasmrt_store_new(engine);
+    let linker = wasmrt_linker_new(engine);
+    let results = [wasmrt_valkind_t::I32];
+    let ty = wasmrt_functype_new(core::ptr::null(), 0, results.as_ptr(), 1);
+    let (m, n) = (cs("env"), cs("reenter"));
+    // One raw pointer, used for every access from here on: the callback reads through it, so touching the value
+    // any other way would invalidate the callback's (Miri's Stacked Borrows says so).
+    let rp: *mut Reentry = Box::into_raw(Box::new(Reentry {
+        store,
+        func: wasmrt_func_t { id: 0 },
+        call_error: String::new(),
+        handle_valid: true,
+    }));
+    let e = wasmrt_linker_define_func(linker, m.as_ptr(), n.as_ptr(), ty, Some(reenter), rp.cast(), None);
+    assert!(e.is_null());
+    wasmrt_functype_delete(ty);
+
+    let bytes = wasm(
+        r#"(module
+            (import "env" "reenter" (func $r (result i32)))
+            (func (export "go") (result i32) (call $r))
+            (func (export "one") (result i32) (i32.const 1)))"#,
+    );
+    let mut module: *mut wasmrt_module = core::ptr::null_mut();
+    assert!(wasmrt_module_new(engine, bytes.as_ptr(), bytes.len(), &raw mut module).is_null());
+    let mut inst = wasmrt_instance_t { id: 0 };
+    let mut trap: *mut wasmrt_trap = core::ptr::null_mut();
+    assert!(wasmrt_linker_instantiate(linker, store, module, &raw mut inst, &raw mut trap).is_null());
+    let (gn, on) = (cs("go"), cs("one"));
+    let (mut go, mut one) = (wasmrt_func_t { id: 0 }, wasmrt_func_t { id: 0 });
+    assert!(wasmrt_instance_get_func(store, inst, gn.as_ptr(), &raw mut go));
+    assert!(wasmrt_instance_get_func(store, inst, on.as_ptr(), &raw mut one));
+    #[allow(unsafe_code, reason = "the test's own allocation, through its one pointer")]
+    // SAFETY: `rp` is the live box made above; no other reference to it exists outside the callback.
+    unsafe {
+        (*rp).func = one;
+    }
+
+    let mut out = [i32v(0)];
+    let e = wasmrt_func_call(store, go, core::ptr::null(), 0, out.as_mut_ptr(), 1, &raw mut trap);
+    assert!(e.is_null(), "{}", msg_of_err(e));
+    assert!(trap.is_null());
+    assert_eq!(as_i32v(&out[0]), 7, "the outer call completes");
+    #[allow(unsafe_code, reason = "the test's own allocation, through its one pointer")]
+    // SAFETY: as above; the callback has returned.
+    let r = unsafe { Box::from_raw(rp) };
+    assert_eq!(r.call_error, "wasmrt_func_call: the store is in use: called from inside one of its own host callbacks");
+    assert!(!r.handle_valid, "a busy store answers no question about its handles");
+
+    // the store was not freed, and works again now the call is over
+    assert!(wasmrt_func_is_valid(store, one));
+    let e = wasmrt_func_call(store, one, core::ptr::null(), 0, out.as_mut_ptr(), 1, &raw mut trap);
+    assert!(e.is_null(), "{}", msg_of_err(e));
+    assert_eq!(as_i32v(&out[0]), 1);
+
+    wasmrt_linker_delete(linker);
+    wasmrt_module_delete(module);
+    wasmrt_store_delete(store);
+    wasmrt_engine_delete(engine);
+}
+
 #[allow(unsafe_code, reason = "a C callback declaration; the ABI requires it")]
 unsafe extern "C" fn always_traps(
     _env: *mut c_void,

@@ -1,6 +1,6 @@
 # STATE: wasmrt
 
-Updated: 2026-11-24, at the end of the session (the one-pass load and the wording committed and pushed)
+Updated: 2026-11-25, at the end of the session (the C ABI store guard committed, not pushed)
 
 ## Version
 - Released: 2.0.2 on 2026-11-20 (UTC); tag `v2.0.2`, crates.io; first published by CI
@@ -18,6 +18,8 @@ Updated: 2026-11-24, at the end of the session (the one-pass load and the wordin
   `decode_validated` decode each body an instruction at a time, validating as they read, as wasmtime; the CLI, C
   ABI and .wast runner use it. Validation refusals in wasmtime's words (`validate::last_failure_message`). On 4,000
   corruptions: wasmtime's offset 3,056 -> 3,165, its words too 2,964 -> 3,156
+- C ABI store guard (2026-11-25): a host callback calling back into its own store (or deleting it) is refused —
+  "the store is in use" — where it was undefined behaviour (Miri-proved); the store's contents are in a RefCell
 - W2 (the old review stages T9–T12) performed and closed 2026-11-24; W4 (the cargo token) revoked
 - Workspace letters: C50 committed (48afb6e) and H42's wasmrt answer committed (b668926) in the workspace repo,
   not pushed
@@ -28,6 +30,8 @@ Updated: 2026-11-24, at the end of the session (the one-pass load and the wordin
   taken temp name), the MSRV and toolchain move — verified by tests on both platforms
 - Run for: the one-pass load and the wording (0358c4f..HEAD; owner: "yes"): five classes, B1 B2 H1 L1 fixed, the
   re-review EMPTY in every class, the full suite green on win-x64 and linux-x64
+- Run for: the C ABI store guard (owner, 2026-11-25: "review"): five classes EMPTY, header notes fixed and
+  re-reviewed EMPTY, the full suite green on both platforms
 - The `Review complete:` line stays at 820669f: the items above that were tested but not reviewed are in the tree,
   so the 3.0.0 release review covers the whole range
 - Open issues: none at or above the floor; recorded notes not acted on are in review-issues.md

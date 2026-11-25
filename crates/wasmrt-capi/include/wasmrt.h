@@ -236,6 +236,8 @@ void wasmrt_engine_delete(wasmrt_engine_t *);
  * stores are isolated. Must not outlive its engine.
  */
 wasmrt_store_t *wasmrt_store_new(wasmrt_engine_t *);
+/* Does nothing to a store that is running a call (from inside one of its own host callbacks):
+ * it is left as it is, still owned by the caller. */
 void wasmrt_store_delete(wasmrt_store_t *);
 
 /* ---- Module: compile, validate, introspect ------------------------------------------- */
@@ -285,6 +287,13 @@ bool   wasmrt_functype_result(const wasmrt_functype_t *, size_t i, wasmrt_valkin
  *
  * `caller` is valid ONLY for the duration of the call. Storing it and using it later is
  * undefined behaviour.
+ *
+ * A callback may NOT use the store it is running in: a call into it (wasmrt_func_call, a
+ * handle check, memory or global access, wasmrt_store_delete) from inside one of its own
+ * callbacks is refused -- an error "the store is in use", NULL, false or 0, as each function
+ * reports misuse, so a handle check answers false for a handle that is valid -- and
+ * wasmrt_store_delete leaves it as it is. Reach the guest's memory through `caller`. Another
+ * store may be called.
  */
 typedef wasmrt_trap_t *(*wasmrt_func_callback_t)(
     void *env, wasmrt_caller_t *caller,
@@ -311,7 +320,9 @@ void wasmrt_linker_delete(wasmrt_linker_t *);
 
 /* Define `module`.`name` as a host function. The linker copies the name strings and takes
  * ownership of nothing else; `env` is passed to every call, and `env_finalizer` (may be
- * NULL) runs when the linker is deleted or the name redefined. Redefining replaces. */
+ * NULL) runs once, when the last holder of `env` goes: the linker (deleted, or the name
+ * redefined) and every store that instantiated the function -- so possibly while a store is
+ * being deleted. A finalizer must not call into any store or linker. Redefining replaces. */
 wasmrt_error_t *wasmrt_linker_define_func(wasmrt_linker_t *,
                                           const char *module, const char *name,
                                           const wasmrt_functype_t *,

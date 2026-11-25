@@ -394,7 +394,17 @@ fn feature_of(i: u32) -> Option<Feature> {
 // Store
 // =====================================================================================
 
+/// A store, as C holds it. Its contents sit in a `RefCell`, and every entry point takes the store by shared
+/// reference and borrows them for the length of the call: a host callback that calls back into the store it is
+/// running in (through a pointer it kept in its `env`) finds them borrowed and is refused — "the store is in
+/// use" — where each entry point used to take `&mut` afresh, making a second live mutable reference to a store
+/// already in a call: undefined behaviour (owner question, 2026-11-25).
 pub struct wasmrt_store {
+    cell: core::cell::RefCell<StoreData>,
+}
+
+/// What a [`wasmrt_store`] holds.
+struct StoreData {
     tag: u32,
     inner: Store,
     /// Instances in creation order; a `wasmrt_instance_t` indexes this.
@@ -406,7 +416,7 @@ pub struct wasmrt_store {
     globals: Vec<(usize, u32)>,
 }
 
-impl wasmrt_store {
+impl StoreData {
     fn instance(&self, h: wasmrt_instance_t) -> Option<InstanceId> {
         self.instances.get(unpack(h.id, self.tag)?).copied()
     }
@@ -426,6 +436,25 @@ impl wasmrt_store {
     fn slot_of(&self, id: InstanceId) -> Option<usize> {
         self.instances.iter().position(|&x| x == id)
     }
+}
+
+/// Why a store could not be borrowed for an entry point.
+const STORE_NULL: &str = "store is NULL";
+const STORE_BUSY: &str = "the store is in use: called from inside one of its own host callbacks";
+
+/// Borrow the store behind `p` mutably, for one entry point (see [`wasmrt_store`]).
+fn store_mut<'a>(p: *const wasmrt_store) -> Result<core::cell::RefMut<'a, StoreData>, &'static str> {
+    #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
+    let s = unsafe { ffi::opt_ref(p) }.ok_or(STORE_NULL)?;
+    s.cell.try_borrow_mut().map_err(|_| STORE_BUSY)
+}
+
+/// Borrow the store behind `p` to read, for one entry point. Refused during a call too: the call holds it
+/// mutably.
+fn store_ref<'a>(p: *const wasmrt_store) -> Result<core::cell::Ref<'a, StoreData>, &'static str> {
+    #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
+    let s = unsafe { ffi::opt_ref(p) }.ok_or(STORE_NULL)?;
+    s.cell.try_borrow().map_err(|_| STORE_BUSY)
 }
 
 // =====================================================================================
@@ -688,18 +717,25 @@ capi! {
             return core::ptr::null_mut();
         };
         ffi::into_raw(wasmrt_store {
-            tag: NEXT_STORE_TAG.fetch_add(1, Ordering::Relaxed),
-            inner: Store::with_limits(e.limits),
-            instances: Vec::new(),
-            funcs: Vec::new(),
-            memories: Vec::new(),
-            globals: Vec::new(),
+            cell: core::cell::RefCell::new(StoreData {
+                tag: NEXT_STORE_TAG.fetch_add(1, Ordering::Relaxed),
+                inner: Store::with_limits(e.limits),
+                instances: Vec::new(),
+                funcs: Vec::new(),
+                memories: Vec::new(),
+                globals: Vec::new(),
+            }),
         })
     }
 }
 
 capi! {
     fn wasmrt_store_delete(p: *mut wasmrt_store) {
+        // Not while it is in a call: deleting it from inside one of its host callbacks would free the store under
+        // the call. Refused — it is left as it is.
+        if store_mut(p.cast_const()).is_err_and(|e| e == STORE_BUSY) {
+            return;
+        }
         #[allow(unsafe_code, reason = "reclaiming a pointer this crate handed out")]
         unsafe { ffi::reclaim(p) };
     }
@@ -711,8 +747,7 @@ macro_rules! validity {
     ($name:ident, $ty:ty, $lookup:ident) => {
         capi! {
             fn $name(p: *const wasmrt_store, h: $ty) -> bool {
-                #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-                let Some(s) = (unsafe { ffi::opt_ref(p) }) else { return false };
+                let Ok(s) = store_ref(p) else { return false };
                 s.$lookup(h).is_some()
             }
         }
@@ -1138,11 +1173,13 @@ capi! {
         instance: wasmrt_instance_t,
     ) -> *mut wasmrt_error {
         #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (l, s, m) = unsafe {
-            (ffi::opt_mut(p), ffi::opt_ref(sp.cast_const()), ffi::cstr(module))
-        };
-        let (Some(l), Some(s), Some(m)) = (l, s, m) else {
+        let (l, m) = unsafe { (ffi::opt_mut(p), ffi::cstr(module)) };
+        let (Some(l), Some(m)) = (l, m) else {
             return err("wasmrt_linker_define_instance: a required argument was NULL or not UTF-8");
+        };
+        let s = match store_ref(sp.cast_const()) {
+            Ok(s) => s,
+            Err(e) => return err(format!("wasmrt_linker_define_instance: {e}")),
         };
         let Some(id) = s.instance(instance) else {
             return err("wasmrt_linker_define_instance: instance handle does not belong to this store");
@@ -1216,10 +1253,15 @@ capi! {
         trap_out: *mut *mut wasmrt_trap,
     ) -> *mut wasmrt_error {
         #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (l, s, m) = unsafe { (ffi::opt_mut(p), ffi::opt_mut(sp), ffi::opt_ref(mp)) };
-        let (Some(l), Some(s), Some(m)) = (l, s, m) else {
+        let (l, m) = unsafe { (ffi::opt_mut(p), ffi::opt_ref(mp)) };
+        let (Some(l), Some(m)) = (l, m) else {
             return err("wasmrt_linker_instantiate: a required argument was NULL");
         };
+        let mut guard = match store_mut(sp.cast_const()) {
+            Ok(g) => g,
+            Err(e) => return err(format!("wasmrt_linker_instantiate: {e}")),
+        };
+        let s = &mut *guard;
         let imports = match l.inner.resolve(&s.inner, &m.md) {
             Ok(i) => i,
             Err(e) => return err(link_error_text(&e)),
@@ -1365,9 +1407,10 @@ capi! {
         name: *const c_char,
         out: *mut wasmrt_func_t,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (s, n) = unsafe { (ffi::opt_mut(sp), ffi::cstr(name)) };
-        let (Some(s), Some(n)) = (s, n) else { return false };
+        #[allow(unsafe_code, reason = "borrowing a caller string via the ffi primitive")]
+        let n = unsafe { ffi::cstr(name) };
+        let (Ok(mut guard), Some(n)) = (store_mut(sp.cast_const()), n) else { return false };
+        let s = &mut *guard;
         let Some(id) = s.instance(inst) else { return false };
         let Some(fi) = s.inner.export_func(id, n) else { return false };
         let Some(slot) = s.slot_of(id) else { return false };
@@ -1385,9 +1428,10 @@ capi! {
         name: *const c_char,
         out: *mut wasmrt_memory_t,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (s, n) = unsafe { (ffi::opt_mut(sp), ffi::cstr(name)) };
-        let (Some(s), Some(n)) = (s, n) else { return false };
+        #[allow(unsafe_code, reason = "borrowing a caller string via the ffi primitive")]
+        let n = unsafe { ffi::cstr(name) };
+        let (Ok(mut guard), Some(n)) = (store_mut(sp.cast_const()), n) else { return false };
+        let s = &mut *guard;
         let Some(id) = s.instance(inst) else { return false };
         let Some(mi) = s.inner.export_index(id, n, ExternKind::Memory) else { return false };
         let Some(slot) = s.slot_of(id) else { return false };
@@ -1405,9 +1449,10 @@ capi! {
         name: *const c_char,
         out: *mut wasmrt_global_t,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing caller handles via the ffi primitives")]
-        let (s, n) = unsafe { (ffi::opt_mut(sp), ffi::cstr(name)) };
-        let (Some(s), Some(n)) = (s, n) else { return false };
+        #[allow(unsafe_code, reason = "borrowing a caller string via the ffi primitive")]
+        let n = unsafe { ffi::cstr(name) };
+        let (Ok(mut guard), Some(n)) = (store_mut(sp.cast_const()), n) else { return false };
+        let s = &mut *guard;
         let Some(id) = s.instance(inst) else { return false };
         let Some(gi) = s.inner.export_index(id, n, ExternKind::Global) else { return false };
         let Some(slot) = s.slot_of(id) else { return false };
@@ -1424,10 +1469,11 @@ capi! {
         inst: wasmrt_instance_t,
         trap_out: *mut *mut wasmrt_trap,
     ) -> *mut wasmrt_error {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_mut(sp) }) else {
-            return err("wasmrt_instance_initialize: store is NULL");
+        let mut guard = match store_mut(sp.cast_const()) {
+            Ok(g) => g,
+            Err(e) => return err(format!("wasmrt_instance_initialize: {e}")),
         };
+        let s = &mut *guard;
         let Some(id) = s.instance(inst) else {
             return err("wasmrt_instance_initialize: instance handle does not belong to this store");
         };
@@ -1448,8 +1494,7 @@ capi! {
 
 capi! {
     fn wasmrt_func_type(sp: *const wasmrt_store, h: wasmrt_func_t) -> *mut wasmrt_functype {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_ref(sp) }) else { return core::ptr::null_mut() };
+        let Ok(s) = store_ref(sp) else { return core::ptr::null_mut() };
         let Some((id, fi)) = s.func(h) else { return core::ptr::null_mut() };
         let Some(ft) = s.inner.func_type(id, fi) else { return core::ptr::null_mut() };
         let (Some(params), Some(results)) = (kinds(&ft.params), kinds(&ft.results)) else {
@@ -1474,10 +1519,11 @@ capi! {
         nresults: usize,
         trap_out: *mut *mut wasmrt_trap,
     ) -> *mut wasmrt_error {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_mut(sp) }) else {
-            return err("wasmrt_func_call: store is NULL");
+        let mut guard = match store_mut(sp.cast_const()) {
+            Ok(g) => g,
+            Err(e) => return err(format!("wasmrt_func_call: {e}")),
         };
+        let s = &mut *guard;
         let Some((id, fi)) = s.func(h) else {
             return err("wasmrt_func_call: function handle does not belong to this store");
         };
@@ -1557,8 +1603,8 @@ unsafe fn arg_slice<'a>(p: *const wasmrt_val_t, n: usize) -> Option<&'a [wasmrt_
 
 capi! {
     fn wasmrt_memory_data(sp: *mut wasmrt_store, h: wasmrt_memory_t) -> *mut u8 {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_mut(sp) }) else { return core::ptr::null_mut() };
+        let Ok(mut guard) = store_mut(sp.cast_const()) else { return core::ptr::null_mut() };
+        let s = &mut *guard;
         let Some((id, mi)) = s.memory(h) else { return core::ptr::null_mut() };
         match s.inner.memory_mut(id, mi) {
             Some(m) => m.bytes.as_mut_ptr(),
@@ -1569,8 +1615,7 @@ capi! {
 
 capi! {
     fn wasmrt_memory_data_size(sp: *const wasmrt_store, h: wasmrt_memory_t) -> usize {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_ref(sp) }) else { return 0 };
+        let Ok(s) = store_ref(sp) else { return 0 };
         let Some((id, mi)) = s.memory(h) else { return 0 };
         s.inner.memory(id, mi).map_or(0, |m| m.bytes.len())
     }
@@ -1578,8 +1623,7 @@ capi! {
 
 capi! {
     fn wasmrt_memory_size_pages(sp: *const wasmrt_store, h: wasmrt_memory_t) -> u64 {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_ref(sp) }) else { return 0 };
+        let Ok(s) = store_ref(sp) else { return 0 };
         let Some((id, mi)) = s.memory(h) else { return 0 };
         s.inner
             .memory(id, mi)
@@ -1595,8 +1639,7 @@ capi! {
         dst: *mut c_void,
         n: usize,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_ref(sp) }) else { return false };
+        let Ok(s) = store_ref(sp) else { return false };
         let Some((id, mi)) = s.memory(h) else { return false };
         let Some(m) = s.inner.memory(id, mi) else { return false };
         let Some(src) = range(m.bytes.len(), offset, n) else { return false };
@@ -1613,8 +1656,8 @@ capi! {
         src: *const c_void,
         n: usize,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_mut(sp) }) else { return false };
+        let Ok(mut guard) = store_mut(sp.cast_const()) else { return false };
+        let s = &mut *guard;
         let Some((id, mi)) = s.memory(h) else { return false };
         let Some(m) = s.inner.memory_mut(id, mi) else { return false };
         let Some(r) = range(m.bytes.len(), offset, n) else { return false };
@@ -1641,8 +1684,7 @@ capi! {
         h: wasmrt_global_t,
         out: *mut wasmrt_val_t,
     ) -> bool {
-        #[allow(unsafe_code, reason = "borrowing a caller handle via the ffi primitive")]
-        let Some(s) = (unsafe { ffi::opt_ref(sp) }) else { return false };
+        let Ok(s) = store_ref(sp) else { return false };
         let Some((id, gi)) = s.global(h) else { return false };
         let Some(v) = s.inner.global(id, gi) else { return false };
         // `module_of` is fallible now (an `InstanceId` carries its issuing store), and the honest

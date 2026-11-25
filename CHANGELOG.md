@@ -62,6 +62,12 @@ README). Refusals now name the byte wasmtime names.
 
 ### Fixed
 
+- **C ABI: a host callback that called back into its own store was undefined behaviour.** Through
+  a store pointer kept in its `env`, a callback could call `wasmrt_func_call` (or any function
+  taking the store, `wasmrt_store_delete` included) on the store already running it; each made a
+  second live mutable reference to that store (Miri: undefined behaviour). It is now refused — an
+  error "the store is in use", or NULL, false or 0 — and the store cannot be deleted under the
+  call. Calling into another store is unchanged. Miri runs the new test clean.
 - **Two valid modules were refused, and one check was quadratic.** An `if` without `else` whose
   parameter is a subtype of its result (`(param (ref $t)) (result (ref null $t))`) was refused
   (the types had to be equal); `array.new_fixed` in unreachable code naming more operands than the
