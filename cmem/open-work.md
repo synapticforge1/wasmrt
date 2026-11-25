@@ -9,7 +9,7 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 - **W1 — the 3.0.0 release review**, then the release (owner's word). Committed and pushed since 2.0.2
   (`e54754c`): I11 (wasmtime's implementation limits, 🔒 owner 2026-11-24: "accept the measured limits that keep
   the program as robust as needed and as small as possible"), I12–I14 (decode refusals in wasmtime's words and
-  offsets), the efficiency review (calls 3.1×, memory roughly halved), the CLI's safe writes and `pin`'s OS lock,
+  offsets), the efficiency review (calls 3.1×, a large module's memory a third to a half lower), the CLI's safe writes and `pin`'s OS lock,
   the gnu toolchains and MSRV 1.100, the one-pass load (wasmtime's structural difference, closed), validation
   refusals in wasmtime's words, the C ABI store guard. 2026-11-25: the release review over the whole range is
   COMPLETE (R1, L1 and notes fixed, re-reviewed to empty, full suite on both platforms), the notes merged; open

@@ -166,8 +166,8 @@ always, the byte wasmtime names, in its words.
   (the store guard). An opaque type to C; nothing to change.
 - **Faster calls, a faster start, and far less memory** (an efficiency review, 2026-11-24; measured on
   one Windows x64 machine, release build). A call reuses its frame's buffers instead of allocating
-  eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s (a call-heavy loop; plain loops gain
-  10–20%). The cold start on the 48 KB benchmark
+  eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s (a call-heavy loop; the steady
+  loop gains less, as measured below). The cold start on the 48 KB benchmark
   module 3.1–3.3 ms → 2.35 ms; the steady loop 243–254 → 255–278 Mops/s. The CLI decodes a module once
   (it decoded the bare-path form twice), links WASI without copying the module, and does not free an
   instance it is about to exit from (about 1.5 ms off a small WASI program's run). An instance no
