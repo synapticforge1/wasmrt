@@ -643,9 +643,11 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         let name = f.to_string_lossy().to_string();
         // A name is written into the DB as text, one entry per line: a control character in it (a newline, on
         // Unix) would split it into lines of its own — a forged pin or a `# mode:` line the user never wrote
-        // (review S1, 2026-11-24). Such a file is skipped, before anything is printed or written.
-        if name.chars().any(char::is_control) {
-            eprintln!("wasmrt: warning: skipping {name:?}: a control character in its name");
+        // (review S1, 2026-11-24). Such a file is skipped, before anything is printed or written. So is one with a
+        // Unicode line or paragraph separator (U+2028, U+2029): wasmrt reads the DB by `\n`, but wazmrt shares it, and
+        // a reader that splits on them would see a forged line (release review, 2026-11-25).
+        if name.chars().any(|c| c.is_control() || c == '\u{2028}' || c == '\u{2029}') {
+            eprintln!("wasmrt: warning: skipping {name:?}: a control character or line separator in its name");
             continue;
         }
         match load_module(&name) {
@@ -684,7 +686,7 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         }
     // The DB's own file — through a symlink — is what the lock and its temporary files are keyed on, so two names
     // for one DB share one lock (security re-review, 2026-11-24).
-    let real_db = match resolve_link(&db_path) {
+    let real_db = match resolve_link(std::path::Path::new(&db_path)) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("wasmrt: cannot write {db_path}: {e}");
@@ -703,7 +705,9 @@ fn pin_modules(rest: &[String]) -> ExitCode {
     remove_dead_temps(&real_db);
     // Only a MISSING DB starts empty: one that exists but cannot be read (a UTF-16 file, a permission error) is
     // refused, not overwritten with just the new lines (review H2, 2026-11-24).
-    let existing = match std::fs::read_to_string(&db_path) {
+    // Read from the file resolved once, above, as the lock and the write are: a symlink retargeted between two
+    // resolutions made `pin` read one DB and rewrite another (release re-review).
+    let existing = match std::fs::read_to_string(&real_db) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => {
@@ -733,7 +737,9 @@ fn pin_modules(rest: &[String]) -> ExitCode {
         out.push('\n');
     }
     if !new_lines.is_empty()
-        && let Err(e) = write_replacing(&db_path, out.as_bytes(), &pin_temp_tag(&real_db)) {
+        // to the file resolved once, above — the one the lock is keyed on (release review: resolved twice, a link
+        // retargeted between the two escaped the lock)
+        && let Err(e) = write_replacing(&real_db, out.as_bytes(), &pin_temp_tag(&real_db)) {
             eprintln!("wasmrt: cannot write {db_path}: {e}");
             return ExitCode::FAILURE;
         }
@@ -1431,7 +1437,7 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
                 eprintln!("wasmrt: refusing to write the output over the input {path}");
                 return ExitCode::FAILURE;
             }
-            if let Err(e) = write_replacing(o, &bytes, "") {
+            if let Err(e) = write_replacing(std::path::Path::new(o), &bytes, "") {
                 eprintln!("wasmrt: cannot write {o}: {e}");
                 return ExitCode::FAILURE;
             }
@@ -1444,7 +1450,7 @@ fn assemble_wat(rest: &[String]) -> ExitCode {
 
 /// Write `bytes` to `path` whole or not at all: into a temporary file beside it, then renamed over it, so an
 /// interrupted or failed run leaves the old file intact (review H2 / H3, 2026-11-24).
-fn write_replacing(path: &str, bytes: &[u8], tag: &str) -> std::io::Result<()> {
+fn write_replacing(path: &std::path::Path, bytes: &[u8], tag: &str) -> std::io::Result<()> {
     use std::io::Write as _;
     // A path that exists and is not a regular file — a device such as `NUL` or `/dev/null` — is written in place:
     // renaming over it fails on Windows and would replace a device node on Unix (re-review N1, 2026-11-24).
@@ -1473,7 +1479,11 @@ fn write_replacing(path: &str, bytes: &[u8], tag: &str) -> std::io::Result<()> {
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
     // Created NEW, so a file or link already at that name is never written through (security re-review note); one
     // there already — left by a killed run that had this process id — moves on to the next name rather than failing
-    // (re-review, 2026-11-24). On Unix it is private (0600) until `prepare_temp` gives it the old file's mode.
+    // (re-review, 2026-11-24). On Unix, replacing a file, it is private (0600) until `prepare_temp` gives it the old
+    // file's mode; making a NEW file, it is created 0666 and the umask applies, as to any new file — renamed into
+    // place with no old mode to copy, a 0600 temp made every new output and pin DB private (release review R1).
+    #[cfg(unix)]
+    let new_mode: u32 = if old.is_some() { 0o600 } else { 0o666 };
     let mut tries = 0;
     let (tmp, mut f) = loop {
         let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1481,7 +1491,7 @@ fn write_replacing(path: &str, bytes: &[u8], tag: &str) -> std::io::Result<()> {
         let mut open = std::fs::OpenOptions::new();
         open.write(true).create_new(true);
         #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+        std::os::unix::fs::OpenOptionsExt::mode(&mut open, new_mode);
         match open.open(&tmp) {
             Ok(f) => break (tmp, f),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < 64 => tries += 1,
@@ -1560,8 +1570,7 @@ const TEMP_PREFIX: &str = ".wasmrt-tmp-";
 
 /// `path` itself, or — when it is a symlink — the file it names. A symlink to nothing is refused: following it
 /// would create a file wherever it points (security re-review, 2026-11-24).
-fn resolve_link(path: &str) -> std::io::Result<std::path::PathBuf> {
-    let p = std::path::Path::new(path);
+fn resolve_link(p: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
     if !std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()) {
         return Ok(p.to_path_buf());
     }

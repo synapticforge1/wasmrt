@@ -19,9 +19,10 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
-**A breaking release** (the Rust API gains fields and new error variants, modules past wasmtime's
-implementation limits are refused, and the minimum Rust version is 1.100; see Breaking Changes in the
-README). Refusals now name the byte wasmtime names.
+**A breaking release** (the Rust API gains fields and error variants and loses three, modules past
+wasmtime's implementation limits are refused, `wasmrt pin` and `wasmrt wat -o` write files differently,
+and the minimum Rust version is 1.100; see Breaking Changes in the README). Refusals now name the byte
+wasmtime names, in its words.
 
 ### Added
 
@@ -45,8 +46,9 @@ README). Refusals now name the byte wasmtime names.
   what `decode` then `validate_with_features` accepts (both remain); where a module has more than
   one fault, it reports the one wasmtime reports — in a body ill-typed at one byte and malformed
   at the next, the type error. The CLI, the C ABI and the `.wast` runner use it. On 4,000 one-byte
-  corruptions of the behaviour corpus, wasmrt's refusal names wasmtime's offset in 3,165 (was
-  3,056); loading takes the same time or a little less.
+  corruptions of the behaviour corpus, wasmrt's refusal names the offset wasm-tools 1.263 names
+  (wasmparser, the parser wasmtime uses) in 3,165, against 3,056 before this change (with this
+  release's decode work already in); loading takes the same time or a little less.
 - **Validation refusals in wasmtime's words**: `type mismatch: expected i32 but nothing on stack`,
   `unknown table 3: table index out of bounds`, `unknown local 5: local index out of bounds`,
   `type mismatch: values remaining on stack at end of block`, `uninitialized local: 0`,
@@ -79,15 +81,18 @@ README). Refusals now name the byte wasmtime names.
   drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the
   binary. Now an unreadable DB is refused, `pin` holds the operating system's lock on `<db>.lock`
   across its read and write (released when the run ends, however it ends; the file stays beside the
-  DB; on a filesystem without file locks, `pin --db` refuses), and both commands write a regular file whole or not at all (a temporary file renamed over it,
-  keeping its permissions and, on Unix, its owner; a symlink is written through, and a dangling one
-  is refused; a read-only file is refused on every OS; a device such as `/dev/null` is written in
-  place). The file is replaced, so another hard link to it keeps the old contents. `pin --db` into a
+  DB; on a filesystem without file locks, `pin --db` refuses), and both commands write a regular file
+  whole or not at all (a temporary file renamed over it, keeping its permissions and, on Unix, its
+  owner — a new file gets the usual mode; a symlink is written through, and a dangling one is
+  refused; a read-only file is refused on every OS; a device such as `/dev/null` is written in
+  place). The file is replaced, so another hard link to it keeps the old contents, and the file's
+  directory must be writable. `pin --db` into a
   directory that does not exist is an error (it was created), and a line already in the DB is not
   appended again.
 - **A file name could forge a pin.** `wasmrt pin <dir>` wrote each module's name into the pin DB as
   text, so on Unix a name containing a newline could add a line of its own — a digest the user never
-  pinned, or a `# mode:` line. A name with a control character is now skipped with a warning. Also:
+  pinned, or a `# mode:` line. A name with a control character, or a Unicode line or paragraph
+  separator (wazmrt reads the same DB), is now skipped with a warning. Also:
   `pin <dir>` no longer follows a symlinked directory (a link back into the tree recursed until the
   stack overflowed); with `--db`, the digest lines are printed only once recorded; a DB path that is
   not a regular file (`NUL`, a FIFO) is refused; a file whose owner cannot be kept (Unix) is written
@@ -131,8 +136,11 @@ README). Refusals now name the byte wasmtime names.
 
 ### Changed
 
-- **Minimum Rust version 1.100** (was 1.85): the stable toolchain wasmrt is tested on. `pin` now
-  holds the standard library's file lock on its DB.
+- **Minimum Rust version 1.100** (was 1.85): the current stable release when 3.0.0 was cut; both
+  targets build with it (`cargo +stable check`), and the tests run on the pinned nightly
+  (`rust-toolchain.toml`). `pin` now holds the standard library's file lock on its DB.
+- **C ABI (Rust side):** `wasmrt_store` is no longer `Freeze` — its contents sit in a `RefCell`
+  (the store guard). An opaque type to C; nothing to change.
 - **Faster calls, a faster start, and far less memory** (an efficiency review, 2026-11-24; measured on
   one Windows x64 machine, release build). A call reuses its frame's buffers instead of allocating
   eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s. The cold start on the 48 KB benchmark

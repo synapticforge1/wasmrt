@@ -173,8 +173,30 @@ fn unix_names_links_and_permissions() {
     assert!(!d.join("planted").exists(), "and its target is not created");
     std::fs::write(d.join("r.db.lock"), b"").unwrap();
     std::fs::set_permissions(d.join("r.db.lock"), std::fs::Permissions::from_mode(0o444)).unwrap();
+    // As root a 0444 file is still writable, so this case is real only for another user: say so, not pass blind.
+    let writable = std::fs::OpenOptions::new().write(true).open(d.join("r.db.lock")).is_ok();
     let out = run(&["pin".as_ref(), ok.as_os_str(), "--db".as_ref(), d.join("r.db").as_os_str()]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    if writable {
+        eprintln!("note: running as root: the read-only lock file was writable, so its read-only path went untested");
+    }
+
+    // A NEW file — `wat -o`'s output, a new pin DB — gets the mode any new file gets here (0666 less the umask),
+    // as `std::fs::write` gave it in 2.0.2; renaming a 0600 temp into place made it private (release review R1).
+    let usual = d.join("usual");
+    std::fs::write(&usual, b"").unwrap();
+    let want = std::fs::metadata(&usual).unwrap().permissions().mode() & 0o777;
+    let fresh = d.join("fresh.wasm");
+    assert!(run(&["wat".as_ref(), src.as_os_str(), "-o".as_ref(), fresh.as_os_str()]).status.success());
+    assert_eq!(std::fs::metadata(&fresh).unwrap().permissions().mode() & 0o777, want, "a new output file");
+    let new_db = d.join("new.db");
+    assert!(run(&["pin".as_ref(), ok.as_os_str(), "--db".as_ref(), new_db.as_os_str()]).status.success());
+    assert_eq!(std::fs::metadata(&new_db).unwrap().permissions().mode() & 0o777, want, "a new pin DB");
+    // …and a name with a Unicode line separator is skipped like one with a newline (wazmrt shares the DB)
+    std::fs::write(d.join("mods").join("a\u{2028}b.wasm"), wasm).unwrap();
+    let out = run(&["pin".as_ref(), d.join("mods").as_os_str(), "--db".as_ref(), d.join("sep.db").as_os_str()]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(!std::fs::read_to_string(d.join("sep.db")).unwrap().contains('\u{2028}'), "the separator name is skipped");
 }
 
 /// The tag `wasmrt` puts in a pin DB's temporary file names (`pin_temp_tag`): FNV-1a 64 of the DB's file name.
@@ -216,6 +238,8 @@ fn pin_db_directory_duplicates_and_dead_temps() {
 }
 
 /// Re-review N3: concurrent `pin` runs into one DB keep every pin (each read-modify-write holds the DB's lock).
+/// Probabilistic: without the lock it fails only sometimes (16 of 400 rounds on Linux, 2026-11-24); the held-lock
+/// case in `pin_dedupes_within_a_run_waits_for_a_held_lock_and_refuses_a_device` is the deterministic one.
 #[test]
 fn concurrent_pins_keep_every_entry() {
     let d = dir().join("concurrent");

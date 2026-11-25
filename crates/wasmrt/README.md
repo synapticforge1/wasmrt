@@ -14,8 +14,9 @@ wasmrt wast tests/                 # run official spec-testsuite scripts
 With no `--dir`, every WASI path call returns `BADF` — there is no implicit working directory.
 
 **Privacy:** wasmrt collects nothing and makes no network requests. It writes only the files you
-name (`-o`, `--db`) and what a guest writes inside a `--dir`; a guest sees only the `--env`
-variables you pass.
+name (`-o`, `--db`) — plus, while it writes one, a short-lived `.wasmrt-tmp-…` file beside it, and a
+`<db>.lock` kept beside a pin DB — and what a guest writes inside a `--dir`; a guest sees only the
+`--env` variables you pass.
 
 The library is [`wasmrt-core`](https://crates.io/crates/wasmrt-core); the C ABI is
 [`wasmrt-capi`](https://crates.io/crates/wasmrt-capi).

@@ -84,7 +84,8 @@ Newest first. Copy the template below for each future adopted component.
   `src/validator/core.rs`); `RefType::wat` (`src/readers/core/types.rs`).
 - **License (SPDX):** `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` (the crate's `license` field,
   confirmed against its licence files); **used under MIT**. Copyright notice retained: *Copyright 2017
-  Mozilla Foundation* (the header of `limits.rs`).
+  Mozilla Foundation* (the header of `limits.rs`). So `limits.rs` is `SPDX-License-Identifier: MIT`, not
+  wasmrt's `MIT OR Apache-2.0`: whichever licence a user takes wasmrt under, this data stays under MIT.
 - **License file:** `third_party/wasmparser/LICENSE-MIT` (verbatim). The crate ships no `NOTICE` file.
 - **What we reused:** DATA, not code: the limit values (the counts, sizes and depths wasmtime refuses
   past), their order, and the error wording wasmparser reports for them; the sentences it reports a
