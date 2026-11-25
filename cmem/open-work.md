@@ -6,9 +6,11 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 
 ## Open
 
-- **W5 — owner calls left open:** F2 (opt-level speed vs size); the efficiency items not done (the archive's W2
-  entry); the 234 offset differences from wasmtime on the 4,000-corruption comparison (end-of-file offsets,
-  module-level refusals with no offset) and 9 wording singletons (`review-issues.md`).
+- **W5 — the owner's calls (2026-11-25: "fix items 1"), in progress:** ✅ F2 opt-level "s" (`e4ca7db`); ✅ offsets
+  and words (`a0e24ed`: offset differences 234 → 56, words 9 → 2, the rest explained in the CHANGELOG); ✅ efficiency
+  items 5 (function types looked up once; it also fixed validation quadratic in imports × calls) and 6 (element
+  segments hold no copy of their items). Left: item 9 (lazy per-function decode) and item 7 (a smaller `Instr`,
+  public API, 4.0.0).
 
 ## To relay — wasmrt cannot write there
 
@@ -17,6 +19,8 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
   byte); the CONTRACT VERSION stays 41 (no row changed). The mirror is complete when wazmrt's 12 files `cmp` equal.
 - **R1 — binaryang:** wasmrt and binaryang 2.2.0 agree on all 6,860 judgements; naming differences remain
   in D1: `select.t` (0x1c) and the `null` forms of `ref.test` / `ref.cast` / `ref.cast_desc_eq`.
+  ✅ Relayed as workspace letter **C52** (owner, 2026-11-25; workspace `1c281d5`): does D1 intend its four spellings,
+  and is the encoding D1's unique key? Open until binaryang answers and wasmrt, its creator, closes it.
 - **R2 — wasmtk:** about ten generated `tests/wasi/wasm_wasi_bundle/**/*.wat` modules `throw 0` with no tag
   declared (`dynrt_eval_bundle/main_*.wat`, `sharedheap_bundle/main_wasic.wat`): a generator defect that
   wasm-tools and wasmrt both refuse (found by `scripts/wat-corpus.ts`, 2026-10-24).
