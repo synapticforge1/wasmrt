@@ -32,7 +32,7 @@ round N, date."; no release was made under that rule.)* Releases before 2026-11-
 ### 3.0.0 — 2026-11-25 — wasmtime's refusals in its words, one-pass load, faster and leaner
 
 A major release (owner, 2026-11-25: "release 3.0.0"). wasmtime's implementation limits (the measured-needed
-set); every decode and validation refusal at wasmtime's offset and in its words (wasmparser 0.263's, credited);
+set); decode and validation refusals in wasmtime's words and almost always at its offset (wasmparser 0.263's, credited);
 decoding and validation in one pass, as wasmtime reads a module (`module::parse` / `Parsed::validate`); the
 efficiency review (calls ~3× faster, memory roughly halved); `pin` and `wat -o` write files whole (temp + rename)
 and `pin` holds an OS file lock; the C ABI refuses a callback that re-enters its own store (was undefined

@@ -9,8 +9,9 @@ wasmtime's observable behaviour, and on a corpus of real WASI programs.
 
 > **Status: `3.0.0`.** `1.0.0` was the conformance clear-out; `2.0.0` corrects one validation rule (an
 > `exact` reference type needs reference-types) and holds wasmrt to binaryang's shared feature
-> rules; `3.0.0` refuses what wasmtime refuses (its implementation limits), in its words and at its
-> offsets, decodes and validates in one pass as wasmtime does, and is faster and smaller in memory.
+> rules; `3.0.0` adopts the wasmtime implementation limits it measured as needed, reports refusals in
+> wasmtime's words and almost always at its offset, decodes and validates in one pass as wasmtime does,
+> and is faster and smaller in memory.
 > wasmrt can **assemble**, **decode**, **type-check**, and **run**
 > WebAssembly — `wasmrt run fac.wasm fac 10` → `3628800`, `wasmrt wat mod.wat -o mod.wasm`. Execution
 > covers integer + floating-point compute, linear memory (incl. **multi-memory** and **memory64**),

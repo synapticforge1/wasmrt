@@ -32,7 +32,9 @@ this release. The CLI is 915,968 bytes (2.0.2: 845,824, +8.3%) and the C ABI DLL
 (536,064, +8.9%): the growth is wasmtime's refusal sentences and limits, the one-pass load beside the
 two-pass API it keeps, and the CLI's safe file writes. The cold start on the 48 KB benchmark module is
 3.2–3.9 ms (2.0.2: 4.1–4.4) and the steady loop 192–223 Mops/s (166–181); a 105-byte module's cold
-start is within noise (6–8 µs).
+start is within noise (6–8 µs). These are three A/B rounds in one session; absolute figures move with
+the machine between sessions (the efficiency figures below are another session's), so compare within a
+pair.
 
 **A breaking release** (the Rust API gains fields and error variants and loses three, modules past
 wasmtime's implementation limits are refused, `wasmrt pin` and `wasmrt wat -o` write files differently,
@@ -137,9 +139,10 @@ wasmtime names, in its words.
   `invalid heap type` by context, `malformed section id`, `illegal opcode: 0x27`, `unknown 0xfc
   subopcode: 0x71`, the flag bytes of memories, tables, globals, tags and segments each in its own
   words, `invalid var_u32: integer representation too long`, and the others. Compared with
-  wasm-tools on 4,000 one-byte corruptions of the behaviour corpus: every decode-stage refusal now
-  agrees in words and offset, except where wasmtime's validator reaches a function body's type error
-  first (it validates while it reads; wasmrt decodes a body, then validates it).
+  wasm-tools on 4,000 one-byte corruptions of the behaviour corpus: the decode-stage refusals then
+  agreed in words and offset except where wasmtime's validator reaches a function body's type error
+  first — the difference the one-pass load (above) removes. Some refusals still differ in offset (234
+  of the 4,000: end-of-file positions, and refusals outside a body, which carry no offset yet).
 - **A function body's decode error waits for the rest of the module**, as in wasmtime: a structural
   fault later in the file (a section past the end, a count mismatch) is reported first. `else`,
   `catch` and `delegate` outside their block are refused while decoding, and a constant expression

@@ -55,7 +55,7 @@ Legend: ✅ done & verified · 🚧 in progress · ⬜ planned
 | **2.0.0** | Type-rule correction | an `exact` reference type needs reference-types (binaryang D2 2.2.0, wasm-tools); wasmrt held to D2's type and encoding rules in `cargo test` | ✅ |
 | **2.0.1** | Release tooling | the GitHub Release page made through the REST API, not the GitHub CLI; no code changes | ✅ |
 | **2.0.2** | Licence texts + the five-class review | every published crate carries its licence texts and notices; the first release reviewed in five classes and published by CI | ✅ |
-| **3.0.0** | wasmtime's refusals, one-pass load, efficiency | wasmtime's implementation limits; every refusal at wasmtime's offset and in its words; decode and validation in one pass; calls ~3× faster and memory roughly halved; safe CLI file writes and the pin DB's OS lock; the C ABI store guard; MSRV 1.100 | ✅ |
+| **3.0.0** | wasmtime's refusals, one-pass load, efficiency | the wasmtime implementation limits measured as needed; refusals in wasmtime's words and almost always at its offset; decode and validation in one pass; calls ~3× faster and memory roughly halved; safe CLI file writes and the pin DB's OS lock; the C ABI store guard; MSRV 1.100 | ✅ |
 
 ## What you can do with wasmrt (use-case matrix)
 

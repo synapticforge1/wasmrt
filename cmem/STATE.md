@@ -8,8 +8,8 @@ Updated: 2026-11-25, releasing 3.0.0 (owner: "release 3.0.0") — notes merged; 
   entry); next `bump.ts major`, `release.ts`, CI's tag / page / publish, then the read-back as a user (release.md)
 
 ## Now
-- 3.0.0's content: wasmtime's implementation limits (the measured-needed set, owner 2026-11-24); every decode and
-  validation refusal at wasmtime's offset and in its words (wasmparser 0.263's); one-pass load (`module::parse` /
+- 3.0.0's content: wasmtime's implementation limits (the measured-needed set, owner 2026-11-24); decode and
+  validation refusals in wasmtime's words, almost always at its offset (wasmparser 0.263's); one-pass load (`module::parse` /
   `Parsed::validate` / `decode_validated`); the efficiency review (calls ~3× faster, memory roughly halved); the
   CLI's safe writes (temp + rename, a new file's usual mode) and `pin`'s OS lock; the C ABI store guard
 - Toolchains (owner, 2026-11-24): gnu on both OSes, the same versions — stable 1.100.0 (the MSRV, `rust-version`)
