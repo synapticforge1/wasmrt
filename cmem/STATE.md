@@ -16,7 +16,8 @@ Updated: 2026-11-25, after the 3.0.0 release (owner: "release 3.0.0")
   and `nightly-2026-11-04` (pinned in `rust-toolchain.toml` and release.yml, the default); gnullvm dropped
 - Measured for 3.0.0 against 2.0.2 built the same way: CLI 915,968 B (+8.3%), DLL 583,680 B (+8.9%); cold start
   3.2–3.9 ms (4.1–4.4), steady 192–223 Mops/s (166–181); no corpus module changes verdict (release.md)
-- Workspace letters: C50 (48afb6e) and H42's wasmrt answer (b668926) committed in the workspace repo, not pushed
+- Workspace letters: C50 (48afb6e), H42's wasmrt answer (b668926) and C51 (3df888d, the interop split for wazmrt to
+  mirror) — all pushed to the workspace repo (2026-11-25)
 
 ## Review
 - The 3.0.0 release review over `v2.0.2..f17127e`: five classes (basic R1, licensing L1, notes) fixed, re-reviewed
@@ -31,7 +32,7 @@ Updated: 2026-11-25, after the 3.0.0 release (owner: "release 3.0.0")
    (R6); the §3.7 limits rows after wazmrt answers C50
 
 ## Waiting on owner
-- the workspace repo's push; the calls in Next 1
+- the calls in Next 1; wazmrt's answer to C50 and its mirror of C51
 
 ## Read next
 - open-work.md: the open list
