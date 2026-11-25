@@ -10,12 +10,12 @@ Updated: 2026-11-25, releasing 3.0.0 (owner: "release 3.0.0") — notes merged; 
 ## Now
 - 3.0.0's content: wasmtime's implementation limits (the measured-needed set, owner 2026-11-24); decode and
   validation refusals in wasmtime's words, almost always at its offset (wasmparser 0.263's); one-pass load (`module::parse` /
-  `Parsed::validate` / `decode_validated`); the efficiency review (calls ~3× faster, memory roughly halved); the
+  `Parsed::validate` / `decode_validated`); the efficiency review (function calls ~3× faster, memory roughly halved); the
   CLI's safe writes (temp + rename, a new file's usual mode) and `pin`'s OS lock; the C ABI store guard
 - Toolchains (owner, 2026-11-24): gnu on both OSes, the same versions — stable 1.100.0 (the MSRV, `rust-version`)
   and `nightly-2026-11-04` (pinned in `rust-toolchain.toml` and release.yml, the default); gnullvm dropped
 - Measured for 3.0.0 against 2.0.2 built the same way: CLI 915,968 B (+8.3%), DLL 583,680 B (+8.9%); cold start
-  3.2–3.9 ms (4.1–4.4), steady 192–223 Mops/s (166–181); no module changes verdict
+  3.2–3.9 ms (4.1–4.4), steady 192–223 Mops/s (166–181); no corpus module changes verdict
 - W2 performed and closed 2026-11-24; W4 (the cargo token) revoked
 - Workspace letters: C50 (48afb6e) and H42's wasmrt answer (b668926) committed in the workspace repo, not pushed
 

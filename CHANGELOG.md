@@ -25,8 +25,9 @@ Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)
 Tested on: Ubuntu 26.04.1 LTS under WSL (`linux-x64`)
 Other platforms: not yet tested.
 
-Measured against 2.0.2 built today the same way: no module changes verdict in either direction (the
-behaviour corpus, and 30,023 accepted pairs over wasmtk's corpus), the spec testsuite passes
+Measured against 2.0.2 built today the same way: in the behaviour corpus and over wasmtk's corpus
+(30,023 accepted pairs) no module changes verdict in either direction (the changes below are on modules
+those corpora do not contain), the spec testsuite passes
 64,603 / 0 / 0 over 288 files on both platforms above, and 2.0.2's integration tests pass against
 this release. The CLI is 915,968 bytes (2.0.2: 845,824, +8.3%) and the C ABI DLL 583,680 bytes
 (536,064, +8.9%): the growth is wasmtime's refusal sentences and limits, the one-pass load beside the
@@ -59,10 +60,11 @@ always, the byte wasmtime names, in its words.
 - **Decoding and validation in one pass**, as wasmtime reads a module: `module::decode_validated`
   (or `module::parse`, then `Parsed::validate`, with the module's structure readable in between)
   reads the structure, validates every section outside the code, then decodes each function body
-  one instruction at a time, checking each instruction as soon as it is read. It accepts exactly
-  what `decode` then `validate_with_features` accepts (both remain); where a module has more than
-  one fault, it reports the one wasmtime reports — in a body ill-typed at one byte and malformed
-  at the next, the type error. The CLI, the C ABI and the `.wast` runner use it. On 4,000 one-byte
+  one instruction at a time, checking each instruction as soon as it is read. It is meant to accept
+  exactly what `decode` then `validate_with_features` accepts (both remain), and gave the same
+  verdict and the same module on all 8,520 corpus and corrupted cases tested; where a module has
+  more than one fault, it reports, as wasmtime does, an ill-typed instruction before a malformed one
+  later in the same body. The CLI, the C ABI and the `.wast` runner use it. On 4,000 one-byte
   corruptions of the behaviour corpus, wasmrt's refusal names the offset wasm-tools 1.263 names
   (wasmparser, the parser wasmtime uses) in 3,165, against 3,056 before this change (with this
   release's decode work already in); loading takes the same time or a little less.
@@ -99,7 +101,8 @@ always, the byte wasmtime names, in its words.
   binary. Now an unreadable DB is refused, `pin` holds the operating system's lock on `<db>.lock`
   across its read and write (released when the run ends, however it ends; the file stays beside the
   DB; on a filesystem without file locks, `pin --db` refuses), and both commands write a regular file
-  whole or not at all (a temporary file renamed over it, keeping its permissions and, on Unix, its
+  whole or not at all (a temporary file renamed over it — except where, on Unix, the file's owner
+  cannot be kept, below; keeping its permissions and, on Unix, its
   owner — a new file gets the usual mode; a symlink is written through, and a dangling one is
   refused; a read-only file is refused on every OS; a device such as `/dev/null` is written in
   place). The file is replaced, so another hard link to it keeps the old contents, and the file's
@@ -142,8 +145,9 @@ always, the byte wasmtime names, in its words.
   wasm-tools on 4,000 one-byte corruptions of the behaviour corpus: the decode-stage refusals then
   agreed in words and offset except where wasmtime's validator reaches a function body's type error
   first — the difference the one-pass load (above) removes. Some still differ: 234 of the 4,000 in
-  offset (mainly end-of-file positions, refusals outside a body, which carry no offset yet, and the
-  memory-count limit wasmrt does not adopt), and 9 in wording.
+  offset (mainly end-of-file positions, validation refusals outside a function body, which carry
+  neither an offset nor wasmtime's words yet, and the memory-count limit wasmrt does not adopt), and 9
+  in wording.
 - **A function body's decode error waits for the rest of the module**, as in wasmtime: a structural
   fault later in the file (a section past the end, a count mismatch) is reported first. `else`,
   `catch` and `delegate` outside their block are refused while decoding, and a constant expression
@@ -162,7 +166,8 @@ always, the byte wasmtime names, in its words.
   (the store guard). An opaque type to C; nothing to change.
 - **Faster calls, a faster start, and far less memory** (an efficiency review, 2026-11-24; measured on
   one Windows x64 machine, release build). A call reuses its frame's buffers instead of allocating
-  eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s. The cold start on the 48 KB benchmark
+  eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s (a call-heavy loop; plain loops gain
+  10–20%). The cold start on the 48 KB benchmark
   module 3.1–3.3 ms → 2.35 ms; the steady loop 243–254 → 255–278 Mops/s. The CLI decodes a module once
   (it decoded the bare-path form twice), links WASI without copying the module, and does not free an
   instance it is about to exit from (about 1.5 ms off a small WASI program's run). An instance no
