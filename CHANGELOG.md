@@ -21,6 +21,10 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ### Changed
 
+- **Built for speed as well as size: `opt-level = "s"`** (was `"z"`; owner's decision). Measured on
+  win-x64, three A/B rounds: the steady loop 211–245 → 298–357 Mops/s, the 48 KB module's cold
+  start 3.0–3.4 → 2.7–3.1 ms; the CLI 915,968 → 1,018,368 bytes (+11.2%), the C ABI DLL 583,680 →
+  648,704 bytes (+11.1%).
 - **C ABI: using the linker from a host callback is now documented and tested as sound** — even the
   linker an instance is being made from, from its start function (defining into it, redefining,
   deleting it). `wasmrt_linker_instantiate` borrows the linker only to resolve the imports, and

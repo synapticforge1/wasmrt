@@ -26,7 +26,7 @@ all = "warn"
 # Size is a first-class goal (cmem/design-decisions.md size levers). Applied to the
 # shipped artifacts; pick per-artifact tuning later (ReleaseSmall-equivalent).
 [profile.release]
-opt-level = "z"
+opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
