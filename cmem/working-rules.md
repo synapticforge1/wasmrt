@@ -207,7 +207,8 @@ The rule in full: `../workspace/cmem/tooling-rules.md` rule 15. For wasmrt:
   and wazmrt co-own interop.md"). The two copies stay byte-identical, so a split or a wrap is ONE edit made in
   both, never by writing into wazmrt's tree. SPLIT 2026-11-25 (owner: "perform the work on W3. wazmrt will follow
   suit"): every section moved verbatim into 12 files, each under 25 KB; then (owner: "fix item 2") the 22 tables
-  with a row over 200 characters became lists and 4 long lines were wrapped, no word changed. They now hold every
+  with a row over 200 characters became lists and 4 long lines were wrapped, no word of a cell or line changed (the
+  first column's name is not repeated; each bullet leads with its cell). They now hold every
   limit, so they are no longer an exception here; ⏳ wazmrt mirrors both.
 - `best-practices-shared.md` line 114 (201 characters): the workspace's ★ rules, copied unchanged under
   their stamp (owner, 2026-11-19: keep the ★ copy as it is).

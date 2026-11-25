@@ -79,7 +79,9 @@ wazmrt will follow suit"*): no row, status or wording changed, so the CONTRACT V
 "interop.md §N" means the section, in the part listed here. Later the same day (owner: *"fix item 2"*) every table
 with a row over 200 characters became a list — each row a bullet led by its first cell, each other cell a sub-bullet
 labelled with its column header, a `<br>` a line break — and every other line over 200 was wrapped at a space, so each
-part holds the memory guide's line limit; no word changed. ⏳ **PENDING MIRROR** of both in wazmrt's copy (§1).
+part holds the memory guide's line limit. No word of any cell or line changed; only each converted table's FIRST
+column name (`version`, `#`, `flag`, `rule`, …) is not repeated, since each bullet leads with that column's cell.
+⏳ **PENDING MIRROR** of both in wazmrt's copy (§1).
 
 | sections | file |
 | --- | --- |
