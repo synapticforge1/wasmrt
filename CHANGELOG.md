@@ -33,7 +33,7 @@ this release. The CLI is 915,968 bytes (2.0.2: 845,824, +8.3%) and the C ABI DLL
 (536,064, +8.9%): the growth is wasmtime's refusal sentences and limits, the one-pass load beside the
 two-pass API it keeps, and the CLI's safe file writes. The cold start on the 48 KB benchmark module is
 3.2–3.9 ms (2.0.2: 4.1–4.4) and the steady loop 192–223 Mops/s (166–181); a 105-byte module's cold
-start is within noise (6–8 µs). These are three A/B rounds in one session; absolute figures move with
+start is within noise (5–8 µs). These are three A/B rounds in one session; absolute figures move with
 the machine between sessions (the efficiency figures below are another session's), so compare within a
 pair.
 
@@ -94,7 +94,8 @@ always, the byte wasmtime names, in its words.
   (the types had to be equal); `array.new_fixed` in unreachable code naming more operands than the
   body had instructions was refused. Both are accepted, as wasm-tools accepts them. And
   `array.new_fixed` in unreachable code no longer counts through every operand it names: a 400 KB
-  body of them took 116 s to validate, and takes 0.14 s.
+  body of them, quadratic in 2.0.2 too, took 116 s in an unreleased build of this one, and takes
+  0.14 s.
 - **The CLI never destroys a file it was given.** `wasmrt pin --db` treated a pin DB it could not
   read (a UTF-16 file, a permission error) as empty and overwrote it, and concurrent `pin` runs could
   drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the
