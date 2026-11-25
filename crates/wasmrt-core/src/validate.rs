@@ -164,7 +164,7 @@ pub fn validate(module: &Module) -> ValidateResult<()> {
 /// With [`Features::all`] every gate below is a no-op, which is why enabling this cost the
 /// spec-suite numbers nothing.
 pub fn validate_with_features(module: &Module, features: &Features) -> ValidateResult<()> {
-    let refs = module_checks(module, features)?;
+    let refs = module_checks(module, features, None)?;
     // Function bodies last, so `refs` is complete before any body's C.refs check.
     for (n, (&type_index, code)) in module.functions.iter().zip(&module.code).enumerate() {
         let ft = module.func_sig(type_index).ok_or(ValidateError::UndefinedType)?;
@@ -176,13 +176,40 @@ pub fn validate_with_features(module: &Module, features: &Features) -> ValidateR
             located(e, module.imported_func_count() + n as u32)
         })?;
     }
-    Ok(())
+    data_checks(module, features, None)
 }
 
-/// Everything [`validate_with_features`] checks outside the function bodies, in its order; returns the
-/// module's C.refs (the functions a body may name in `ref.func`). Run BEFORE any body, as wasmtime
-/// validates every section before it validates a body (`module::decode_validated` streams them after).
-pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateResult<Vec<bool>> {
+/// Where a just-parsed module's entities begin, and its bytes: the offsets at which wasmtime reports a
+/// module-level refusal (W5, 2026-11-25). `None` for a [`Module`] that was not just parsed, whose
+/// refusals then carry their words but no offset.
+pub(crate) struct At<'a> {
+    pub(crate) pos: &'a crate::module::Positions,
+    pub(crate) bytes: &'a [u8],
+}
+
+/// Note a module-level refusal's offset, where it is known.
+fn mark(at: Option<usize>) {
+    if let Some(p) = at {
+        note_offset(u32::try_from(p).unwrap_or(u32::MAX));
+    }
+}
+
+/// The offset just past the LEB128 number that begins at `p` (an element segment's item, read again for
+/// its position).
+fn past_leb(bytes: &[u8], p: usize) -> usize {
+    let mut q = p;
+    while bytes.get(q).is_some_and(|b| b & 0x80 != 0) {
+        q += 1;
+    }
+    q + 1
+}
+
+/// Everything [`validate_with_features`] checks outside the function bodies and the data segments, in
+/// wasmtime's order — the sections': tables, memories, tags, globals, exports, start, elements (W5);
+/// returns the module's C.refs (the functions a body may name in `ref.func`). Run BEFORE any body, as
+/// wasmtime validates each section before the code section after it; the data segments come after the
+/// bodies ([`data_checks`]), as the data section does. `at`: where the module's entities begin.
+pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At<'_>>) -> ValidateResult<Vec<bool>> {
     // Cleared on ENTRY, not on success: every failure below this point that is not inside a
     // function body must report "no location" rather than inherit the previous module's.
     reset_failure();
@@ -213,126 +240,38 @@ pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateRes
     // validate: an accept-invalid, and the rule it broke is the whole point of `C.refs`.
     // wasmtime 47 agrees, offset for offset.
 
-    // Global init const-exprs: each must produce exactly the declared type. Defined globals
-    // occupy the tail of the global space.
+    let pos = at.map(|a| a.pos);
     let n_imported_globals = (module.globals.len() - module.global_inits.len()) as u32;
-    for (i, init_expr) in module.global_inits.iter().enumerate() {
-        let self_index = n_imported_globals + i as u32;
-        let expected = module.globals[self_index as usize].content;
-        validate_const_expr(module, init_expr, expected, self_index, Some(&mut refs), features)?;
-    }
-
     let all_globals = module.globals.len() as u32;
+    let min_over_max = || say(|| "size minimum must not be greater than maximum".into());
 
-    // Element segments.
-    for elem in &module.elements {
-        for &fi in &elem.funcs {
-            if module.func_type(fi).is_none() {
-                return Err(ValidateError::UndefinedFunc);
-            }
-            if (fi as usize) < n_funcs {
-                refs[fi as usize] = true; // a segment entry declares the function
-            }
-        }
-        for ex in &elem.exprs {
-            // ⚠️ Every global, not just the imported ones. An element segment is decoded AFTER
-            // the global section, so a `global.get` in one of its item expressions can name a
-            // *defined* global — `global.wast`'s definition-order module does exactly that
-            // (`(elem (table $t) (global.get $g3) funcref (global.get $gf))`) and was refused.
-            // The segment's OFFSET expression below already used `all_globals`; the item
-            // expressions did not, and the two are read from the same section.
-            validate_const_expr(module, ex, elem.elem_type, all_globals, Some(&mut refs), features)?;
-        }
-        if elem.mode == crate::module::ElementMode::Active {
-            let ti = elem.table_index as usize;
-            if ti >= module.tables.len() {
-                return Err(ValidateError::UndefinedTable);
-            }
-            let tet = module.tables[ti].element;
-            // §3.5.9: the segment's element type must be a SUBTYPE of the table's, which
-            // is directional and does care about nullability.
-            //
-            // This used to compare families with nullability normalized away. That was
-            // harmless only because a non-nullable table element type could not occur —
-            // the decoder rejected the `0x40` table-with-initializer form outright. Once
-            // that form decodes (2026-08-06), `(table 1 (ref func))` is expressible and a
-            // nullable `funcref` segment must no longer satisfy it.
-            if !subtype_of(module, elem.elem_type, tet) {
-                return Err(ValidateError::TypeMismatch);
-            }
-            // The offset produces the TABLE's index type — `i64` on a 64-bit table
-            // (table64), `i32` otherwise. Exactly the rule the data-segment loop below
-            // already applied for memory64; hardcoding `i32` here is what made
-            // `(elem (table $t) (i64.const 1) …)` a TypeMismatch and took every assertion
-            // in `table_get64.wast` / `table_set64.wast` with it.
-            let off_ty = if module.tables[ti].limits.is64 { V::I64 } else { V::I32 };
-            validate_const_expr(module, &elem.offset_expr, off_ty, all_globals, None, features)?;
-        }
-    }
-
-    // Data segments: an active segment targets an existing memory; its offset const-expr
-    // produces the memory's index type (memory64: i64, else i32).
-    for seg in &module.data {
-        if !seg.active {
-            continue;
-        }
-        let mi = seg.mem_index as usize;
-        if mi >= module.memories.len() {
-            return Err(ValidateError::MissingMemory);
-        }
-        let off_ty = if module.memories[mi].limits.is64 {
-            V::I64
-        } else {
-            V::I32
-        };
-        validate_const_expr(module, &seg.offset_expr, off_ty, all_globals, None, features)?;
-    }
-
-    // Limits (§3.2.5): min <= max, each bounded by the type ceiling; a shared memory must
-    // declare a max.
-    for mt in &module.memories {
-        // custom-page-sizes: only 1 byte and 64 KiB. (An exponent that is not a size at all was
-        // refused by the decoder as malformed.)
-        let e = mt.page_size_log2();
-        if e != 0 && e != crate::module::DEFAULT_PAGE_SIZE_LOG2 {
-            return Err(ValidateError::InvalidPageSize);
-        }
-        // The ceiling depends on the page size — the one rule `memory.grow` also applies.
-        let ceiling = crate::module::max_pages(mt.limits.is64, e);
-        if mt.limits.min > ceiling {
-            return Err(ValidateError::InvalidLimits);
-        }
-        match mt.limits.max {
-            Some(mx) => {
-                if mx > ceiling || mt.limits.min > mx {
-                    return Err(ValidateError::InvalidLimits);
-                }
-            }
-            None => {
-                if mt.limits.shared {
-                    return Err(ValidateError::InvalidLimits);
-                }
-            }
-        }
-    }
-    for tt in &module.tables {
+    // Limits (§3.2.5): min <= max, each bounded by the type ceiling — each refusal at the table's or
+    // memory's entry, in wasmparser's order (its `check_limits` first).
+    for (i, tt) in module.tables.iter().enumerate() {
+        let entry = pos.and_then(|p| p.tables.get(i).copied());
+        let here = || mark(entry.map(|e| e.0));
         // §3.2.4: a table type's element type is a REFERENCE type. The decoder refuses a numeric
         // one as malformed (§5.3.9, `read_table_type`) — this is the second stage, for a [`Module`]
         // nobody decoded: the fields are public, and a `v128`-element table type-checks its way
         // through `table.get`/`table.set` and hands the guest the engine's null sentinel.
         if !tt.element.is_ref() {
+            here();
             return Err(ValidateError::TypeMismatch);
         }
+        if let Some(mx) = tt.limits.max
+            && tt.limits.min > mx {
+                here();
+                min_over_max();
+                return Err(ValidateError::InvalidLimits);
+            }
         // Limits are decoded as u64 whatever the index type, so a 32-bit table's bounds must be
         // held to 32 bits here — wasm-tools: "table size must be at most 0xffffffff entries".
         let ceiling = if tt.limits.is64 { u64::MAX } else { u64::from(u32::MAX) };
         if tt.limits.min > ceiling || tt.limits.max.is_some_and(|mx| mx > ceiling) {
+            here();
+            say(|| alloc::format!("table size must be at most {ceiling:#x} entries"));
             return Err(ValidateError::InvalidLimits);
         }
-        if let Some(mx) = tt.limits.max
-            && tt.limits.min > mx {
-                return Err(ValidateError::InvalidLimits);
-            }
         // A table's initializer expression must produce its element type (function-references).
         //
         // ⚠️⚠️ **Only the IMPORTED globals are in scope here, and the reason is section order,
@@ -353,7 +292,38 @@ pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateRes
                 n_imported_globals,
                 Some(&mut refs),
                 features,
+                entry.and_then(|e| e.1),
             )?;
+        }
+    }
+    for (i, mt) in module.memories.iter().enumerate() {
+        let here = || mark(pos.and_then(|p| p.mems.get(i).copied()));
+        if let Some(mx) = mt.limits.max
+            && mt.limits.min > mx {
+                here();
+                min_over_max();
+                return Err(ValidateError::InvalidLimits);
+            }
+        // custom-page-sizes: only 1 byte and 64 KiB. (An exponent that is not a size at all was
+        // refused by the decoder as malformed.)
+        let e = mt.page_size_log2();
+        if e != 0 && e != crate::module::DEFAULT_PAGE_SIZE_LOG2 {
+            here();
+            say(|| "invalid custom page size".into());
+            return Err(ValidateError::InvalidPageSize);
+        }
+        // The ceiling depends on the page size — the one rule `memory.grow` also applies.
+        let ceiling = crate::module::max_pages(mt.limits.is64, e);
+        if mt.limits.min > ceiling || mt.limits.max.is_some_and(|mx| mx > ceiling) {
+            here();
+            say(|| alloc::format!("memory size must be at most {ceiling:#x} {}-byte pages", 1u64 << e));
+            return Err(ValidateError::InvalidLimits);
+        }
+        // A shared memory must declare a max.
+        if mt.limits.shared && mt.limits.max.is_none() {
+            here();
+            say(|| "shared memory must have maximum size".into());
+            return Err(ValidateError::InvalidLimits);
         }
     }
 
@@ -371,6 +341,15 @@ pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateRes
         }
     }
 
+    // Global init const-exprs: each must produce exactly the declared type. Defined globals
+    // occupy the tail of the global space.
+    for (i, init_expr) in module.global_inits.iter().enumerate() {
+        let self_index = n_imported_globals + i as u32;
+        let expected = module.globals[self_index as usize].content;
+        let init_at = pos.and_then(|p| p.global_inits.get(i).copied());
+        validate_const_expr(module, init_expr, expected, self_index, Some(&mut refs), features, init_at)?;
+    }
+
     // Export names must be pairwise distinct (§3.4.10).
     //
     // ⚠️⚠️ Written as a pairwise loop, this is O(n²) over a GUEST-CONTROLLED count, and the cost
@@ -379,20 +358,116 @@ pub(crate) fn module_checks(module: &Module, features: &Features) -> ValidateRes
     // is a denial of service reachable from a module that is otherwise entirely valid. A set
     // makes it O(n log n) — 128,000 exports now costs no more than reading them.
     let mut seen: BTreeSet<&str> = BTreeSet::new();
-    for e in &module.exports {
+    for (i, e) in module.exports.iter().enumerate() {
         if !seen.insert(e.name.as_str()) {
+            mark(pos.and_then(|p| p.exports.get(i).copied()));
+            say(|| alloc::format!("duplicate export name `{}` already defined", e.name));
             return Err(ValidateError::DuplicateExport);
         }
     }
 
-    // Start function (§3.5.5): a defined/imported function of type [] → [].
+    // Start function (§3.5.5): a defined/imported function of type [] → [], refused at the section.
     if let Some(si) = module.start {
-        let ft = module.func_type(si).ok_or(ValidateError::UndefinedFunc)?;
+        let here = || mark(pos.map(|p| p.start));
+        let Some(ft) = module.func_type(si) else {
+            here();
+            say(|| alloc::format!("unknown function {si}: func index out of bounds"));
+            return Err(ValidateError::UndefinedFunc);
+        };
         if !ft.params.is_empty() || !ft.results.is_empty() {
+            here();
+            say(|| "invalid start function type".into());
             return Err(ValidateError::InvalidStartFunction);
         }
     }
+
+    // Element segments, each as wasmparser checks one: its table, its type against the table's, its
+    // offset, then its items.
+    for (k, elem) in module.elements.iter().enumerate() {
+        let ep = pos.and_then(|p| p.elems.get(k));
+        let seg = || mark(ep.map(|e| e.at));
+        if elem.mode == crate::module::ElementMode::Active {
+            let ti = elem.table_index as usize;
+            if ti >= module.tables.len() {
+                seg();
+                say(|| alloc::format!("unknown table {ti}: table index out of bounds"));
+                return Err(ValidateError::UndefinedTable);
+            }
+            let tet = module.tables[ti].element;
+            // §3.5.9: the segment's element type must be a SUBTYPE of the table's, which
+            // is directional and does care about nullability.
+            //
+            // This used to compare families with nullability normalized away. That was
+            // harmless only because a non-nullable table element type could not occur —
+            // the decoder rejected the `0x40` table-with-initializer form outright. Once
+            // that form decodes (2026-08-06), `(table 1 (ref func))` is expressible and a
+            // nullable `funcref` segment must no longer satisfy it.
+            //
+            // (No words: wasmparser names the two types by its `ty_to_str`, whose spelling of every
+            // reference type is not proven to be `wat_name`'s.)
+            if !subtype_of(module, elem.elem_type, tet) {
+                seg();
+                return Err(ValidateError::TypeMismatch);
+            }
+            // The offset produces the TABLE's index type — `i64` on a 64-bit table
+            // (table64), `i32` otherwise. Exactly the rule the data-segment loop
+            // already applied for memory64; hardcoding `i32` here is what made
+            // `(elem (table $t) (i64.const 1) …)` a TypeMismatch and took every assertion
+            // in `table_get64.wast` / `table_set64.wast` with it.
+            let off_ty = if module.tables[ti].limits.is64 { V::I64 } else { V::I32 };
+            validate_const_expr(module, &elem.offset_expr, off_ty, all_globals, None, features, ep.map(|e| e.offset_expr))?;
+        }
+        // Each item's offset: just past the items' count, then item by item.
+        let mut item_at = at.zip(ep).map(|(a, e)| past_leb(a.bytes, e.items));
+        for &fi in &elem.funcs {
+            if module.func_type(fi).is_none() {
+                mark(item_at);
+                say(|| alloc::format!("unknown function {fi}: func index out of bounds"));
+                return Err(ValidateError::UndefinedFunc);
+            }
+            if (fi as usize) < n_funcs {
+                refs[fi as usize] = true; // a segment entry declares the function
+            }
+            item_at = at.zip(item_at).map(|(a, p)| past_leb(a.bytes, p));
+        }
+        for ex in &elem.exprs {
+            // ⚠️ Every global, not just the imported ones. An element segment is decoded AFTER
+            // the global section, so a `global.get` in one of its item expressions can name a
+            // *defined* global — `global.wast`'s definition-order module does exactly that
+            // (`(elem (table $t) (global.get $g3) funcref (global.get $gf))`) and was refused.
+            // The segment's OFFSET expression above already used `all_globals`; the item
+            // expressions did not, and the two are read from the same section.
+            validate_const_expr(module, ex, elem.elem_type, all_globals, Some(&mut refs), features, item_at)?;
+            item_at = item_at.map(|p| p + ex.len());
+        }
+    }
     Ok(refs)
+}
+
+/// The data segments' checks, which wasmtime makes after the function bodies (the data section follows
+/// the code section): an active segment targets an existing memory — refused at the segment — and its
+/// offset const-expr produces the memory's index type (memory64: i64, else i32).
+pub(crate) fn data_checks(module: &Module, features: &Features, at: Option<&At<'_>>) -> ValidateResult<()> {
+    let all_globals = module.globals.len() as u32;
+    for (k, seg) in module.data.iter().enumerate() {
+        if !seg.active {
+            continue;
+        }
+        let dp = at.and_then(|a| a.pos.data.get(k).copied());
+        let mi = seg.mem_index as usize;
+        if mi >= module.memories.len() {
+            mark(dp.map(|d| d.0));
+            say(|| alloc::format!("unknown memory {mi}: memory index out of bounds"));
+            return Err(ValidateError::MissingMemory);
+        }
+        let off_ty = if module.memories[mi].limits.is64 {
+            V::I64
+        } else {
+            V::I32
+        };
+        validate_const_expr(module, &seg.offset_expr, off_ty, all_globals, None, features, dp.map(|d| d.1))?;
+    }
+    Ok(())
 }
 
 /// Where the last validation failure was, and what it was about.
@@ -950,13 +1025,70 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
 /// Type-check a constant expression (§3.3.7 + extended-const `i32`/`i64` add/sub/mul). It
 /// must produce exactly one value of `expected`. A `global.get x` may reference only a
 /// *prior* immutable global. (v128.const and GC constant instructions land in v0.5.x.)
+///
+/// `at`: where the expression begins in the module. A refusal is noted where wasmtime reports it — at
+/// the instruction refused, and for the value the expression leaves, at its `end` (W5) — in its words.
 fn validate_const_expr(
+    module: &Module,
+    expr: &[u8],
+    expected: V,
+    self_index: u32,
+    refs: Option<&mut Vec<bool>>,
+    features: &Features,
+    at: Option<usize>,
+) -> ValidateResult<()> {
+    let mut op_at = 0;
+    check_const_expr(module, expr, expected, self_index, refs, features, &mut op_at)
+        .inspect_err(|_| mark(at.map(|a| a + op_at)))
+}
+
+/// wasmparser's visitor name for an instruction (`i32.add` → `visit_i32_add`), which its
+/// constant-expression check prints; `None` where the two spellings are not known to agree.
+fn visit_name(i: &Instr) -> Option<alloc::string::String> {
+    if i.op == Op::SelectT {
+        let one = matches!(&i.imm, Imm::SelectTypes(t) if t.len() == 1);
+        return Some(if one { "visit_typed_select" } else { "visit_typed_select_multi" }.into());
+    }
+    let name = i.op.text_name();
+    // a family tag has no name of its own; wasmparser splits ref.test / ref.cast / br_on_cast by nullability
+    if name.is_empty() || name.starts_with("ref.test") || name.starts_with("ref.cast") || name.starts_with("br_on_cast") {
+        return None;
+    }
+    Some(alloc::format!("visit_{}", name.replace('.', "_")))
+}
+
+/// The instruction at `op_at` in `expr` is not constant: wasmparser's words, naming it.
+fn not_const(expr: &[u8], op_at: usize) -> ValidateError {
+    if let Some(name) = expr.get(op_at..).and_then(opcode::first_instr).as_ref().and_then(visit_name) {
+        say(|| alloc::format!("constant expression required: non-constant operator: {name}"));
+    }
+    ValidateError::ConstantExpressionRequired
+}
+
+/// Pop an operand that must be `want`, in wasmparser's words when it is missing or of another type.
+fn pop_const_operand(stack: &mut Vec<V>, want: V) -> ValidateResult<()> {
+    match stack.pop() {
+        None => {
+            say(|| alloc::format!("type mismatch: expected {} but nothing on stack", want.wat_name()));
+            Err(ValidateError::TypeMismatch)
+        }
+        Some(got) if got != want => {
+            say(|| alloc::format!("type mismatch: expected {}, found {}", want.wat_name(), got.wat_name()));
+            Err(ValidateError::TypeMismatch)
+        }
+        Some(_) => Ok(()),
+    }
+}
+
+/// [`validate_const_expr`]'s check; `op_at` is left at the instruction it stopped at.
+fn check_const_expr(
     module: &Module,
     expr: &[u8],
     expected: V,
     self_index: u32,
     mut refs: Option<&mut Vec<bool>>,
     features: &Features,
+    op_at: &mut usize,
 ) -> ValidateResult<()> {
     let mut r = Reader::new(expr);
     let mut stack: Vec<V> = Vec::new();
@@ -980,6 +1112,7 @@ fn validate_const_expr(
         Ok(())
     };
     loop {
+        *op_at = r.pos();
         match r.read_byte()? {
             0x0b => break, // end
             0x41 => {
@@ -1002,9 +1135,11 @@ fn validate_const_expr(
                 // global.get x — only a prior, immutable global.
                 let gi = r.read_var_u32()?;
                 if gi >= self_index {
+                    say(|| alloc::format!("unknown global {gi}: global index out of bounds"));
                     return Err(ValidateError::UndefinedGlobal);
                 }
                 if module.globals[gi as usize].mutable {
+                    say(|| "constant expression required: global.get of mutable global".into());
                     return Err(ValidateError::ConstantExpressionRequired);
                 }
                 push(&mut stack, module.globals[gi as usize].content)?;
@@ -1020,7 +1155,12 @@ fn validate_const_expr(
                         nullable: true,
                         heap,
                     },
-                )?;
+                )
+                .inspect_err(|_| {
+                    if let HeapType::Concrete(i) | HeapType::Exact(i) = heap {
+                        say(|| alloc::format!("unknown type {i}: type index out of bounds"));
+                    }
+                })?;
                 gate_val_type(vt, features)?;
                 push(&mut stack, vt)?;
             }
@@ -1029,6 +1169,7 @@ fn validate_const_expr(
                 gate(Some(Feature::ReferenceTypes), features)?;
                 let fi = r.read_var_u32()?;
                 if module.func_type(fi).is_none() {
+                    say(|| alloc::format!("unknown function {fi}: function index out of bounds"));
                     return Err(ValidateError::UndefinedFunc);
                 }
                 if let Some(set) = refs.as_deref_mut()
@@ -1159,26 +1300,17 @@ fn validate_const_expr(
                         push(&mut stack, V::I31REF_NN)?;
                     }
                     // Everything else in the 0xFB family is not constant. Refused, not assumed.
-                    _ => return Err(ValidateError::ConstantExpressionRequired),
+                    _ => return Err(not_const(expr, *op_at)),
                 }
             }
-            0x6a..=0x6c => {
-                // i32 add/sub/mul (extended-const)
+            // i32 / i64 add, sub, mul (extended-const): the second operand is popped first, as wasmparser
+            // does, so the operand it names is the one it names
+            op @ (0x6a..=0x6c | 0x7c..=0x7e) => {
                 gate(Some(Feature::ExtendedConst), features)?;
-                let n = stack.len();
-                if n < 2 || stack[n - 1] != V::I32 || stack[n - 2] != V::I32 {
-                    return Err(ValidateError::TypeMismatch);
-                }
-                stack.pop();
-            }
-            0x7c..=0x7e => {
-                // i64 add/sub/mul (extended-const)
-                gate(Some(Feature::ExtendedConst), features)?;
-                let n = stack.len();
-                if n < 2 || stack[n - 1] != V::I64 || stack[n - 2] != V::I64 {
-                    return Err(ValidateError::TypeMismatch);
-                }
-                stack.pop();
+                let t = if op <= 0x6c { V::I32 } else { V::I64 };
+                pop_const_operand(&mut stack, t)?;
+                pop_const_operand(&mut stack, t)?;
+                push(&mut stack, t)?;
             }
             // `v128.const` — the SIMD prefix. The interpreter has evaluated this in a
             // const-expr since v0.6.5, so rejecting it here was a **false rejection**: a
@@ -1187,7 +1319,7 @@ fn validate_const_expr(
             0xfd => {
                 gate(Some(Feature::Simd), features)?;
                 if r.read_var_u32()? != 0x0c {
-                    return Err(ValidateError::ConstantExpressionRequired);
+                    return Err(not_const(expr, *op_at));
                 }
                 r.read_bytes(16)?;
                 push(&mut stack, V::V128)?;
@@ -1196,13 +1328,25 @@ fn validate_const_expr(
             // stay rejected, and the interpreter's `eval_const_expr` rejects them too — so
             // validator and engine agree. That is a missing feature, tracked in
             // `cmem/known-issues.md`, not a disagreement.
-            _ => return Err(ValidateError::ConstantExpressionRequired),
+            _ => return Err(not_const(expr, *op_at)),
         }
     }
-    if stack.len() != 1 || !subtype_of(module, stack[0], expected) {
-        return Err(ValidateError::TypeMismatch);
+    // At the `end`, in wasmparser's order: the value the expression must leave, then nothing else.
+    match stack.last() {
+        None => {
+            say(|| alloc::format!("type mismatch: expected {} but nothing on stack", expected.wat_name()));
+            Err(ValidateError::TypeMismatch)
+        }
+        Some(&got) if !subtype_of(module, got, expected) => {
+            say(|| alloc::format!("type mismatch: expected {}, found {}", expected.wat_name(), got.wat_name()));
+            Err(ValidateError::TypeMismatch)
+        }
+        Some(_) if stack.len() > 1 => {
+            say(|| "type mismatch: values remaining on stack at end of block".into());
+            Err(ValidateError::TypeMismatch)
+        }
+        Some(_) => Ok(()),
     }
-    Ok(())
 }
 
 fn validate_function(
@@ -1330,6 +1474,10 @@ fn default_words(e: &ValidateError, instr: &Instr) {
         return;
     }
     match (e, idx) {
+        // call_ref's type is checked as a heap type, which names it (wasmparser's `check_call_ref_ty`; W5)
+        (ValidateError::UndefinedType, Some(i)) if matches!(instr.op, Op::CallRef | Op::ReturnCallRef) => {
+            say(|| alloc::format!("unknown type {i}: type index out of bounds"));
+        }
         (ValidateError::UndefinedFunc, Some(i)) => say(|| alloc::format!("unknown function {i}: function index out of bounds")),
         (ValidateError::UndefinedTag, Some(i)) => say(|| alloc::format!("unknown tag {i}: tag index out of bounds")),
         (ValidateError::UndefinedData, Some(i)) => say(|| alloc::format!("unknown data segment {i}")),
@@ -1823,11 +1971,13 @@ impl<'a> FuncValidator<'a> {
             Op::Nop => {}
 
             Op::Block | Op::Loop | Op::If => {
+                // The block type first, then `if`'s condition — wasmparser's order (W5: an `if` naming no
+                // type over a non-i32 condition is "unknown type", not a type mismatch).
+                let bt = expect_block_type(&instr.imm)?;
+                let (pop, push) = self.block_sig(bt)?;
                 if instr.op == Op::If {
                     self.pop_expect(V::I32)?;
                 }
-                let bt = expect_block_type(&instr.imm)?;
-                let (pop, push) = self.block_sig(bt)?;
                 self.pop_vals(&pop)?;
                 let kind = match instr.op {
                     Op::Block => FrameKind::Block,
@@ -2310,8 +2460,16 @@ impl<'a> FuncValidator<'a> {
                 }
             }
             Op::RefEq => {
-                self.pop_expect(V::EQREF)?;
-                self.pop_expect(V::EQREF)?;
+                // wasmparser's `pop_maybe_shared_ref`: any reference first ("expected ref but found i64",
+                // "expected a type but nothing on stack"), then a subtype of eqref (W5). (Its words for the
+                // second — "expected subtype of …" — spell a reference type its own way; not said.)
+                for _ in 0..2 {
+                    if let StackType::Val(t) = self.pop_ref()?
+                        && !subtype_of(self.module, t, V::EQREF) {
+                            note_types(V::EQREF, t);
+                            return Err(ValidateError::TypeMismatch);
+                        }
+                }
                 self.push_val_t(V::I32);
             }
             Op::RefI31 => {
@@ -2633,6 +2791,18 @@ impl<'a> FuncValidator<'a> {
                     return Err(ValidateError::UnsupportedValidation);
                 };
                 let sg = simd_sig(s.sub);
+                // A lane index past its shape's lanes, in wasmparser's words and at its moment (W5): a
+                // lane op's before its operands are popped (after its memarg's checks), a shuffle's after.
+                let lane_out = |lane: u8, lanes: u8| {
+                    if lane >= lanes {
+                        say(|| "SIMD index out of bounds".into());
+                        return Err(ValidateError::Decode(DecodeError::SimdIndexOutOfBounds));
+                    }
+                    Ok(())
+                };
+                if (0x15..=0x22).contains(&s.sub) {
+                    lane_out(s.lane, opcode::simd_lane_count(s.sub))?;
+                }
                 if opcode::simd_is_memory_op(s.sub) {
                     // A memory-touching SIMD op needs a memory to exist, its memarg index in
                     // range (multi-memory), and its alignment within the natural maximum.
@@ -2642,6 +2812,9 @@ impl<'a> FuncValidator<'a> {
                     }
                     self.require_memory(mi)?;
                     self.check_mem_offset(mi, s.mem.offset)?;
+                    if (0x54..=0x5b).contains(&s.sub) {
+                        lane_out(s.lane, opcode::simd_lane_count(s.sub))?;
+                    }
                     // memory64: the address operand is the memory's index type, not the
                     // `i32` baked into `simd_sig`. `pop[0]` is always the address — pop the
                     // trailing v128 value(s) top-first, then it.
@@ -2655,6 +2828,12 @@ impl<'a> FuncValidator<'a> {
                     self.push_vals(sg.push);
                 } else {
                     self.pop_vals(sg.pop)?;
+                    if s.sub == 0x0d {
+                        // i8x16.shuffle: each byte selects one of the two operands' 32 lanes
+                        for b in s.bytes.to_le_bytes() {
+                            lane_out(b, 32)?;
+                        }
+                    }
                     self.push_vals(sg.push);
                 }
             }
@@ -2852,9 +3031,11 @@ impl<'a> FuncValidator<'a> {
             Op::BrOnNonNull => {
                 let lt = self.label_types_at(expect_label(&instr.imm)?)?;
                 let Some((last, init)) = lt.split_last() else {
+                    say(|| "type mismatch: br_on_non_null target has no label types".into());
                     return Err(ValidateError::TypeMismatch);
                 };
                 if !last.is_ref() {
+                    say(|| "type mismatch: br_on_non_null target does not end with heap type".into());
                     return Err(ValidateError::TypeMismatch);
                 }
                 // The reference the branch would carry, in its nullable form.
@@ -4749,6 +4930,97 @@ mod wasmtime_shaped_diagnostic_tests {
         assert_eq!(site.offset, Some(61), "wasmtime reports offset 61 for this module");
         assert_eq!(site.func_index, Some(2));
         assert_eq!((site.expected, site.found), (Some(V::I32), Some(V::F64)));
+    }
+
+    /// 🔒 W5 (2026-11-25): a module-level refusal — a limit, a page size, a constant expression, an
+    /// element's function — at wasmtime's offset and in its words, and the body refusals whose words or
+    /// order differed. Each module is one of the 4,000-corruption study's (two without the name section
+    /// that followed their code); each offset and sentence is what `wasm-tools validate --features all`
+    /// (wasmparser 0.263) printed for it, as given here.
+    #[test]
+    fn module_level_refusals_carry_wasmtimes_offset_and_words() {
+        let h = |b: &[u8]| {
+            let mut m = alloc::vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+            m.extend_from_slice(b);
+            m
+        };
+        let cases: &[(&str, Vec<u8>, u32, &str)] = &[
+            ("a table initializer that leaves nothing — at its `end`", h(&[0x04, 0x09, 0x01, 0x40, 0x00, 0x70, 0x00, 0xb8, 0xd0, 0x70, 0x0b]), 18, "type mismatch: expected funcref but nothing on stack"),
+            ("a global initializer reading a local — at the local.get", h(&[0x06, 0x09, 0x01, 0x7f, 0x00, 0x41, 0x01, 0x20, 0x02, 0x6a, 0x0b]), 15, "constant expression required: non-constant operator: visit_local_get"),
+            ("a global initializer leaving two values", h(&[0x06, 0x09, 0x01, 0x7f, 0x00, 0x41, 0x01, 0x41, 0xe9, 0x6a, 0x0b]), 18, "type mismatch: values remaining on stack at end of block"),
+            ("a global initializer of the wrong type", h(&[0x06, 0x09, 0x01, 0x7f, 0x00, 0x43, 0x01, 0x41, 0x02, 0x6a, 0x0b]), 18, "type mismatch: expected i32, found f32"),
+            ("a table initializer naming no type — at the ref.null", h(&[0x04, 0x09, 0x01, 0x40, 0x00, 0x70, 0x00, 0x01, 0xd0, 0x12, 0x0b]), 16, "unknown type 18: type index out of bounds"),
+            ("a page size of 2^47 — at the memory", h(&[0x05, 0x04, 0x01, 0x08, 0x01, 0x2f]), 11, "invalid custom page size"),
+            ("a shared memory with no maximum — the second memory", h(&[0x05, 0x05, 0x02, 0x00, 0x01, 0x06, 0x01]), 13, "shared memory must have maximum size"),
+            ("a memory's minimum over its maximum", h(&[0x05, 0x04, 0x01, 0x03, 0x1c, 0x01]), 11, "size minimum must not be greater than maximum"),
+            (
+                "an element naming no function — at the index",
+                h(&[0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x04, 0x04, 0x01, 0x70, 0x00, 0x02, 0x09, 0x07, 0x01, 0x00, 0x41, 0x01, 0x0b, 0x01, 0x71, 0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b]),
+                32,
+                "unknown function 113: func index out of bounds",
+            ),
+            // the body refusals: an operand's words, and wasmparser's order of checks
+            ("ref.eq on an empty stack", h(&[0x01, 0x05, 0x01, 0x60, 0x01, 0x6e, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00, 0xd3]), 24, "type mismatch: expected a type but nothing on stack"),
+            (
+                "ref.eq on an i64",
+                h(&[0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x10, 0x01, 0x0e, 0x00, 0x42, 0x00, 0x42, 0x00, 0x42, 0x00, 0xd3, 0x00, 0xfc, 0x13, 0x1a, 0x1a, 0x0b]),
+                29,
+                "type mismatch: expected ref but found i64",
+            ),
+            (
+                "an `if` naming no type, over an f32: the type first",
+                h(&[0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7e, 0x7e, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0e, 0x01, 0x0c, 0x00, 0x42, 0x01, 0x42, 0x02, 0x42, 0x03, 0xb5, 0x04, 0xfc, 0x13, 0x0b]),
+                32,
+                "unknown type: type index out of bounds",
+            ),
+            (
+                "call_ref naming no type",
+                h(&[0x01, 0x09, 0x02, 0x60, 0x00, 0x00, 0x60, 0x01, 0x64, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x0a, 0x08, 0x01, 0x06, 0x00, 0x20, 0x00, 0x14, 0xf8, 0x0b]),
+                30,
+                "unknown type 1528: type index out of bounds",
+            ),
+            (
+                "br_on_non_null to a label of i64s",
+                h(&[0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7e, 0x7e, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0e, 0x01, 0x0c, 0x00, 0x42, 0x00, 0xd6, 0x00, 0x42, 0x00, 0x42, 0x00, 0xfc, 0x13, 0x0b]),
+                27,
+                "type mismatch: br_on_non_null target does not end with heap type",
+            ),
+            (
+                "a shuffle lane past 31, over one operand: the operands first",
+                h(&[
+                    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x2b, 0x01, 0x29, 0x00, 0xfd, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0x8d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xae, 0x01, 0x0b,
+                ]),
+                42,
+                "type mismatch: expected v128 but nothing on stack",
+            ),
+        ];
+        for (what, bytes, offset, words) in cases {
+            let r = crate::module::decode_validated(bytes, &Features::all());
+            assert!(matches!(r, Err(crate::module::LoadError::Invalid(_))), "{what}: {r:?}");
+            assert_eq!(last_failure_site().offset, Some(*offset), "{what}");
+            assert_eq!(last_failure_message().as_deref(), Some(*words), "{what}");
+        }
+    }
+
+    /// A shuffle's lane index past 31 is INVALID, not malformed (`simd_lane.wast`'s `assert_invalid`
+    /// "invalid lane index"): refused by the validator, in wasmparser's words, at the instruction (W5).
+    #[test]
+    fn a_lane_index_past_its_shape_is_invalid_not_malformed() {
+        let shuffle = |lane: u8| {
+            let lanes = alloc::vec![lane; 16].iter().map(u8::to_string).collect::<alloc::vec::Vec<_>>().join(" ");
+            alloc::format!("(module (func (result v128) (i8x16.shuffle {lanes} (v128.const i64x2 0 0) (v128.const i64x2 0 0))))")
+        };
+        let wasm = |src: &str| crate::wat::assemble(src.as_bytes()).unwrap();
+        assert!(crate::module::decode_validated(&wasm(&shuffle(31)), &Features::all()).is_ok());
+        let bad = wasm(&shuffle(32));
+        assert!(decode(&bad).is_ok(), "decodes: the lane's range is validation's");
+        let r = crate::module::decode_validated(&bad, &Features::all());
+        assert!(matches!(r, Err(crate::module::LoadError::Invalid(_))), "{r:?}");
+        assert_eq!(last_failure_message().as_deref(), Some("SIMD index out of bounds"));
+        let extract = wasm("(module (func (result i32) (i32x4.extract_lane 4 (v128.const i64x2 0 0))))");
+        assert!(matches!(crate::module::decode_validated(&extract, &Features::all()), Err(crate::module::LoadError::Invalid(_))));
+        assert_eq!(last_failure_message().as_deref(), Some("SIMD index out of bounds"));
     }
 
     /// A success must leave nothing behind — the whole record, not just the function index. A stale

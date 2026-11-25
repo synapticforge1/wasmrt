@@ -605,9 +605,14 @@ fn immediate_kind(b: u8) -> ImmKind {
     }
 }
 
-/// Lanes addressable by an extract/replace/lane-load-store lane immediate. An
-/// out-of-range lane must be rejected **at decode**. Not a lane op → 255 (never rejects).
-fn simd_lane_count(sub: u32) -> u8 {
+/// Lanes addressable by an extract/replace/lane-load-store lane immediate. Not a lane op → 255 (never
+/// rejects).
+///
+/// An out-of-range lane is INVALID, not malformed (W5, 2026-11-25): the spec asserts it with
+/// `assert_invalid` ("invalid lane index", 40 times in `simd_lane.wast`), and wasmparser refuses it in
+/// its validator — for `i8x16.shuffle` only after popping both operands. It was refused here, at decode,
+/// from T2 on: the right verdict at the wrong stage, and for a shuffle at the wrong instant.
+pub(crate) fn simd_lane_count(sub: u32) -> u8 {
     match sub {
         0x15 | 0x16 | 0x17 | 0x54 | 0x58 => 16,
         0x18 | 0x19 | 0x1a | 0x55 | 0x59 => 8,
@@ -1010,31 +1015,22 @@ fn decode_simd(r: &mut Reader, sub: u32) -> DecodeResult<Instr> {
         0x54..=0x5b => {
             // v128.load/store lane: memarg + a lane index.
             s.mem = read_mem_arg(r)?;
-            s.lane = r.read_byte()?;
-            if s.lane >= simd_lane_count(sub) {
-                return Err(DecodeError::SimdIndexOutOfBounds);
-            }
+            s.lane = r.read_byte()?; // its range is the validator's (`simd_lane_count`)
         }
         0x0c | 0x0d => {
             // v128.const / i8x16.shuffle: 16 immediate bytes (little-endian).
             let mut v: u128 = 0;
             for i in 0..16u32 {
+                // shuffle's bytes are lane indices selecting from two 16-byte operands, which the
+                // validator holds below 32; v128.const bytes are literal data.
                 let b = r.read_byte()?;
-                // shuffle's bytes are lane indices selecting from two 16-byte operands,
-                // so each must be < 32; v128.const bytes are literal data.
-                if sub == 0x0d && b >= 32 {
-                    return Err(DecodeError::SimdIndexOutOfBounds);
-                }
                 v |= (b as u128) << (i * 8);
             }
             s.bytes = v;
         }
         0x15..=0x22 => {
             // extract_lane / replace_lane.
-            s.lane = r.read_byte()?;
-            if s.lane >= simd_lane_count(sub) {
-                return Err(DecodeError::SimdIndexOutOfBounds);
-            }
+            s.lane = r.read_byte()?; // its range is the validator's (`simd_lane_count`)
         }
         _ => {
             // ⚠️ `sub <= MAX_SIMD_SUB` is NOT the same question as "this sub-opcode exists": the
@@ -1196,6 +1192,14 @@ pub fn decode_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
 /// its bytes running out is the section's end ("unexpected end-of-file").
 pub(crate) fn decode_const_expr(r: &mut Reader) -> DecodeResult<Vec<Instr>> {
     decode_expr_mode(r, true)
+}
+
+/// The first instruction of `bytes`, read as in a constant expression — for its name in a refusal's words
+/// (W5) — or `None` if it does not decode. Notes no failure.
+pub(crate) fn first_instr(bytes: &[u8]) -> Option<Instr> {
+    let mut r = Reader::new(bytes);
+    let mut cur = 0;
+    decode_expr_from(&mut r, &mut cur, true, Some(&mut |_: &Instr| false)).ok()?.into_iter().next()
 }
 
 fn decode_expr_mode(r: &mut Reader, is_const: bool) -> DecodeResult<Vec<Instr>> {

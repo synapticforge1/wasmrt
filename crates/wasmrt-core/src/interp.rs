@@ -5673,7 +5673,9 @@ macro_rules! simd_load_extend {
 /// set; an unknown sub-opcode traps `UnsupportedInstruction`.
 #[allow(clippy::too_many_lines)]
 fn exec_simd(frame: &mut Frame, store: &mut Pools, maps: &IndexMaps, s: crate::opcode::Simd) -> Result<()> {
-    let lane = s.lane as usize;
+    // Held to its shape's lanes: the VALIDATOR refuses one past them (W5; the decoder did until then), so
+    // on a valid module this is the lane itself, and an unvalidated one cannot index past the array.
+    let lane = usize::from(s.lane) % usize::from(crate::opcode::simd_lane_count(s.sub));
     match s.sub {
         // --- const / load / store ---
         0x0c => frame.push(s.bytes), // v128.const

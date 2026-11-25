@@ -697,6 +697,8 @@ struct Decoder {
     /// Merged path: the first code entry whose LOCALS failed to decode — its index, error and offset —
     /// reported in function order, after any error in the bodies before it.
     locals_error: Option<(usize, DecodeError, Option<usize>)>,
+    /// Where each module-level entity begins (for [`Parsed::validate`]).
+    pos: Positions,
 }
 
 /// What the structure-only read leaves for [`decode_validated`]'s body pass.
@@ -705,6 +707,38 @@ struct Deferred {
     body_spans: Vec<(usize, usize)>,
     locals_error: Option<(usize, DecodeError, Option<usize>)>,
     has_data_count: bool,
+    pos: Positions,
+}
+
+/// Where each module-level entity begins, from the start of the module, in index order: the offsets at which
+/// wasmtime reports a refusal of one (W5, 2026-11-25: 49 of the 4,000-corruption study's offset differences
+/// were module-level refusals reported with no offset at all). Recorded on every decode, kept by [`parse`].
+#[derive(Default)]
+pub(crate) struct Positions {
+    /// Each memory's entry: an import's start, or its memory type's.
+    pub(crate) mems: Vec<usize>,
+    /// Each table's entry, and its initializer expression (`None`: it has none).
+    pub(crate) tables: Vec<(usize, Option<usize>)>,
+    /// Each defined global's initializer expression.
+    pub(crate) global_inits: Vec<usize>,
+    /// Each export's entry.
+    pub(crate) exports: Vec<usize>,
+    /// The start section's payload.
+    pub(crate) start: usize,
+    /// Each element segment.
+    pub(crate) elems: Vec<ElemPos>,
+    /// Each data segment's entry, and its offset expression (an active one).
+    pub(crate) data: Vec<(usize, usize)>,
+}
+
+/// Where an element segment's parts begin (see [`Positions`]).
+pub(crate) struct ElemPos {
+    /// The segment's entry.
+    pub(crate) at: usize,
+    /// Its offset expression (an active segment).
+    pub(crate) offset_expr: usize,
+    /// Its items' COUNT, which the items follow.
+    pub(crate) items: usize,
 }
 
 /// wasmtime's effective type size (adopted 2026-11-24, the limits study: 100,000 imports of a 999-param type made a
@@ -836,7 +870,8 @@ impl Parsed<'_> {
     /// bodies decoded; or why not.
     pub fn validate(self, features: &crate::features::Features) -> Result<Module, LoadError> {
         let Parsed { bytes, mut module, mut deferred } = self;
-        let refs = crate::validate::module_checks(&module, features).map_err(LoadError::Invalid)?;
+        let at = crate::validate::At { pos: &deferred.pos, bytes };
+        let refs = crate::validate::module_checks(&module, features, Some(&at)).map_err(LoadError::Invalid)?;
         let first_import = module.imported_func_count();
         for k in 0..module.code.len() {
             if let Some((_, e, at)) = deferred.locals_error.take_if(|(at_k, ..)| *at_k == k) {
@@ -869,6 +904,8 @@ impl Parsed<'_> {
             })?;
             module.code[k].ir = ir;
         }
+        // The data section follows the code section, and wasmtime checks each body as it reads it.
+        crate::validate::data_checks(&module, features, Some(&at)).map_err(LoadError::Invalid)?;
         Ok(module)
     }
 }
@@ -947,6 +984,8 @@ fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<
         // count, and entries that end before the claimed size as "trailing bytes". Every other section must
         // be present whole.
         let available = if id == SectionId::Code { size.min(r.remaining()) } else { size };
+        // where the file ends, for a code entry that runs past it (`decode_code_section`)
+        let file_end = offset + r.remaining();
         let claimed_past_end = size > available;
         let payload = r.read_bytes(available)?;
         sections.push(Section { id, offset, size });
@@ -978,9 +1017,9 @@ fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<
             SectionId::Memory => decode_memory_section(&mut d, &mut sub)?,
             SectionId::Global => decode_global_section(&mut d, &mut sub)?,
             SectionId::Export => exports = decode_export_section(&mut d, &mut sub)?,
-            SectionId::Element => elements = decode_element_section(&d, &mut sub)?,
+            SectionId::Element => elements = decode_element_section(&mut d, &mut sub)?,
             SectionId::Code => {
-                code = decode_code_section(&mut d, &mut sub, offset, claimed_past_end)?;
+                code = decode_code_section(&mut d, &mut sub, offset, claimed_past_end, file_end)?;
                 d.code_section = true;
                 if claimed_past_end {
                     crate::reader::note_decode_at(sub.abs_pos());
@@ -988,7 +1027,7 @@ fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<
                 }
             }
             SectionId::Data => {
-                data = decode_data_section(&mut sub, data_count)?;
+                data = decode_data_section(&mut d, &mut sub, data_count)?;
                 d.data_section = true;
             }
             SectionId::DataCount => {
@@ -999,7 +1038,10 @@ fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<
                 }
                 data_count = Some(n);
             }
-            SectionId::Start => start = Some(sub.read_var_u32()?),
+            SectionId::Start => {
+                d.pos.start = offset;
+                start = Some(sub.read_var_u32()?);
+            }
         }
 
         // The section's contents must occupy exactly the size it declared. Custom sections are
@@ -1098,6 +1140,7 @@ fn decode_from(r: &mut Reader, deferred: Option<&mut Deferred>) -> DecodeResult<
         out.body_spans = core::mem::take(&mut d.body_spans);
         out.locals_error = d.locals_error.take();
         out.has_data_count = data_count.is_some();
+        out.pos = core::mem::take(&mut d.pos);
     }
 
     Ok(Module {
@@ -1206,9 +1249,10 @@ fn read_heap_type_ref(r: &mut Reader, nullable: bool, kinds: &[CompKind]) -> Dec
         e => e,
     })?;
     if let H::Concrete(ti) | H::Exact(ti) = ht {
+        // in wasmtime's words: "unknown type N: type index out of bounds" (W5)
         let kind = kinds
             .get(ti as usize)
-            .ok_or(DecodeError::IndexOutOfRange)?;
+            .ok_or(DecodeError::UnknownType(ti))?;
         let head = match kind {
             CompKind::Func => RefHeap::Func,
             CompKind::Struct => RefHeap::Struct,
@@ -1416,15 +1460,25 @@ fn decode_type_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
     while nrec > 0 {
         nrec -= 1;
         let start = comp.len() as u32;
+        // wasmtime judges a rec group's type indexes once the group is read, and reports one past the type
+        // section at the GROUP (W5). (wasmrt stops at the index, so a malformed byte later in the same group,
+        // which wasmtime would report first, is not reached.)
+        let group_at = r.abs_pos();
+        let at_group = |e: DecodeError| {
+            if matches!(e, DecodeError::UnknownType(_)) {
+                crate::reader::note_decode_at(group_at);
+            }
+            e
+        };
         if r.peek_byte()? == 0x4e {
             r.read_byte()?; // rec group
             let mut k = r.read_var_u32()?;
             while k > 0 {
                 k -= 1;
-                decode_sub_type(&d.type_kinds, r, &mut comp, &mut supers, &mut finals, &mut links)?;
+                decode_sub_type(&d.type_kinds, r, &mut comp, &mut supers, &mut finals, &mut links).map_err(at_group)?;
             }
         } else {
-            decode_sub_type(&d.type_kinds, r, &mut comp, &mut supers, &mut finals, &mut links)?;
+            decode_sub_type(&d.type_kinds, r, &mut comp, &mut supers, &mut finals, &mut links).map_err(at_group)?;
         }
         groups.push((start, comp.len() as u32 - start));
     }
@@ -1877,11 +1931,13 @@ fn decode_import_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<Vec<Im
                 // contents — so this is always the plain form.
                 let tt = read_table_type(r, &d.type_kinds)?;
                 d.table_space.push(tt.clone());
+                d.pos.tables.push((entry_at, None));
                 Extern::Table(tt)
             }
             ExternKind::Memory => {
                 let mt = read_memory_type(r)?;
                 d.mem_space.push(mt);
+                d.pos.mems.push(entry_at);
                 Extern::Memory(mt)
             }
             ExternKind::Global => {
@@ -1972,12 +2028,14 @@ fn decode_table_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
         // `0x40` cannot begin a valtype, so peeking one byte disambiguates. Reading the
         // second form is what stops a table declared with an initializer from silently
         // instantiating full of nulls.
+        let mut init_at = None;
         let mut tt = if r.peek_byte()? == 0x40 {
             r.read_byte()?; // 0x40
             if r.read_byte()? != 0x00 {
                 return Err(DecodeError::MalformedFlag("invalid table encoding"));
             }
             let mut tt = read_table_type(r, &d.type_kinds)?;
+            init_at = Some(r.abs_pos());
             tt.init = Some(read_const_expr_bytes(r)?);
             tt
         } else {
@@ -1992,6 +2050,7 @@ fn decode_table_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
         }
         tt.limits.shared = false;
         d.table_space.push(tt);
+        d.pos.tables.push((entry_at, init_at));
     }
     Ok(())
 }
@@ -2000,8 +2059,10 @@ fn decode_memory_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
     let mut count = r.read_var_u32()?;
     while count > 0 {
         count -= 1;
+        let at = r.abs_pos();
         let mt = read_memory_type(r)?;
         d.mem_space.push(mt);
+        d.pos.mems.push(at);
     }
     Ok(())
 }
@@ -2014,6 +2075,7 @@ fn decode_global_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<()> {
         count -= 1;
         let gt = read_global_type(r, &d.type_kinds)?;
         d.global_space.push(gt);
+        d.pos.global_inits.push(r.abs_pos());
         let init = read_const_expr_bytes(r)?;
         d.global_init_space.push(init);
     }
@@ -2043,6 +2105,7 @@ fn decode_export_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<Vec<Ex
         };
         add_type_size(d, &ty, entry_at)?;
         list.push(Export { name, index, ty });
+        d.pos.exports.push(entry_at);
     }
     Ok(list)
 }
@@ -2127,7 +2190,7 @@ fn read_expr_vec(r: &mut Reader, seg_at: usize) -> DecodeResult<Vec<Vec<u8>>> {
 }
 
 /// Decode the element section (§5.5.12): all 8 flag variants.
-fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Element>> {
+fn decode_element_section(d: &mut Decoder, r: &mut Reader) -> DecodeResult<Vec<Element>> {
     let count = r.read_count_with(|n, at| over(0, n, limits::ELEMENT_SEGMENTS, "element segments", at))?;
     let mut list = Vec::with_capacity(r.cap(count));
     for _ in 0..count {
@@ -2160,9 +2223,11 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
         if mode == ElementMode::Active && (flags & 0b010) != 0 {
             table_index = r.read_var_u32()?;
         }
+        let offset_at = r.abs_pos();
         if mode == ElementMode::Active {
             offset_expr = read_const_expr_bytes(r)?;
         }
+        let items_at;
         if flags & 0b100 == 0 {
             // Func-index form. Non-flag-0 variants carry a leading elemkind byte.
             if flags != 0 {
@@ -2173,6 +2238,7 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
                     return Err(DecodeError::MalformedFlag("only the function external type is supported in elem segment"));
                 }
             }
+            items_at = r.abs_pos();
             funcs = read_func_vec(r, seg_at)?;
             // ⚠️ §5.5.12 with function-references: the funcidx **shorthand** forms have type
             // `(ref func)` — NON-NULL — because every element is `(ref.func y)`, which can never
@@ -2199,8 +2265,10 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
                     return Err(DecodeError::BadValType);
                 }
             }
+            items_at = r.abs_pos();
             exprs = read_expr_vec(r, seg_at)?;
         }
+        d.pos.elems.push(ElemPos { at: seg_at, offset_expr: offset_at, items: items_at });
         list.push(Element {
             mode,
             table_index,
@@ -2214,7 +2282,7 @@ fn decode_element_section(d: &Decoder, r: &mut Reader) -> DecodeResult<Vec<Eleme
     Ok(list)
 }
 
-fn decode_data_section(r: &mut Reader, data_count: Option<u32>) -> DecodeResult<Vec<DataSegment>> {
+fn decode_data_section(d: &mut Decoder, r: &mut Reader, data_count: Option<u32>) -> DecodeResult<Vec<DataSegment>> {
     // A count unlike the data-count section's is refused at the section's END, before any segment is read
     // (wasmtime checks it as the section is delimited); then the limit.
     let end = r.abs_pos() + r.remaining();
@@ -2227,9 +2295,12 @@ fn decode_data_section(r: &mut Reader, data_count: Option<u32>) -> DecodeResult<
     })?;
     let mut list = Vec::with_capacity(r.cap(count));
     for _ in 0..count {
+        let seg_at = r.abs_pos();
+        let mut offset_at = 0;
         let seg = match r.read_var_u32()? {
             // segment flags (§5.5.14)
             0 => {
+                offset_at = r.abs_pos();
                 let offset_expr = read_const_expr_bytes(r)?;
                 let bytes = read_byte_vec(r)?;
                 DataSegment { active: true, mem_index: 0, offset_expr, bytes }
@@ -2242,6 +2313,7 @@ fn decode_data_section(r: &mut Reader, data_count: Option<u32>) -> DecodeResult<
             },
             2 => {
                 let mem_index = r.read_var_u32()?;
+                offset_at = r.abs_pos();
                 let offset_expr = read_const_expr_bytes(r)?;
                 let bytes = read_byte_vec(r)?;
                 DataSegment { active: true, mem_index, offset_expr, bytes }
@@ -2249,6 +2321,7 @@ fn decode_data_section(r: &mut Reader, data_count: Option<u32>) -> DecodeResult<
             _ => return Err(DecodeError::MalformedFlag("invalid flags byte in data segment")),
         };
         list.push(seg);
+        d.pos.data.push((seg_at, offset_at));
     }
     Ok(list)
 }
@@ -2286,7 +2359,7 @@ fn module_const_exprs<'a>(
         )
 }
 
-fn decode_code_section(d: &mut Decoder, r: &mut Reader, payload_base: usize, truncated: bool) -> DecodeResult<Vec<Code>> {
+fn decode_code_section(d: &mut Decoder, r: &mut Reader, payload_base: usize, truncated: bool, file_end: usize) -> DecodeResult<Vec<Code>> {
     // A code count that disagrees with the function section is refused AT the count, before its
     // bodies are read (as wasmtime); the check after the decode loop covers a missing code section.
     let declared = d.func_space.len() - d.imported_funcs;
@@ -2306,12 +2379,16 @@ fn decode_code_section(d: &mut Decoder, r: &mut Reader, payload_base: usize, tru
         let entry_len = r.read_var_u32()? as usize;
         let entry_start = r.pos();
         // An entry running past its section is reported at its size (wasmtime delimits each entry by the
-        // section); past the FILE (a truncated section) where the bytes ran out (review F1, 2026-11-24).
+        // section); past the FILE (a truncated section) where the bytes ran out (review F1, 2026-11-24). An entry
+        // in a section that fits the file, but which itself runs past the file's end, is reported just after its
+        // size, where its bytes begin (W5, 2026-11-25: measured with wasm-tools 1.263; 111 of the 4,000-corruption
+        // comparison's offset differences were this).
         let entry = match r.read_bytes(entry_len) {
             Ok(e) => e,
             Err(e) => {
                 if !truncated {
-                    crate::reader::note_decode_at(size_at);
+                    let past_file = payload_base + entry_start + entry_len > file_end;
+                    crate::reader::note_decode_at(if past_file { payload_base + entry_start } else { size_at });
                 }
                 return Err(e);
             }
@@ -2412,9 +2489,15 @@ mod tests {
             v
         };
         let table = [0x04, 0x04, 0x01, 0x70, 0x00, 0x01];
-        let cases: [(&str, Vec<u8>, DecodeError, u32); 37] = [
+        let cases: [(&str, Vec<u8>, DecodeError, u32); 41] = [
             // review F1–F4 (2026-11-24): measured with wasm-tools on these bytes
             ("a code entry past its section (not the file): at its size", m(&[&ty[..], &func[..], &[0x0a, 0x04, 0x01, 0x05, 0x00, 0x0b, 0x00, 0x03, 0x01, 0x61, 0x62]].concat()), DecodeError::UnexpectedEof, 21),
+            // W5 (2026-11-25): an entry past the FILE, in a section that fits it — just after its size (wasm-tools 0x18)
+            ("a code entry past the file: after its size", m(&[0x01, 0x06, 0x01, 0x60, 0x01, 0x64, 0x6e, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x04, 0x01, 0x3d, 0x00, 0x0b]), DecodeError::UnexpectedEof, 24),
+            // W5: a type index past the type section, inside a type, at its REC GROUP (wasm-tools 0xd, 0x15, 0xb)
+            ("a type naming no type: at its implicit group", m(&[0x01, 0x08, 0x02, 0x5f, 0x00, 0x60, 0x00, 0x01, 0x64, 0x28]), DecodeError::UnknownType(40), 13),
+            ("…after an explicit group", m(&[0x01, 0x11, 0x02, 0x4e, 0x02, 0x4d, 0x01, 0x5f, 0x00, 0x4c, 0x00, 0x5f, 0x00, 0x60, 0x01, 0x63, 0x62, 0x06, 0x00]), DecodeError::UnknownType(6), 21),
+            ("…in an explicit group: at the group", m(&[0x01, 0x08, 0x01, 0x4e, 0x01, 0x60, 0x01, 0x63, 0x09, 0x00]), DecodeError::UnknownType(9), 11),
             ("an unknown section id whose size runs past the file", m(&[0x68, 0x72, 0x00]), DecodeError::UnexpectedEof, 10),
             ("an unknown section id whose payload is present", m(&[0x68, 0x02, 0x00, 0x00]), DecodeError::InvalidSectionId(0x68), 10),
             ("an element segment's kind byte", m(&[&ty[..], &func[..], &table[..], &[0x09, 0x05, 0x01, 0x03, 0x01, 0x01, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b]].concat()), DecodeError::MalformedFlag("only the function external type is supported in elem segment"), 28),
@@ -2621,6 +2704,8 @@ mod tests {
         }
         assert_eq!(DecodeError::InvalidLeadingByte { byte: 0x07, what: "type" }.to_string(), "invalid leading byte (0x7) for type");
         assert_eq!(DecodeError::UnknownType(5).to_string(), "unknown type 5: type index out of bounds");
+        // wasmparser 0.263's words for a memarg flag above 0x40 (W5: wasm-tools, c2591 of the study)
+        assert_eq!(DecodeError::MalformedMemopFlags.to_string(), "malformed memop: reserved flags bits set");
         // a supertype earlier in the same rec group is fine
         decode(&m(&[0x01, 0x0c, 0x01, 0x4e, 0x02, 0x50, 0x00, 0x5f, 0x00, 0x50, 0x01, 0x00, 0x5f, 0x00]))
             .expect("a supertype defined earlier in its rec group");

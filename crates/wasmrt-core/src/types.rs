@@ -795,7 +795,8 @@ impl fmt::Display for DecodeError {
             DecodeError::TooManyLocals => "too many locals: locals exceed maximum",
             DecodeError::MissingEnd => "control frames remain at end of function body or expression",
             DecodeError::ExprFramesRemain => "control frames remain at end of expression",
-            DecodeError::MalformedMemopFlags => "malformed memop flags",
+            // wasmparser 0.263's words (W5); the spec suite's are "malformed memop flags"
+            DecodeError::MalformedMemopFlags => "malformed memop: reserved flags bits set",
             DecodeError::UnbalancedEnd => "operators remaining after end of function body or expression",
         };
         f.write_str(s)

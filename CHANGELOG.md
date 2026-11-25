@@ -30,6 +30,40 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
   deleting it). `wasmrt_linker_instantiate` borrows the linker only to resolve the imports, and
   that borrow ends before any guest code runs; a test run under Miri proves it. No behaviour
   changed.
+- **Every module-level refusal now carries wasmtime's offset and words.** A memory's or table's
+  limits, a page size, a shared memory without a maximum, a constant expression (each non-constant
+  instruction by wasmparser's name for it, and the value it leaves checked at its `end`), an
+  element's function, a duplicate export, the start function and a data segment's memory were all
+  refused with no offset at all. Each is now reported where wasmtime reports it. The module-level
+  checks run in wasmtime's order too: tables, memories, tags, globals, exports, start, elements,
+  then the function bodies, then the data segments. A type index past the type section, inside a
+  type, is "unknown type N", reported at its rec group.
+- **Words and order for five body refusals, as wasmtime gives them:** `ref.eq`'s operand ("expected
+  ref but found i64", "expected a type but nothing on stack"), `br_on_non_null` to a label without
+  a reference, `call_ref` naming no type ("unknown type N"), an `if` whose block type names no type
+  (now checked before its condition), and a memarg flag above `0x40` ("malformed memop: reserved
+  flags bits set").
+- Measured on 4,000 seeded one-byte corruptions against wasm-tools 1.263:
+  - refusals with the same offset and words went from 3,156 to 3,341;
+  - offset differences went from 234 to 56;
+  - wording-only differences went from 9 to 2.
+
+  What remains:
+  - **39:** wasmtime's limit of 100 memories, which wasmrt does not adopt.
+  - **16:** proposals wasmtime does not implement, enabled only by `--features all`:
+    stack-switching (the 2 wording differences among them), shared-everything-threads, and the
+    memarg bits of acquire-release atomics and multibyte array access.
+  - **3:** an invalid entry followed by a malformed byte later in the file. wasmtime validates each
+    entry as it reads it. wasmrt reads the whole structure before validating, because only
+    validation knows the features.
+
+### Fixed
+
+- **A SIMD lane index past its shape is refused as invalid, not malformed.** This is the stage the
+  spec gives (`simd_lane.wast` asserts it with `assert_invalid` 40 times). The decoder had refused
+  it since T2. For `i8x16.shuffle` the check now comes after its operands are popped, as
+  wasmparser's does. The interpreter now keeps a lane index within its shape, so an unvalidated
+  module cannot index past a lane array.
 
 ## [3.0.0] — 2026-11-25 — wasmtime's refusals in its words, one-pass load, faster and leaner
 
