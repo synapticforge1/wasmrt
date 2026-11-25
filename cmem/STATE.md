@@ -1,10 +1,10 @@
 # STATE: wasmrt
 
-Updated: 2026-11-25, at the end of the session (the C ABI store guard committed, not pushed)
+Updated: 2026-11-25, memory files brought up to date (everything through e54754c pushed)
 
 ## Version
 - Released: 2.0.2 on 2026-11-20 (UTC); tag `v2.0.2`, crates.io; first published by CI
-- Working branch: `main`, ahead of `origin/main`; the next release is a MAJOR, 3.0.0 (unreleased: CHANGELOG
+- Working branch: `main` = `origin/main` (`e54754c`, pushed 2026-11-25); the next release is a MAJOR, 3.0.0 (unreleased: CHANGELOG
   `[Unreleased]`)
 
 ## Now
@@ -41,6 +41,7 @@ Updated: 2026-11-25, at the end of the session (the C ABI store guard committed,
 2. The owner's open calls: F2 (opt-level speed vs size), the remaining efficiency items; the 234 offset differences
    left (end-of-file offsets, module-level refusals without an offset)
 3. `interop.md` (187 KB; co-owned with wazmrt): agree one split; the §3.7 limits rows after wazmrt answers C50
+4. W6: the C ABI linker has the store's old re-entry shape (open-work.md)
 
 ## Waiting on owner
 - the workspace repo's push; the calls in Next 2

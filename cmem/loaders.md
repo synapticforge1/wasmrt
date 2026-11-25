@@ -151,6 +151,8 @@ C-ABI surface must expose it.
   durable memory handle must be tagged against a live store, and during a callback the store is
   mid-borrow. Use `wasmrt_caller_read`/`_write`/`_memory_size` inside callbacks — which is what the
   loaders actually need; the handle form exists so the wasmtime-shaped call sequence compiles.
+  Since 2026-11-25 a callback that uses its OWN store anyway (`wasmrt_func_call`, `wasmrt_memory_data`, a
+  handle check, `wasmrt_store_delete`) is refused — "the store is in use", NULL, false or 0 — not undefined.
 - **A second, smaller caveat (2026-08-08):** **imported memories now link, but only from Rust.**
   `Linker::define_memory` and `Imports::with_instance_memory` are core-only — the C ABI has no
   `wasmrt_linker_define_memory`, because no surveyed loader needs one (they instantiate one module per

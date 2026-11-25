@@ -129,7 +129,10 @@ Both are **new capability wazmrt does not have**, and both are enforced where th
     enabling a dependency would accept modules the embedder meant to refuse.
 - **Resource ceilings** (`ResourceLimits`) — memory bytes, table elements, call depth, GC objects and
   boxed exceptions are now per-store rather than compile-time, so a host can bound a guest's appetite
-  instead of relying on constants it cannot see. Each is a ceiling, not a reservation.
+  instead of relying on constants it cannot see. Each is a ceiling, not a reservation. The iteration
+  budget (loop back-edges + tail-call hops per top-level call) traps, never pauses; each store has its own.
+  Call depth restarts at each top-level call; a C callback cannot re-enter its own store (refused,
+  2026-11-25 — it was undefined behaviour), so native stack is bounded per store: `architecture.md`.
 
 **Unchanged:** the FS sandbox is still the entire authority story for files, and every property in the
 section below holds exactly as before — the C ABI adds no path a guest can take.

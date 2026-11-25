@@ -1,20 +1,24 @@
 # open-work.md — the open items, and nothing else
 
-Every item still to do, one per entry. Last verified: 2026-11-23. Done items leave this file for
+Every item still to do, one per entry. Last verified: 2026-11-25. Done items leave this file for
 `archive/` (the file up to 2026-11-23: [archive/open-work-to-2026-11-23.md](archive/open-work-to-2026-11-23.md));
 where the project stands: [STATE.md](STATE.md); each release's record: [release.md](release.md).
 
 ## Open
 
-- **W1 — the open review issues**, in the gitignored `review-issues.md` (never on GitHub, letter H37): I1–I10
-  fixed or closed (2026-11-23, review complete at `820669f`). Since then, UNCOMMITTED and REVIEWED (W2's five-class
-  review, complete 2026-11-24 on win-x64 and linux-x64; `Review complete: <commit>` written at the owner's commit):
-  I11, wasmtime's implementation limits — measured and decided (🔒 owner, 2026-11-24: "accept the measured limits
-  that keep the program as robust as needed and as small as possible": the needed ones kept, type size adopted,
-  `MAX_CTRL_DEPTH` kept); I12–I14, decode refusals in wasmtime's words and offsets; the efficiency review's fixes
-  (calls 3.1×, memory roughly halved); the review's own fixes (CLI writes, pin lock). Open: the opt-level speed /
-  size decision (F2), the efficiency items not done (see the archive's W2 entry), and the structural difference
-  (wasmtime validates a body while reading it).
+- **W1 — the 3.0.0 release review**, then the release (owner's word). Committed and pushed since 2.0.2
+  (`e54754c`): I11 (wasmtime's implementation limits, 🔒 owner 2026-11-24: "accept the measured limits that keep
+  the program as robust as needed and as small as possible"), I12–I14 (decode refusals in wasmtime's words and
+  offsets), the efficiency review (calls 3.1×, memory roughly halved), the CLI's safe writes and `pin`'s OS lock,
+  the gnu toolchains and MSRV 1.100, the one-pass load (wasmtime's structural difference, closed), validation
+  refusals in wasmtime's words, the C ABI store guard. Each reviewed except: the last pin-lock notes and the
+  toolchain move (tested only) — so `Review complete:` stays at `820669f` and the release review covers all.
+- **W5 — owner calls left open:** F2 (opt-level speed vs size); the efficiency items not done (the archive's W2
+  entry); the 234 offset differences from wasmtime on the 4,000-corruption comparison (end-of-file offsets,
+  module-level refusals with no offset) and 9 wording singletons (`review-issues.md`).
+- **W6 — a C callback can call a linker function on a linker the outer code holds `&mut`** (2026-11-25 review
+  note, unproved): live only across `resolve` in `wasmrt_linker_instantiate` (a start function's callback). Same
+  shape as the store hole; a `RefCell` on the linker would close it the same way.
   🔒 The five `--features` changes are DECIDED (owner, 2026-11-24: "I agree with the recommendations"): the three
   verdict changes are approved as implemented (multi-memory off: `memory.size`/`memory.grow` need `0x00`, a memarg's
   `0x40` flag is refused; reference-types off: an overlong `return_call_indirect` index is accepted); the `wasm3`

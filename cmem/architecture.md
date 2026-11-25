@@ -4,6 +4,14 @@ The Rust architecture for `wasmrt`. It reproduces wazmrt's **decode → validate
 pipeline and its **dual-target contract**, in idiomatic Rust. Detail: `docs/port/` (esp.
 `00-synthesis.md`, `02-decode-core.md`, `03-validate-interp.md`, `06-build-docs-licensing.md`).
 
+🔁 *Since 2026-11-24 (owner: "merge the decoding with validation") the LOAD is one pass, as wasmtime's:*
+`module::parse` reads every section and only LOCATES each body; `Parsed::validate` runs
+`validate::module_checks` (all checks outside bodies), then per function `validate::decode_and_validate_body`
+decodes an instruction and hands it to `FuncValidator::step` at once (a hook in `opcode::decode_expr_from`).
+`decode_validated` = both; the CLI, C ABI and `.wast` runner use it. `decode` + `validate_with_features` stay
+public and accept exactly the same modules (`tests/merged_decode_validate.rs`). Refusals carry wasmparser's
+words (`validate::last_failure_message`, a thread-local beside the failure site).
+
 **Added at T8 / v0.9.0 — the crate tree is now complete.** `wasmrt-capi` is real: **~74 exported
 functions** over core, plus `features` (proposal gating) and `linker` (name-based import resolution) in
 `wasmrt-core`. Three shapes are load-bearing:
@@ -23,7 +31,13 @@ functions** over core, plus `features` (proposal gating) and `linker` (name-base
   linked against, so deleting the linker first would finalize an environment a live instance still
   points at. The environment lives behind an `Rc` shared by the linker *and* every closure linked from
   it, so the finalizer runs when the last holder drops — in whatever order the embedder tears down. No
-  documented ordering requirement, and therefore none to get wrong.
+  documented ordering requirement, and therefore none to get wrong. (That holder can be a store, so a
+  finalizer may run inside `wasmrt_store_delete`: it must not call into any store or linker — `wasmrt.h`.)
+- **A store is borrowed, never re-entered (2026-11-25).** `wasmrt_store` holds its contents in a
+  `RefCell<StoreData>`; every entry point takes the store by `&` and borrows them (`store_mut` / `store_ref`)
+  for the call. A host callback that calls back into its OWN store — or deletes it — is refused ("the store
+  is in use", or NULL / false / 0); taking `&mut` afresh there was undefined behaviour (Miri-proved).
+  Another store may be called. A Rust host callback cannot even try: `Caller` exposes memories, not the store.
 
 Gating happens at **validation**, never at execution (`validate_with_features`), so a refused proposal
 can never be half-checked. `ResourceLimits` lives on `Pools`, which the runtime already threads down
@@ -193,6 +207,16 @@ which calls `call_function` for a nested call. That is deliberate and stays — 
 `call_function` **loops** — rebinding instance, function and arguments, reusing its own native frame,
 at the **same `depth`**. An unbounded chain therefore runs in constant native stack and never
 approaches `max_call_depth`, because the chain never deepens.
+
+**Where the bounds live** (asked for the JVM port, 2026-11-25). `depth` is not stored: it is a parameter of
+`call_function`, 1 at each top-level `Store::invoke_index`, `+1` per call (also across instances of ONE
+store); past `max_call_depth` (default 512) → `Trap::CallStackExhausted`. The iteration budget (`fuel`,
+`max_iterations`, default 2^30, u64; one unit = one loop back-edge — a branch to a label whose `is_loop` is
+set, no special opcode — or one tail-call hop) and the in-guest flag live in `Pools`, one per `Store`;
+exhausted → `Trap::IterationLimitExceeded`, a trap, never a pause. Calling ANOTHER store from a callback
+starts its depth at 1, so a chain is bounded by the cap × the distinct stores in it (each at most once).
+C ABI setters: 0 leaves a limit unchanged (none can be removed); Rust's `max_iterations: 0` is unlimited
+and `max_call_depth: 0` traps every call.
 
 ⚠️ **Do not "simplify" that loop back into a recursive call.** It reads like an equivalent spelling and
 is not: `return_call_ref` shipped for releases as the recursive version, produced correct results, and
