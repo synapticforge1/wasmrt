@@ -20,6 +20,7 @@
 //! what it describes, and this one contradicted code a few hundred lines below it.** Measured
 //! 2026-09-20: `call_indirect` through an imported table dispatches into the reference's owner.
 
+use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;

@@ -73,6 +73,8 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ### Fixed
 
+- **The freestanding build (`no_std`, `wasm32-unknown-unknown`) compiles again.** The previous
+  commit's boxed tables used `Box` without importing it, so only the `std` build compiled.
 - **Validation was quadratic in imports × calls.** Validating each `call` scanned the imports and
   copied the callee's type, so 20,000 imports and 200,000 calls took 5.3 s to validate (wasm-tools:
   0.10 s). Both counts are the guest's to choose. Each function's type is now looked up once per
