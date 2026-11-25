@@ -4,21 +4,134 @@
 
 ### 2.2 Flags
 
-| flag | wazmrt | wasmrt | status |
-| --- | --- | --- | --- |
-| `--dir <host>[<sep>guest]` | ✅ **BOTH `:` and `::`**, and 🆕 **the host half has a GRAMMAR** (2026-09-21, v27): `./p` `../p` `.` `..` `/p`, plus `<letter>:/p`, `<letter>:\p` and `\\srv\share` **on Windows only**. A bare relative path (`data`) and a drive-relative one (`C:`, `C:Users`) are SYNTAX errors, rc 1, before the filesystem is touched | ✅ **BOTH `:` and `::`** (2026-09-19), never mistaking a drive letter | ⏳ **DIVERGED — wazmrt has narrowed and wasmrt has not.** ⚠️ The ambiguous case is **gone on wazmrt rather than documented**: `x:/` is drive `X:` because `x` alone is no longer a legal host path at all. ⚠️ **UNMEASURED on wasmrt: their column records no host-path grammar, so `--dir data:/m` is expected to run there and is rc 1 here** — which would make this the first CLI row where wazmrt is the stricter side. **The check, not the conclusion:** run `--dir data:/m`, `--dir C:`, `--dir C:Users` on wasmrt from a directory containing `./data` and compare rc. Mirror per §1a, owner-directed |
-| `--ro-dir` | same separator issue | same | ⚠️⚠️ as above |
-| **flag POSITION** relative to the module path | flags come **AFTER** the path — 🆕🔒 **and a wazmrt flag written where only the guest sees it is an ERROR, `rc 1`** (v26, owner 2026-09-20; it WARNED from zH7, 2026-08-19 until then); nothing after an explicit `--` is examined, which is now the whole escape hatch. ⚠️ **See §5 #12** — this contradicts §2.4a's *"guest positions are never examined"* and `prog.wasm install --yes` now fails | flags come **BEFORE** the path | ⚠⚠ **DIVERGENT AND LIVE — MEASURED 2026-08-19 (F3).** wasmrt silently passes a trailing `--dir` to the GUEST, so the sandbox is never granted and nothing warns. |
-| `--allow-symlink` | ✅ | ✅ | ✅ **AGREED** (both added 2026-08-10) |
-| `--env KEY=VALUE` | ✅ — 🔒 **the rule (v35, owner 2026-10-24, §5 #13): the guest sees ONLY the `--env` variables, nothing from the host; an entry must be `KEY=VALUE` with a non-empty KEY, else rc 1; a repeated KEY replaces the earlier entry in place (last wins), never a second entry.** ✅ **wazmrt FIXED to it the same day** (`putEnv`; measured before: `--env A` and `--env =x` reached the guest verbatim, and `--env A=1 --env A=2` gave it two `A` entries) | ❌ **the guest INHERITS the whole host environment** and `--env` adds to it: measured 2026-10-24, **111** variables with no `--env` (the host's) where wazmrt's guest sees **0**. Deliberate, with a test asserting it (`cli_review_regressions.rs`, `env_flags_add_to_the_inherited_environment_rather_than_replacing_it`). `--env A` is rc 1 ✅ and a repeated KEY replaces ✅; ❌ `--env =x` is accepted | ✅ **AGREED (v36, 2026-10-24): wasmrt FIXED it** (`cfeee31`). Re-run by the pen holder on both binaries, wasmrt built from that commit into a scratch target: no `--env` → 0 variables, `A=1 A=2` → 1, `A=1 B=2` → 2, `A=` → 1, `A` and `=x` → rc 1, **identical on all six**. *(v35 read: "DIVERGENT — wasmrt must stop inheriting, and refuse an empty KEY".)* 🔒 The reason is the sandbox rule: a guest reaches only what is granted, and a shell's environment carries tokens. ⚠️ wasmrt's inherit test asserts the opposite and must be INVERTED, not deleted. *(A probe that exits with the bare variable count cannot tell "1 variable" from "refused, rc 1": exit with count + 10.)* |
-| `--max-memory <size>` | ✅ | ✅ (measured 2026-10-24) | ✅ **AGREED (v35).** `1M` refuses a 2 MiB memory and `4M` admits it, rc 1 / rc 0 on both; an unparseable size (`lots`) is rc 1 on both |
-| `--max-table-elems <count>` | ✅ | ✅ (measured 2026-10-24) | ✅ **AGREED (v35).** `10` refuses a 100-entry table and `1000` admits it, on both |
-| `--features <list>` | 🔒🆕 **v39 (2026-10-24): the VALUE-TYPE rule is D2 2.2.0's `typeRules`** (wasm-tools 1.262's rule; owner: "wasm-tools' rule"). **wazmrt reads it from its definitions copy.** Every rule group needs ANY one of its features on:<br>• `funcref` / `externref` need reference-types; as a table's or element segment's type, `funcref` needs nothing.<br>• `(ref func)` / `(ref extern)` need reference-types AND function-references.<br>• `(ref null? $t)` needs reference-types AND (function-references OR gc).<br>• `exnref` and its forms need reference-types AND exceptions.<br>• The GC types (`any` `eq` `i31` struct array, the bottoms) need reference-types AND gc.<br>The encodings follow D2's `encodingRules`. *(v39 said "which wazmrt already met"; **v40 corrects it**: a table initializer was not gated, fixed 2026-10-24.)* Measured: wazmrt vs binaryang 2.2.0 over S1's corpus × 49 configs, **2,352 / 0 differ**; before the change it was 22 (all wazmrt accepting). Accepting less, so S1 −20 and the floor is **MAJOR** (wazmrt **4.0.0**). ✅ **AGREED on both:** wasmrt adopted the same rule (`cee7bd1`, owner-directed). Re-run by the pen holder on wasmrt **1.0.0** (`d0cb616`) against wazmrt 4.0.0: the D2 matrix is **2,352 / 0 differ** (`d2-matrix.ts --runtime`), and the CLI corpus is identical. — ✅ **AGREED (v38, 2026-10-24): wasmrt made the v37 change** (`4162c52` + `daec1d6`) and the pen holder RE-RAN the row on both binaries, wasmrt built from `daec1d6` into a scratch target (§1a). Over `tests/behaviour` × D2's presets, `-all,<f>`, `all,-<f>` and `-all`, there were **2,352 judgements, 0 differ** (`cmem/probes/d2-matrix.ts --runtime`). The CLI corpus (`tests/cli`, 56 command lines, `--features` position included) was **identical**. ⏳ The TYPE rules both runtimes share await binaryang's answer to the matrix letter (sent 2026-10-24). — 🔒🆕 **v37 (2026-10-24): IMPLEMENTED in wazmrt — D2's names AND meanings** (binaryang D2 2.1.0 / D1 1.0.1, `docs/opcode-guide.md`): **(1)** every instruction is gated by its own D1 `feature` and nothing else (a test holds all 582 to it; 141 differed before, every one a wasm-tools layer); **(2)** the names are D2's `cli` (`mutable-globals`, `saturating-float-to-int`, …; `annotations` and `code-metadata` accepted, switching nothing); **(3)** the presets are D2's `wasm1` `wasm2` `wasm3` `all` (⚠️ D2's `wasm3` has NO `threads`), with `mvp`, `lime1` and `-all` kept; **(4)** D2 `requires` is recorded, not enforced — and **gc no longer admits the INSTRUCTION `call_ref` with function-references off** (it still admits a typed reference, as the guide says); **(5)** the wasm-tools-only names are DEPRECATED aliases with a warning: `floats` → nothing (1.0 core), `bulk-memory-opt` → bulk-memory, `legacy-exceptions` → exceptions, `call-indirect-overlong` → reference-types, `gc-types` → gc, `mutable-global` → mutable-globals; the C ABI's values 20–24 stay valid and inert. Measured with the gate: spec conformance unchanged (288 files, 0 regressed); S1 `beh` +62 −2 (`wasm3` no longer accepts `threads.wat`; `lime1` no longer the overlong `call_indirect`), so the floor is **MAJOR**; no `run` line moved. ⏳ **wasmrt migrates once, to this.** The text below is the history. 🔒 **v32 (2026-10-23): the VOCABULARY below is REVERSED by the owner, "we need to align with binaryang not wasm-tools"**: binaryang's D2 names become canonical, and the wasm-tools-only names stay as deprecated aliases for one minor release. 🔒 **v33: names AND meanings** (owner, 2026-10-23: "aligning with binaryang means its meanings also"): which feature gates which instruction follows D1's `feature` column, and the preset and dependency rules follow D2, not wasm-tools' measured ones. This answers wasmrt's §2.2m question. This row is rewritten when binaryang's FL1 settles D2's spellings. ⚠️ **wasmrt: do not implement v30's wasm-tools vocabulary in the meantime.** 🆕 **And it PRECEDES the module path, the only wazmrt flag that does; written after it is now an ERROR** (§2.4b, v16). 🆕🔒 **v30 (2026-09-21): wasm-tools' WHOLE vocabulary with wasm-tools' MEANINGS** — every name wasm-tools 1.259 accepts (component-model included; unimplemented proposals switch nothing), the presets `-all` `mvp` `wasm1` `wasm2` `wasm3` `lime1`, the group names (`bulk-memory` also switches `bulk-memory-opt`; `reference-types` also `call-indirect-overlong`), and **no configuration is refused** — only modules. Proven by `cmem/probes/feature-matrix.ts`: the same matrix run on both tools is **identical** | ✅ at the CLI, before the path (measured 2026-10-24, v35): `--features mvp` refuses a SIMD module and `all` admits it, rc 1 / rc 0 on both; written after the path it is rc 1 on both, so **§2.4b's position rule is met**. The VOCABULARY is v32's pending migration (§2.2m: 54 of 85 matrix lines differ, by v32's direction) | ⏳ **position AGREED; vocabulary and meanings migrate ONCE, to D2, at FL1** (v32/v33). *(Until v35 this cell read "absent at the CLI", stale since 2026-09-21, and asked wasmrt to match v30, which v32 reversed.)* |
-| `--max-iterations <count>` | ✅ (2026-08-19) | ✅ (T9i, 2026-09-19) | ✅ **AGREED — §3.7a, v19**; re-measured 2026-10-24 (v35): `1000` stops `(loop (br 0))`, rc 1 on both, wasmrt naming the ceiling. *(The cell read "absent" until v35.)* |
-| `--` ends host flags, rest is guest argv | ✅ — 🆕 **and it is now the ONLY way to hand a wazmrt-flag spelling to the guest** (v26; see the position row below) | ✅ (measured 2026-10-24) | ✅ **AGREED (v35).** `m.wasm -- --yes x` gives the guest argc 3 on both; `m.wasm install --yes` is rc 1 on both (v26/v28) |
-| `--pins <path>` | ✅ — 🔒 **a DB named by `--pins` that cannot be read is an ERROR, `FileNotFound` included, in every mode** (v35, owner 2026-10-24: §5 #14). ✅ **FIXED in wazmrt the same day**; before it a missing file meant "no DB", and the module ran unverified in silence unless `--verify enforce` | ✅ refuses, rc 1, *"cannot read pin DB"*, in every mode (measured 2026-10-24) | ✅ **AGREED (v35)** — wasmrt's behaviour was the right one, and wazmrt took it. The DEFAULT paths keep "missing = unmanaged" (§3.3), because there nobody asked for a DB |
-| `--verify off\|warn\|enforce` | ✅ | ✅ (measured 2026-10-24) | ✅ **AGREED (v35).** A typo (`enforc`) is rc 1 on both; a pinned module runs under `enforce`; an unpinned one is refused under `enforce`, and under `warn` with no TTY to confirm, on both |
-| `--no-verify`, `--yes` | ✅ | ✅ (measured 2026-10-24) | ✅ **AGREED (v35).** Under `warn` the unpinned module runs, with a warning, on both; under `enforce` `--yes` does not override, rc 1 on both |
+- `--dir <host>[<sep>guest]`
+  - wazmrt: ✅ **BOTH `:` and `::`**, and 🆕 **the host half has a GRAMMAR** (2026-09-21, v27): `./p` `../p` `.` `..`
+    `/p`, plus `<letter>:/p`, `<letter>:\p` and `\\srv\share` **on Windows only**. A bare relative path (`data`) and a
+    drive-relative one (`C:`, `C:Users`) are SYNTAX errors, rc 1, before the filesystem is touched
+  - wasmrt: ✅ **BOTH `:` and `::`** (2026-09-19), never mistaking a drive letter
+  - status: ⏳ **DIVERGED — wazmrt has narrowed and wasmrt has not.** ⚠️ The ambiguous case is **gone on wazmrt rather
+    than documented**: `x:/` is drive `X:` because `x` alone is no longer a legal host path at all. ⚠️ **UNMEASURED on
+    wasmrt: their column records no host-path grammar, so `--dir data:/m` is expected to run there and is rc 1 here** —
+    which would make this the first CLI row where wazmrt is the stricter side. **The check, not the conclusion:** run
+    `--dir data:/m`, `--dir C:`, `--dir C:Users` on wasmrt from a directory containing `./data` and compare rc. Mirror
+    per §1a, owner-directed
+- `--ro-dir`
+  - wazmrt: same separator issue
+  - wasmrt: same
+  - status: ⚠️⚠️ as above
+- **flag POSITION** relative to the module path
+  - wazmrt: flags come **AFTER** the path — 🆕🔒 **and a wazmrt flag written where only the guest sees it is an ERROR,
+    `rc 1`** (v26, owner 2026-09-20; it WARNED from zH7, 2026-08-19 until then); nothing after an explicit `--` is
+    examined, which is now the whole escape hatch. ⚠️ **See §5 #12** — this contradicts §2.4a's *"guest positions are
+    never examined"* and `prog.wasm install --yes` now fails
+  - wasmrt: flags come **BEFORE** the path
+  - status: ⚠⚠ **DIVERGENT AND LIVE — MEASURED 2026-08-19 (F3).** wasmrt silently passes a trailing `--dir` to the
+    GUEST, so the sandbox is never granted and nothing warns.
+- `--allow-symlink`
+  - wazmrt: ✅
+  - wasmrt: ✅
+  - status: ✅ **AGREED** (both added 2026-08-10)
+- `--env KEY=VALUE`
+  - wazmrt: ✅ — 🔒 **the rule (v35, owner 2026-10-24, §5 #13): the guest sees ONLY the `--env` variables, nothing from
+    the host; an entry must be `KEY=VALUE` with a non-empty KEY, else rc 1; a repeated KEY replaces the earlier entry in
+    place (last wins), never a second entry.** ✅ **wazmrt FIXED to it the same day** (`putEnv`; measured before: `--env
+    A` and `--env =x` reached the guest verbatim, and `--env A=1 --env A=2` gave it two `A` entries)
+  - wasmrt: ❌ **the guest INHERITS the whole host environment** and `--env` adds to it: measured 2026-10-24, **111**
+    variables with no `--env` (the host's) where wazmrt's guest sees **0**. Deliberate, with a test asserting it
+    (`cli_review_regressions.rs`, `env_flags_add_to_the_inherited_environment_rather_than_replacing_it`). `--env A` is
+    rc 1 ✅ and a repeated KEY replaces ✅; ❌ `--env =x` is accepted
+  - status: ✅ **AGREED (v36, 2026-10-24): wasmrt FIXED it** (`cfeee31`). Re-run by the pen holder on both binaries,
+    wasmrt built from that commit into a scratch target: no `--env` → 0 variables, `A=1 A=2` → 1, `A=1 B=2` → 2, `A=` →
+    1, `A` and `=x` → rc 1, **identical on all six**. *(v35 read: "DIVERGENT — wasmrt must stop inheriting, and refuse
+    an empty KEY".)* 🔒 The reason is the sandbox rule: a guest reaches only what is granted, and a shell's environment
+    carries tokens. ⚠️ wasmrt's inherit test asserts the opposite and must be INVERTED, not deleted. *(A probe that
+    exits with the bare variable count cannot tell "1 variable" from "refused, rc 1": exit with count + 10.)*
+- `--max-memory <size>`
+  - wazmrt: ✅
+  - wasmrt: ✅ (measured 2026-10-24)
+  - status: ✅ **AGREED (v35).** `1M` refuses a 2 MiB memory and `4M` admits it, rc 1 / rc 0 on both; an unparseable size
+    (`lots`) is rc 1 on both
+- `--max-table-elems <count>`
+  - wazmrt: ✅
+  - wasmrt: ✅ (measured 2026-10-24)
+  - status: ✅ **AGREED (v35).** `10` refuses a 100-entry table and `1000` admits it, on both
+- `--features <list>`
+  - wazmrt: 🔒🆕 **v39 (2026-10-24): the VALUE-TYPE rule is D2 2.2.0's `typeRules`** (wasm-tools 1.262's rule; owner:
+    "wasm-tools' rule"). **wazmrt reads it from its definitions copy.** Every rule group needs ANY one of its features
+    on:
+    • `funcref` / `externref` need reference-types; as a table's or element segment's type, `funcref` needs nothing.
+    • `(ref func)` / `(ref extern)` need reference-types AND function-references.
+    • `(ref null? $t)` needs reference-types AND (function-references OR gc).
+    • `exnref` and its forms need reference-types AND exceptions.
+    • The GC types (`any` `eq` `i31` struct array, the bottoms) need reference-types AND gc.
+    The encodings follow D2's `encodingRules`. *(v39 said "which wazmrt already met"; **v40 corrects it**: a table
+    initializer was not gated, fixed 2026-10-24.)* Measured: wazmrt vs binaryang 2.2.0 over S1's corpus × 49 configs,
+    **2,352 / 0 differ**; before the change it was 22 (all wazmrt accepting). Accepting less, so S1 −20 and the floor is
+    **MAJOR** (wazmrt **4.0.0**). ✅ **AGREED on both:** wasmrt adopted the same rule (`cee7bd1`, owner-directed). Re-run
+    by the pen holder on wasmrt **1.0.0** (`d0cb616`) against wazmrt 4.0.0: the D2 matrix is **2,352 / 0 differ**
+    (`d2-matrix.ts --runtime`), and the CLI corpus is identical. — ✅ **AGREED (v38, 2026-10-24): wasmrt made the v37
+    change** (`4162c52` + `daec1d6`) and the pen holder RE-RAN the row on both binaries, wasmrt built from `daec1d6`
+    into a scratch target (§1a). Over `tests/behaviour` × D2's presets, `-all,<f>`, `all,-<f>` and `-all`, there were
+    **2,352 judgements, 0 differ** (`cmem/probes/d2-matrix.ts --runtime`). The CLI corpus (`tests/cli`, 56 command
+    lines, `--features` position included) was **identical**. ⏳ The TYPE rules both runtimes share await binaryang's
+    answer to the matrix letter (sent 2026-10-24). — 🔒🆕 **v37 (2026-10-24): IMPLEMENTED in wazmrt — D2's names AND
+    meanings** (binaryang D2 2.1.0 / D1 1.0.1, `docs/opcode-guide.md`): **(1)** every instruction is gated by its own D1
+    `feature` and nothing else (a test holds all 582 to it; 141 differed before, every one a wasm-tools layer); **(2)**
+    the names are D2's `cli` (`mutable-globals`, `saturating-float-to-int`, …; `annotations` and `code-metadata`
+    accepted, switching nothing); **(3)** the presets are D2's `wasm1` `wasm2` `wasm3` `all` (⚠️ D2's `wasm3` has NO
+    `threads`), with `mvp`, `lime1` and `-all` kept; **(4)** D2 `requires` is recorded, not enforced — and **gc no
+    longer admits the INSTRUCTION `call_ref` with function-references off** (it still admits a typed reference, as the
+    guide says); **(5)** the wasm-tools-only names are DEPRECATED aliases with a warning: `floats` → nothing (1.0 core),
+    `bulk-memory-opt` → bulk-memory, `legacy-exceptions` → exceptions, `call-indirect-overlong` → reference-types,
+    `gc-types` → gc, `mutable-global` → mutable-globals; the C ABI's values 20–24 stay valid and inert. Measured with
+    the gate: spec conformance unchanged (288 files, 0 regressed); S1 `beh` +62 −2 (`wasm3` no longer accepts
+    `threads.wat`; `lime1` no longer the overlong `call_indirect`), so the floor is **MAJOR**; no `run` line moved. ⏳
+    **wasmrt migrates once, to this.** The text below is the history. 🔒 **v32 (2026-10-23): the VOCABULARY below is
+    REVERSED by the owner, "we need to align with binaryang not wasm-tools"**: binaryang's D2 names become canonical,
+    and the wasm-tools-only names stay as deprecated aliases for one minor release. 🔒 **v33: names AND meanings**
+    (owner, 2026-10-23: "aligning with binaryang means its meanings also"): which feature gates which instruction
+    follows D1's `feature` column, and the preset and dependency rules follow D2, not wasm-tools' measured ones. This
+    answers wasmrt's §2.2m question. This row is rewritten when binaryang's FL1 settles D2's spellings. ⚠️ **wasmrt: do
+    not implement v30's wasm-tools vocabulary in the meantime.** 🆕 **And it PRECEDES the module path, the only wazmrt
+    flag that does; written after it is now an ERROR** (§2.4b, v16). 🆕🔒 **v30 (2026-09-21): wasm-tools' WHOLE
+    vocabulary with wasm-tools' MEANINGS** — every name wasm-tools 1.259 accepts (component-model included;
+    unimplemented proposals switch nothing), the presets `-all` `mvp` `wasm1` `wasm2` `wasm3` `lime1`, the group names
+    (`bulk-memory` also switches `bulk-memory-opt`; `reference-types` also `call-indirect-overlong`), and **no
+    configuration is refused** — only modules. Proven by `cmem/probes/feature-matrix.ts`: the same matrix run on both
+    tools is **identical**
+  - wasmrt: ✅ at the CLI, before the path (measured 2026-10-24, v35): `--features mvp` refuses a SIMD module and `all`
+    admits it, rc 1 / rc 0 on both; written after the path it is rc 1 on both, so **§2.4b's position rule is met**. The
+    VOCABULARY is v32's pending migration (§2.2m: 54 of 85 matrix lines differ, by v32's direction)
+  - status: ⏳ **position AGREED; vocabulary and meanings migrate ONCE, to D2, at FL1** (v32/v33). *(Until v35 this cell
+    read "absent at the CLI", stale since 2026-09-21, and asked wasmrt to match v30, which v32 reversed.)*
+- `--max-iterations <count>`
+  - wazmrt: ✅ (2026-08-19)
+  - wasmrt: ✅ (T9i, 2026-09-19)
+  - status: ✅ **AGREED — §3.7a, v19**; re-measured 2026-10-24 (v35): `1000` stops `(loop (br 0))`, rc 1 on both, wasmrt
+    naming the ceiling. *(The cell read "absent" until v35.)*
+- `--` ends host flags, rest is guest argv
+  - wazmrt: ✅ — 🆕 **and it is now the ONLY way to hand a wazmrt-flag spelling to the guest** (v26; see the position row
+    below)
+  - wasmrt: ✅ (measured 2026-10-24)
+  - status: ✅ **AGREED (v35).** `m.wasm -- --yes x` gives the guest argc 3 on both; `m.wasm install --yes` is rc 1 on
+    both (v26/v28)
+- `--pins <path>`
+  - wazmrt: ✅ — 🔒 **a DB named by `--pins` that cannot be read is an ERROR, `FileNotFound` included, in every mode**
+    (v35, owner 2026-10-24: §5 #14). ✅ **FIXED in wazmrt the same day**; before it a missing file meant "no DB", and the
+    module ran unverified in silence unless `--verify enforce`
+  - wasmrt: ✅ refuses, rc 1, *"cannot read pin DB"*, in every mode (measured 2026-10-24)
+  - status: ✅ **AGREED (v35)** — wasmrt's behaviour was the right one, and wazmrt took it. The DEFAULT paths keep
+    "missing = unmanaged" (§3.3), because there nobody asked for a DB
+- `--verify off|warn|enforce`
+  - wazmrt: ✅
+  - wasmrt: ✅ (measured 2026-10-24)
+  - status: ✅ **AGREED (v35).** A typo (`enforc`) is rc 1 on both; a pinned module runs under `enforce`; an unpinned one
+    is refused under `enforce`, and under `warn` with no TTY to confirm, on both
+- `--no-verify`, `--yes`
+  - wazmrt: ✅
+  - wasmrt: ✅ (measured 2026-10-24)
+  - status: ✅ **AGREED (v35).** Under `warn` the unpinned module runs, with a warning, on both; under `enforce` `--yes`
+    does not override, rc 1 on both
 
 ⚠️ **THE `--dir` SEPARATOR IS A SWAPPABILITY BREAK THAT IS LIVE TODAY**, and it has nothing to do with
 verification. `--dir .:/` is a working wazmrt invocation; on wasmrt the single colon is not the
@@ -122,14 +235,44 @@ wazmrt's committed `cmem/interop.md`), plus two wasmrt annexes not yet folded:
 **verified by running both binaries on the same command lines**: wazmrt `1.0.3`
 (`zig-out/bin/wazmrt.exe`, built 2026-09-21) and wasmrt at the mirror commit.
 
-| row | wasmrt BEFORE the mirror | now | evidence |
-| --- | --- | --- | --- |
-| **v27** `--dir` host grammar | ❌ **in breach**: `data`, `data:/m`, `data::/m`, `C:` and `data/../data` were accepted (rc 0); `C:Users` and `~/x` failed only at the filesystem | ✅ **identical to wazmrt on 26 cases**, wording included; Windows-only drive and UNC forms | `crates/wasmrt/tests/cli_contract_dir_and_guest_position.rs`, inverted |
-| **v26 / v28** exact host-flag name in a guest position | ❌ **in breach**: all 11 names passed to the guest (rc 0), with a warning for 3 | ✅ identical on 30 cases: the 11 names are rc 1; the `=value` forms, `--features`, `--help`, `--version`, `-h` and `-v` pass | same file, inverted |
-| **§2.4b** `--features=<list>` | ❌ **a swappability break the row's own table implies**: `wazmrt --features=mvp m.wasm` ran, and wasmrt refused it as an unknown flag | ✅ applied before the path; after it, rc 1 naming the position. The ONLY `=` spelling either runtime takes (measured over 12 flags) | same file, inverted |
-| v11 unknown flag · v15 single dash · v16 position | ✅ already identical (19-row probe) | ✅ | — |
-| **v30** `--features` = wasm-tools' vocabulary and meanings | ❌ **NOT MET**: `cmem/probes/feature-matrix.ts` differs from wazmrt's output on **54 of 85 lines**. No `wasm1`/`wasm2`/`wasm3`/`lime1`/`-all`, no `floats`/`gc-types`/`call-indirect-overlong`…, and wasmrt refuses CONFIGURATIONS (`all,-simd` → "relaxed-simd requires simd") | ⏸️ **NOT implemented, by v32's direction** ("wasmrt: do NOT implement v30's wasm-tools vocabulary in the meantime"). wasmrt migrates ONCE, to binaryang's D2 vocabulary, when FL1 settles the spellings. ⚠️ Two v30 points are about MEANINGS rather than names (no configuration refused; module-level dependencies). 🔒 **Owner, 2026-10-23: "use v32"**: wasmrt follows v32 as written, so neither is implemented until the row is rewritten at FL1, and wasmrt still refuses `all,-simd` as a configuration until then | the matrix, run three ways. wasmrt also measured, from wasm-tools 1.262, each instruction's required feature set (492 instructions) and the bulk-memory / reference-types group splits; kept for the D2 migration |
-| **v29** `.wat` pins | ❌ broken on purpose by wazmrt `1.0.2`'s H13 fixes: 64/528 agreed | ✅ **RESTORED 2026-10-23**: wasmrt made H13's three encoder fixes (locals in runs, exports in source order, implicit types interned in source order), plus I8 (an `@custom "name"` annotation is the only `name` section). Then **`wasmrt pin` = `wazmrt pin` on 603/603 `.wat` and 584/584 `.wasm` over wasmtk's corpus**, nothing on one side only, and **wasmrt's module bodies = `wasm-tools parse` on 603/603** | `scripts/body-parity.ts` (new gate); both runtimes' `pin <dir>`, compared file by file |
+- **v27** `--dir` host grammar
+  - wasmrt BEFORE the mirror: ❌ **in breach**: `data`, `data:/m`, `data::/m`, `C:` and `data/../data` were accepted (rc
+    0); `C:Users` and `~/x` failed only at the filesystem
+  - now: ✅ **identical to wazmrt on 26 cases**, wording included; Windows-only drive and UNC forms
+  - evidence: `crates/wasmrt/tests/cli_contract_dir_and_guest_position.rs`, inverted
+- **v26 / v28** exact host-flag name in a guest position
+  - wasmrt BEFORE the mirror: ❌ **in breach**: all 11 names passed to the guest (rc 0), with a warning for 3
+  - now: ✅ identical on 30 cases: the 11 names are rc 1; the `=value` forms, `--features`, `--help`, `--version`, `-h`
+    and `-v` pass
+  - evidence: same file, inverted
+- **§2.4b** `--features=<list>`
+  - wasmrt BEFORE the mirror: ❌ **a swappability break the row's own table implies**: `wazmrt --features=mvp m.wasm`
+    ran, and wasmrt refused it as an unknown flag
+  - now: ✅ applied before the path; after it, rc 1 naming the position. The ONLY `=` spelling either runtime takes
+    (measured over 12 flags)
+  - evidence: same file, inverted
+- v11 unknown flag · v15 single dash · v16 position
+  - wasmrt BEFORE the mirror: ✅ already identical (19-row probe)
+  - now: ✅
+  - evidence: —
+- **v30** `--features` = wasm-tools' vocabulary and meanings
+  - wasmrt BEFORE the mirror: ❌ **NOT MET**: `cmem/probes/feature-matrix.ts` differs from wazmrt's output on **54 of 85
+    lines**. No `wasm1`/`wasm2`/`wasm3`/`lime1`/`-all`, no `floats`/`gc-types`/`call-indirect-overlong`…, and wasmrt
+    refuses CONFIGURATIONS (`all,-simd` → "relaxed-simd requires simd")
+  - now: ⏸️ **NOT implemented, by v32's direction** ("wasmrt: do NOT implement v30's wasm-tools vocabulary in the
+    meantime"). wasmrt migrates ONCE, to binaryang's D2 vocabulary, when FL1 settles the spellings. ⚠️ Two v30 points
+    are about MEANINGS rather than names (no configuration refused; module-level dependencies). 🔒 **Owner, 2026-10-23:
+    "use v32"**: wasmrt follows v32 as written, so neither is implemented until the row is rewritten at FL1, and wasmrt
+    still refuses `all,-simd` as a configuration until then
+  - evidence: the matrix, run three ways. wasmrt also measured, from wasm-tools 1.262, each instruction's required
+    feature set (492 instructions) and the bulk-memory / reference-types group splits; kept for the D2 migration
+- **v29** `.wat` pins
+  - wasmrt BEFORE the mirror: ❌ broken on purpose by wazmrt `1.0.2`'s H13 fixes: 64/528 agreed
+  - now: ✅ **RESTORED 2026-10-23**: wasmrt made H13's three encoder fixes (locals in runs, exports in source order,
+    implicit types interned in source order), plus I8 (an `@custom "name"` annotation is the only `name` section). Then
+    **`wasmrt pin` = `wazmrt pin` on 603/603 `.wat` and 584/584 `.wasm` over wasmtk's corpus**, nothing on one side
+    only, and **wasmrt's module bodies = `wasm-tools parse` on 603/603**
+  - evidence: `scripts/body-parity.ts` (new gate); both runtimes' `pin <dir>`, compared file by file
 
 ⚠️ **Oracle drift, for the pen-holder.** v30's matrix is proven "identical" against wasm-tools
 **1.259**. wasm-tools **1.262** float-gates three relaxed-SIMD ops (`f32x4.relaxed_madd`,

@@ -6,12 +6,26 @@
 
 ### 3.1 What gets hashed — the TOCTOU rule
 
-| rule | status |
-| --- | --- |
-| hash the **in-memory bytes about to execute**; never re-read by path | ✅ **AGREED** — `bytes-hashed == bytes-run` by construction |
-| a `.wat` input hashes the **assembled** bytes, not the source text | ✅ **AGREED** as a rule. ⏳ 🚨 **PORTABILITY BROKEN ON PURPOSE by wazmrt `1.0.2` (2026-09-21, v29), PENDING wasmrt's matching fix.** Workspace letter H13 found both runtimes' bodies diverging from wasm-tools in three ways (I12 local runs, I13 export order, I14 type interning order) — hidden because the runtimes matched EACH OTHER. wazmrt fixed all three (`9aee871d1`: 528/528 bodies equal wasm-tools'), so **measured against wasmrt's build of 2026-09-20: `.wat` pins agree on 64 of 528 and differ on 464** (`cmem/probes/pin-parity.ts`), where they agreed on 528. The 464 are exactly the files the fix changed. `.wasm` pins are untouched. ⚠️ **Parity returns when wasmrt makes the same three fixes** — the letter asks it to, and the check is `probes/body-parity.ts` against wasm-tools, not against wazmrt. 🔒 Owner: shipped in `1.0.2` anyway, *"since the consumers are not involved yet"*. *(Superseded:)* ✅ **PORTABLE since 2026-09-20 (Z4 closed, v22).** 954 of 954 comparable `.wat` files in the `wasmtk` tree now hash identically under both runtimes, up from 2; `.wasm` was and stays 513/513. **See §3.1m for the 2026-09-19 divergence and §3.1m-r for the close.** ✅ **And since v23 the two listings are the same length — 1,467 lines each, nothing in one and not the other** (B-d fixed, §3.1m-r). |
-| a `.wast` script hashes the **script bytes** — every module it can run is contained in them | ✅ **AGREED** |
-| the file is read **once**; no path is reopened after load | ✅ **AGREED** in behaviour · ⚠️ **wasmrt is making it a compiler-checked type** (`Loaded { bytes, digest }`), wazmrt passes a slice — an implementation difference, not a contract difference |
+- hash the **in-memory bytes about to execute**; never re-read by path
+  - status: ✅ **AGREED** — `bytes-hashed == bytes-run` by construction
+- a `.wat` input hashes the **assembled** bytes, not the source text
+  - status: ✅ **AGREED** as a rule. ⏳ 🚨 **PORTABILITY BROKEN ON PURPOSE by wazmrt `1.0.2` (2026-09-21, v29), PENDING
+    wasmrt's matching fix.** Workspace letter H13 found both runtimes' bodies diverging from wasm-tools in three ways
+    (I12 local runs, I13 export order, I14 type interning order) — hidden because the runtimes matched EACH OTHER.
+    wazmrt fixed all three (`9aee871d1`: 528/528 bodies equal wasm-tools'), so **measured against wasmrt's build of
+    2026-09-20: `.wat` pins agree on 64 of 528 and differ on 464** (`cmem/probes/pin-parity.ts`), where they agreed on
+    528. The 464 are exactly the files the fix changed. `.wasm` pins are untouched. ⚠️ **Parity returns when wasmrt
+    makes the same three fixes** — the letter asks it to, and the check is `probes/body-parity.ts` against wasm-tools,
+    not against wazmrt. 🔒 Owner: shipped in `1.0.2` anyway, *"since the consumers are not involved yet"*.
+    *(Superseded:)* ✅ **PORTABLE since 2026-09-20 (Z4 closed, v22).** 954 of 954 comparable `.wat` files in the `wasmtk`
+    tree now hash identically under both runtimes, up from 2; `.wasm` was and stays 513/513. **See §3.1m for the
+    2026-09-19 divergence and §3.1m-r for the close.** ✅ **And since v23 the two listings are the same length — 1,467
+    lines each, nothing in one and not the other** (B-d fixed, §3.1m-r).
+- a `.wast` script hashes the **script bytes** — every module it can run is contained in them
+  - status: ✅ **AGREED**
+- the file is read **once**; no path is reopened after load
+  - status: ✅ **AGREED** in behaviour · ⚠️ **wasmrt is making it a compiler-checked type** (`Loaded { bytes, digest }`),
+    wazmrt passes a slice — an implementation difference, not a contract difference
 
 ⚠️⚠️ **`.wast` MUST BE GATED.** A script instantiates and invokes the modules it contains — including
 `(module binary "…")` raw payloads. wazmrt shipped this bypass: `wazmrt payload.wast` ran unpinned,
@@ -109,16 +123,29 @@ assembles on both and is refused by both at decode.
 
 ### 3.3 The pin DB — a SHARED ON-DISK ARTIFACT
 
-| item | agreed value |
-| --- | --- |
-| **location** | ✅ **DECIDED (owner, 2026-09-19) — v18. THE SHARED DEPLOYMENT PATH:** `/etc/wasmtk/pins` · `C:\ProgramData\wasmtk\pins`, named for the deployment both runtimes ship inside, **with each runtime's own path kept as a FALLBACK**, and — 🔒 **the part that carries the safety** — **a loud warning when a runtime finds no DB where its sibling would have found one**, instead of quietly computing `armed = false`. ✅ Implemented in wasmrt (T9e), as a pure function with a mutation-verified test. ⏳ **wazmrt to adopt the same order and the same warning** — Track B-b. Today wazmrt reads `C:\ProgramData\wazmrt\pins` only |
-| ownership | **root-owned, read-only to the user, plaintext.** Integrity from **ownership, not secrecy** |
-| format | one lowercase-hex SHA-256 per line; blank lines and `#` lines ignored; whitespace-separated text after the hash is a human label and is ignored |
-| addressing | **content-addressed — no paths in the DB**, so moving or renaming an approved file does not re-open a hole |
-| policy directive | `# mode: off\|warn\|enforce` — the policy inherits the DB file's **ownership** |
-| pinning time | at **install** time, with privilege — a verified install, **not** TOFU |
-| no encryption | a category error: encryption gives confidentiality; what is needed is integrity |
-| no machine-binding | the attacker **is** the user |
+- **location**
+  - agreed value: ✅ **DECIDED (owner, 2026-09-19) — v18. THE SHARED DEPLOYMENT PATH:** `/etc/wasmtk/pins` ·
+    `C:\ProgramData\wasmtk\pins`, named for the deployment both runtimes ship inside, **with each runtime's own path
+    kept as a FALLBACK**, and — 🔒 **the part that carries the safety** — **a loud warning when a runtime finds no DB
+    where its sibling would have found one**, instead of quietly computing `armed = false`. ✅ Implemented in wasmrt
+    (T9e), as a pure function with a mutation-verified test. ⏳ **wazmrt to adopt the same order and the same warning** —
+    Track B-b. Today wazmrt reads `C:\ProgramData\wazmrt\pins` only
+- ownership
+  - agreed value: **root-owned, read-only to the user, plaintext.** Integrity from **ownership, not secrecy**
+- format
+  - agreed value: one lowercase-hex SHA-256 per line; blank lines and `#` lines ignored; whitespace-separated text after
+    the hash is a human label and is ignored
+- addressing
+  - agreed value: **content-addressed — no paths in the DB**, so moving or renaming an approved file does not re-open a
+    hole
+- policy directive
+  - agreed value: `# mode: off|warn|enforce` — the policy inherits the DB file's **ownership**
+- pinning time
+  - agreed value: at **install** time, with privilege — a verified install, **not** TOFU
+- no encryption
+  - agreed value: a category error: encryption gives confidentiality; what is needed is integrity
+- no machine-binding
+  - agreed value: the attacker **is** the user
 
 ✅ **RESOLVED 2026-09-19 by the owner — v18, and this closes §5 decision #1, the row this file has
 called its most dangerous since v1.** Shared path, per-runtime fallback, and the anti-silent-disarm
@@ -173,12 +200,16 @@ come from root.
 
 ### 3.5 Fail-closed rules — both bought by defects, both binding
 
-| rule | why |
-| --- | --- |
-| a present `# mode:` with an **unrecognised value** means **`enforce`**, not "no policy" | a typo (`# mode: enfroce`), odd capitalisation or a trailing comment must not silently degrade to a state `--no-verify` can then override. **A root-intended enforce must never be downgradable by a misspelling.** |
-| a DB content line whose first token is **not a valid 64-hex digest** is an **error**, not a skipped line | a truncated or mangled DB must fail **loud**; silently dropping approvals makes a pinned module look "not in the list" — which reads as an attack and hides a corrupt file |
-| `--verify <typo>` is an **error**, not a default | same reasoning as the `# mode:` rule, at the other input |
-| an override that *would* have blocked **prints a warning** | never silently unverified |
+- a present `# mode:` with an **unrecognised value** means **`enforce`**, not "no policy"
+  - why: a typo (`# mode: enfroce`), odd capitalisation or a trailing comment must not silently degrade to a state
+    `--no-verify` can then override. **A root-intended enforce must never be downgradable by a misspelling.**
+- a DB content line whose first token is **not a valid 64-hex digest** is an **error**, not a skipped line
+  - why: a truncated or mangled DB must fail **loud**; silently dropping approvals makes a pinned module look "not in
+    the list" — which reads as an attack and hides a corrupt file
+- `--verify <typo>` is an **error**, not a default
+  - why: same reasoning as the `# mode:` rule, at the other input
+- an override that *would* have blocked **prints a warning**
+  - why: never silently unverified
 
 ### 3.6 The WASI sandbox rights model
 

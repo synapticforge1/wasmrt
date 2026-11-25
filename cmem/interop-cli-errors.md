@@ -4,17 +4,35 @@
 
 ### 2.3 Exit codes
 
-| behaviour | status |
-| --- | --- |
-| a WASI guest's `proc_exit(n)` becomes the process exit status (`n & 0xff`) | ✅ **AGREED** — verified in both, 2026-08-19 |
-| success → 0, host-side failure (bad args, unreadable file, invalid module, refused by policy) → non-zero | ✅ **AGREED** |
-| **specific non-zero codes per failure kind** | ✅ **AGREED (v13, 2026-09-19) — every host-side failure and every guest TRAP → `1` on both; `proc_exit(n)` → `n & 0xff`.** Measured twice by running both binaries: wasmrt's 18-row matrix (§2.3m) and the pen-holder's own 12-case re-run on the same bytes before folding — unreadable file, bad magic, unassemblable `.wat`, invalid module (summarize **and** call-an-export), wrong arity, unparseable argument literal, missing arguments, no arguments, and a trap: **`1` on both, in every one.** 🎓 **The row closes with no per-kind table, because neither implementation distinguishes kinds** — the portable contract is the success/failure split plus `proc_exit`, and writing a table of codes nobody emits would have been a list that drifts. Closes §5 decision #4. ⚠️ **REOPEN** the moment either side introduces a second non-zero code — that is the day scripts stop being portable across the swap. |
-| 🆕 **naming an export the module does not have is a failure** — non-zero, with a message naming it; never a silent fall-back to summarizing (Z1, §2.3m) | ✅ **FOLDED IN AS CONTRACT VERSION 13 by the pen-holder (wazmrt, regime A), 2026-09-19.** 🔒 Owner decision, recorded by wasmrt; owner: *"pass all three issues to the wazmrt team"*. ⚠️⚠️ **THE ROW BINDS BOTH SIDES, and on the day it was folded in NEITHER was fully clean** — recorded that way deliberately, because a row written as "they must adopt" is a row its author stops testing. It is a case of row 2 (a bad argument), stated separately because wazmrt breaks it: `wazmrt m.wasm nosuch` prints the summary and exits **0**. wasmrt's `run` already complies (rc 1, *"no exported function `nosuch`"*). ⚠️ **wasmrt's bare-path form still has F1** (`wasmrt m.wasm f` summarizes, rc 0). That is the same class on wasmrt's side, and it stays open under §2.1. |
+- a WASI guest's `proc_exit(n)` becomes the process exit status (`n & 0xff`)
+  - status: ✅ **AGREED** — verified in both, 2026-08-19
+- success → 0, host-side failure (bad args, unreadable file, invalid module, refused by policy) → non-zero
+  - status: ✅ **AGREED**
+- **specific non-zero codes per failure kind**
+  - status: ✅ **AGREED (v13, 2026-09-19) — every host-side failure and every guest TRAP → `1` on both; `proc_exit(n)` →
+    `n & 0xff`.** Measured twice by running both binaries: wasmrt's 18-row matrix (§2.3m) and the pen-holder's own
+    12-case re-run on the same bytes before folding — unreadable file, bad magic, unassemblable `.wat`, invalid module
+    (summarize **and** call-an-export), wrong arity, unparseable argument literal, missing arguments, no arguments, and
+    a trap: **`1` on both, in every one.** 🎓 **The row closes with no per-kind table, because neither implementation
+    distinguishes kinds** — the portable contract is the success/failure split plus `proc_exit`, and writing a table of
+    codes nobody emits would have been a list that drifts. Closes §5 decision #4. ⚠️ **REOPEN** the moment either side
+    introduces a second non-zero code — that is the day scripts stop being portable across the swap.
+- 🆕 **naming an export the module does not have is a failure** — non-zero, with a message naming it; never a silent
+  fall-back to summarizing (Z1, §2.3m)
+  - status: ✅ **FOLDED IN AS CONTRACT VERSION 13 by the pen-holder (wazmrt, regime A), 2026-09-19.** 🔒 Owner decision,
+    recorded by wasmrt; owner: *"pass all three issues to the wazmrt team"*. ⚠️⚠️ **THE ROW BINDS BOTH SIDES, and on the
+    day it was folded in NEITHER was fully clean** — recorded that way deliberately, because a row written as "they must
+    adopt" is a row its author stops testing. It is a case of row 2 (a bad argument), stated separately because wazmrt
+    breaks it: `wazmrt m.wasm nosuch` prints the summary and exits **0**. wasmrt's `run` already complies (rc 1, *"no
+    exported function `nosuch`"*). ⚠️ **wasmrt's bare-path form still has F1** (`wasmrt m.wasm f` summarizes, rc 0).
+    That is the same class on wasmrt's side, and it stays open under §2.1.
 
-#### 🔬 2.3m — §2.3 MEASURED by running both binaries (wasmrt session, 2026-09-19) — 📎 ANNEX, ✅ **ACCEPTED AND FOLDED IN as v13** (wazmrt, pen-holder, 2026-09-19); kept in place as the measured evidence
+#### 🔬 2.3m — §2.3 MEASURED by running both binaries (wasmrt session, 2026-09-19) — 📎 ANNEX, ✅ **ACCEPTED AND FOLDED
+IN as v13** (wazmrt, pen-holder, 2026-09-19); kept in place as the measured evidence
 
 *A wasmrt contribution under regime A: **not a version**, rows above deliberately left as the pen-holder wrote
-them — ✅ **and the pen-holder has since folded them in as v13**, after re-running all of it (§2.5h-a). Triggered by the owner's `coordinate` on the one item wasmrt had logged as needing it: "`wasmrt <file>`
+them — ✅ **and the pen-holder has since folded them in as v13**, after re-running all of it (§2.5h-a). Triggered by the
+owner's `coordinate` on the one item wasmrt had logged as needing it: "`wasmrt <file>`
 exits 0 on an invalid module".*
 
 **Method.** Both copies of this file byte-compared first: **IDENTICAL at v10** (neither changed since
@@ -134,14 +152,35 @@ must not slip past silently. The CLI help says so on wasmrt.
 **zH7 is unchanged and complementary.** A **known** host flag stranded in a guest position still only
 *warns* (it may be the guest's own); an **unknown** `--flag` in a host position *errors*.
 
-| | wazmrt (measured 2026-09-19, 1.0.1) | wasmrt | status |
-| --- | --- | --- | --- |
-| first argument / before the path (**either dash form**) | rc 1, but reported as *"cannot read '--bogus': FileNotFound"* | ✅ `unknown flag` | ⚠⚠ **wazmrt: NOT merely the wording — a v14 breach.** The parser decided the flag *looked like* a path. Right code, and a message that sends the user to the filesystem to debug a typo'd flag |
-| leading run after the path, **`--flag`** | **rc 0 — handed to the guest** | ✅ `unknown flag` | ⚠⚠ **wazmrt must adopt** |
-| leading run after the path, **`-flag`**, in a mode that **HAS guest argv** (`_start` present) (v15) | rc 0 — the guest's | rc 0 — the guest's | ✅ **AGREED — both measured correct 2026-09-19** (`wazmrt start.wasm -la`, `wasmrt wasi start.wasm -la`). 🎓 The narrowing *removed* work from wazmrt: its existing behaviour here was right, and pre-narrowing v11 would have made us break it |
-| ⚠️ leading run after the path, **`-flag`**, in a mode with **NO guest argv** (summarize, `.wast`, `wat`) | **rc 0 — ignored** (`wazmrt valid.wasm -la`) | ✅ rc 1, `unknown flag` | ⚠⚠ **wazmrt must adopt — the v15 carve-out does NOT reach here.** Position 4 is *every* argument, both dash forms; the dash-count split is scoped to **modes that have guest argv**, because that is the only place there is a guest to hand it to |
-| `.wast` script flags | **rc 0 — ignored** | ✅ `unknown flag` | ⚠️⚠️ **wazmrt must adopt** |
-| guest positions (after `--`, after the first guest arg) | untouched | untouched | ✅ **AGREED** |
+- first argument / before the path (**either dash form**)
+  - wazmrt (measured 2026-09-19, 1.0.1): rc 1, but reported as *"cannot read '--bogus': FileNotFound"*
+  - wasmrt: ✅ `unknown flag`
+  - status: ⚠⚠ **wazmrt: NOT merely the wording — a v14 breach.** The parser decided the flag *looked like* a path.
+    Right code, and a message that sends the user to the filesystem to debug a typo'd flag
+- leading run after the path, **`--flag`**
+  - wazmrt (measured 2026-09-19, 1.0.1): **rc 0 — handed to the guest**
+  - wasmrt: ✅ `unknown flag`
+  - status: ⚠⚠ **wazmrt must adopt**
+- leading run after the path, **`-flag`**, in a mode that **HAS guest argv** (`_start` present) (v15)
+  - wazmrt (measured 2026-09-19, 1.0.1): rc 0 — the guest's
+  - wasmrt: rc 0 — the guest's
+  - status: ✅ **AGREED — both measured correct 2026-09-19** (`wazmrt start.wasm -la`, `wasmrt wasi start.wasm -la`). 🎓
+    The narrowing *removed* work from wazmrt: its existing behaviour here was right, and pre-narrowing v11 would have
+    made us break it
+- ⚠️ leading run after the path, **`-flag`**, in a mode with **NO guest argv** (summarize, `.wast`, `wat`)
+  - wazmrt (measured 2026-09-19, 1.0.1): **rc 0 — ignored** (`wazmrt valid.wasm -la`)
+  - wasmrt: ✅ rc 1, `unknown flag`
+  - status: ⚠⚠ **wazmrt must adopt — the v15 carve-out does NOT reach here.** Position 4 is *every* argument, both dash
+    forms; the dash-count split is scoped to **modes that have guest argv**, because that is the only place there is a
+    guest to hand it to
+- `.wast` script flags
+  - wazmrt (measured 2026-09-19, 1.0.1): **rc 0 — ignored**
+  - wasmrt: ✅ `unknown flag`
+  - status: ⚠️⚠️ **wazmrt must adopt**
+- guest positions (after `--`, after the first guest arg)
+  - wazmrt (measured 2026-09-19, 1.0.1): untouched
+  - wasmrt: untouched
+  - status: ✅ **AGREED**
 
 wasmrt is pinned by `crates/wasmrt/tests/cli_unknown_flag.rs` (mutation-verified). Before the rule,
 **both** runtimes silently ignored an unknown flag in at least one host position.
@@ -157,14 +196,28 @@ RESEMBLANCE-MATCH anything, ever.** Within a host-flag position an argument is c
 of options that command accepts: **exact match → run it; anything else → `unknown flag`, rc 1.** There
 is no third branch, and in particular these are all now **forbidden**:
 
-| forbidden | what it looks like in practice | why it is forbidden |
-| --- | --- | --- |
-| **guessing a flag is a PATH** | ⚠️ wazmrt today: `wazmrt --bogus m.wasm` → *"cannot read '--bogus': FileNotFound"* | the exit code is right and **the message sends the user to look at the filesystem for a typo in their flag.** This is the purest case of the rule: the parser decided what the argument *resembled* |
-| **fuzzy / "did you mean"** matching | `--dirr` → silently treated as `--dir`, or corrected | a near-miss that RUNS is the silent-wrong-output class with a helpful face on it. ⚠️ **Printing a suggestion is not the same as acting on one** — the error may name near spellings, it may not adopt one |
-| **prefix / abbreviation** matching | `--max` accepted for `--max-memory` | today's unambiguous abbreviation becomes ambiguous the moment a flag is added, so it silently changes meaning across versions |
-| **"probably the guest's"** inference in a **host** position | ignoring an unknown flag after the path because it might be argv | this is Z2 exactly, and it is what §2.4a already killed |
-| **inferring a flag from its VALUE's shape** | treating `-1` as a flag, or a flag as a value, based on what it resembles | §2.4a settles this **by position**, and position is grammar — see below |
-| **a "did you mean a host flag?" warning** on a near-miss | warning that `-dir /tmp` looks like `--dir /tmp` before passing it to the guest | 🔒 **the owner considered exactly this case and REFUSED it** (v15). It is the most tempting form of the rule to break, because the thing it would catch is real |
+- **guessing a flag is a PATH**
+  - what it looks like in practice: ⚠️ wazmrt today: `wazmrt --bogus m.wasm` → *"cannot read '--bogus': FileNotFound"*
+  - why it is forbidden: the exit code is right and **the message sends the user to look at the filesystem for a typo in
+    their flag.** This is the purest case of the rule: the parser decided what the argument *resembled*
+- **fuzzy / "did you mean"** matching
+  - what it looks like in practice: `--dirr` → silently treated as `--dir`, or corrected
+  - why it is forbidden: a near-miss that RUNS is the silent-wrong-output class with a helpful face on it. ⚠️ **Printing
+    a suggestion is not the same as acting on one** — the error may name near spellings, it may not adopt one
+- **prefix / abbreviation** matching
+  - what it looks like in practice: `--max` accepted for `--max-memory`
+  - why it is forbidden: today's unambiguous abbreviation becomes ambiguous the moment a flag is added, so it silently
+    changes meaning across versions
+- **"probably the guest's"** inference in a **host** position
+  - what it looks like in practice: ignoring an unknown flag after the path because it might be argv
+  - why it is forbidden: this is Z2 exactly, and it is what §2.4a already killed
+- **inferring a flag from its VALUE's shape**
+  - what it looks like in practice: treating `-1` as a flag, or a flag as a value, based on what it resembles
+  - why it is forbidden: §2.4a settles this **by position**, and position is grammar — see below
+- **a "did you mean a host flag?" warning** on a near-miss
+  - what it looks like in practice: warning that `-dir /tmp` looks like `--dir /tmp` before passing it to the guest
+  - why it is forbidden: 🔒 **the owner considered exactly this case and REFUSED it** (v15). It is the most tempting
+    form of the rule to break, because the thing it would catch is real
 
 ⚠⚠ **WHAT v14 DOES *NOT* TOUCH, and the distinction is the load-bearing one: GRAMMAR IS NOT
 RESEMBLANCE.** The host/guest boundary in §2.4a is fixed by the **shape of the command line** — an

@@ -1,6 +1,65 @@
 # interop.md — the **wasmrt ⇄ wazmrt swappability contract**
 
-**CONTRACT VERSION: 41 — wazmrt LEADS (owner, 2026-08-19).** **v41 (2026-10-26): record-only — §3.1 `.wat` pins: a `(@custom "name" …)` is the only `name` section on BOTH runtimes now (wazmrt `852ff84`, I8 on wasm-tools 1.262); and every version through v40 is MIRRORED (the two copies' SHA-256 equal, wasmrt `2ee6628`) — the ⏳ marks on v18–v40 record each row's state when written** ⏳ PENDING MIRROR. **v40 (2026-10-24): a correction to v39 — wazmrt did NOT meet D2's table-initializer encoding rule (found by wasmrt); fixed, 2,401 / 0 differ on both** ⏳ PENDING MIRROR. 🔒 **v39 (2026-10-24): value types follow binaryang D2 2.2.0's `typeRules` (wasm-tools' rule) — AGREED on both (wazmrt 4.0.0, wasmrt 1.0.0: 2,352 / 0 differ)** ⏳ PENDING MIRROR. **v38 (2026-10-24): record-only — `--features` AGREED on both (re-run: 2,352 / 0 differ); the ladder line corrected (wasmrt's T13 is met in its source)** ⏳ PENDING MIRROR. 🔒 **v37 (2026-10-24): §2.2 `--features` — wazmrt implements binaryang D2's names AND meanings (per-instruction gating = D1's column; D2 presets; wasm-tools-only names deprecated); wasmrt migrates once, to this** ⏳ PENDING MIRROR. **v36 (2026-10-24): record-only — §5 #13 MET on both sides (wasmrt `cfeee31`, re-verified by running both)** ⏳ PENDING MIRROR. 🔒 **v35 (2026-10-24): §2.2m's stale wasmrt cells REFRESHED by running both — all agree but two, now owner decisions: a WASI guest sees ONLY `--env`, well-formed, last KEY wins (§5 #13, wazmrt fixed, wasmrt changes), and a `--pins` DB that cannot be read is an ERROR (§5 #14, wazmrt fixed, shipped as a patch)** ⏳ PENDING MIRROR. **v34 (2026-10-24): record-only — wasmrt's second history rewrite; the four quoted wasmrt ids replaced, one of them a v31 typo** ⏳ PENDING MIRROR. 🔒 **v33 (2026-10-23): (1) RELEASE LOCKSTEP ENDED (owner: "we are officially out of lock step now due to differences"), §1e; the contract rows and the mirror stay. (2) v32 covers MEANINGS as well as names (owner: "aligning with binaryang means its meanings also"). (3) wasmrt's two annexes §2.2f / §2.2m are FOLDED, and the copies were byte-identical at the fold** ⏳ PENDING MIRROR. 🔒 **v32 (2026-10-23): the owner REVERSES v30's direction: `--features` aligns with binaryang's D2 vocabulary, not wasm-tools'** (§2.2's row; record-only until binaryang's FL1 settles the spellings) ⏳ PENDING MIRROR. 🆕 **v31 (2026-10-23): wasmrt's commit ids are its post-rewrite ids** (workspace letter H21; no row's meaning changes) ⏳ PENDING MIRROR. 🆕 **v30 (2026-09-21): `--features` takes wasm-tools' whole vocabulary with wasm-tools' meanings, proven identical by one shared measurement matrix** (§2.2). 🚨 **v29 (2026-09-21): `.wat` pin portability is BROKEN on purpose** — wazmrt `1.0.2` fixed letter H13's three encoder divergences from wasm-tools, and pins now agree with wasmrt on 64/528 until wasmrt makes the same fixes (§3.1). 🆕 **v28 (2026-09-21): §5 #12 CLOSED by amending §2.4a to match the code** (exact wazmrt flag names after the first guest word are an error; only `--` hands off unconditionally), **and wazmrt `1.0.2` ships before wasmrt reaches `1.0.1`** (§1e revised). 🆕 **v27 (2026-09-21) CLOSES §5 #10 by giving the `--dir` host half a GRAMMAR** — a relative path must say `./` or `../`, which makes a leading `<letter>:` a drive by grammar instead of by resemblance, so the heuristic v14 forbade is deleted rather than exchanged. 🚨 **It also fixes a defect the row never suspected: the drive rule had no platform branch and was shipping to Linux and macOS.** ⚠️ **wazmrt is now the stricter side of a CLI row for the first time — so this one needs a mirror in the other direction.** The wasmrt half is **UNMEASURED**; the check is written into the §2.2 row. wazmrt is finishing its hardening stage and **its copy is the latest**; wasmrt mirrors from it and **does not originate version numbers** until wasmrt reaches the same stage. ✅ **THE 2026-09-19 OWNER DECISIONS ARE FOLDED IN AND NUMBERED HERE** — **§2.4a as v11**, **§2.5 as v12**, wasmrt's **§2.3m annex as v13** (the §2.3 Z1 row, and row 3 promoted to ✅ AGREED), 🔒 **the owner's NO-"LOOKS LIKE" clarification as v14 (§2.4a-i)**, and 🔒 **the owner's same-day NARROWING of §2.4a as v15** (after the module path a single-dash token is the guest's). ⚠️ **v14 puts §2.2's `--dir` drive-letter fallback in tension and needs an owner ruling (§5 #10).** 🆕 **v16 adds §2.4b: a flag with a REQUIRED position, written where it cannot apply, is an error** — and wazmrt has **shipped** it. 🆕 **v17–v20 fold in wasmrt's T9e + T9i (2026-09-19):** **v17** Z4, `.wat` pin digests are not portable and the cause is the `name` section · **v18** the pin DB path is DECIDED (§3.3), closing §5 #1 · **v19** §3.7a is CLOSED, verified by running both, closing §5 #5 · **v20** §2.1/§2.2 convergence — wasmrt's column is green and wazmrt's halves are what remain. ⚠️⚠️ **v20 also carries a NEW wazmrt defect this pass found by running: `--dir .:/` — the example wazmrt's own `--help` prints — DOES NOT WORK**, and the cause is the drive-letter heuristic already flagged at §5 #10. 🚨 **v15 exists because §1c happened again while this very pass was running** — both sessions edited their own copies within the same hour; see the v15 change-log row. 📎 **The annexes themselves (§2.1m, §2.3m) stay where they are** — they are the measured *evidence*, and folding never means deleting the measurement that bought the row. 🆕 **v22 (2026-09-20) CLOSES Z4: `.wat` pin digests are PORTABLE** — 954 of 954 comparable files agree, up from 2. ⚠️ **The v17 annex named ONE cause and there were THREE**; the other two (an over-eager data-count section, and implicit import types interned after every tag's) were reachable only by the gate, because the file the byte-for-byte diagnosis ran on could not contain either. 🚨 **v22 also carries a NEW wazmrt defect the run found — B-d: `(type N)` naming an undeclared type binds an import to a signature the text never wrote, rc 0**, where wasmrt refuses. 🆕 **v23 (same day) FIXES B-d, and cross-runtime parity is now TOTAL: the two pin listings are 1,467 lines each, `.wat` 954 of 954 and `.wasm` 513 of 513, with nothing in one and not the other.** 🆕 **v24 lands §2.1's four SUBCOMMAND SPELLINGS — `run`/`wasi`/`wat`/`wast`, additively — which EMPTIES the 2026-09-19 outstanding list; `pin` on wasmrt's side is what is left in §2.1.** ⏳ **wasmrt's copy is therefore at 10 and BEHIND — PENDING MIRROR**, which §1a says the owner directs and wasmrt makes in its own tree · opened 2026-08-19 (owner) · 🆕 **v25 records two wazmrt defects that broke BINARY interop in both directions** — a block type emitted as an internal enum tag, and the `any`/`extern` conversion opcodes swapped at four agreeing sites — found by assembling the SPEC corpus with both toolchains; the real-world `.wat` parity claim is unchanged at 954/954, which is exactly why that corpus could not find them. · last change 2026-09-20 (v25) · **this file must be kept IDENTICAL
+**CONTRACT VERSION: 41 — wazmrt LEADS (owner, 2026-08-19).** **v41 (2026-10-26): record-only — §3.1 `.wat` pins: a
+`(@custom "name" …)` is the only `name` section on BOTH runtimes now (wazmrt `852ff84`, I8 on wasm-tools 1.262); and
+every version through v40 is MIRRORED (the two copies' SHA-256 equal, wasmrt `2ee6628`) — the ⏳ marks on v18–v40 record
+each row's state when written** ⏳ PENDING MIRROR. **v40 (2026-10-24): a correction to v39 — wazmrt did NOT meet D2's
+table-initializer encoding rule (found by wasmrt); fixed, 2,401 / 0 differ on both** ⏳ PENDING MIRROR. 🔒 **v39
+(2026-10-24): value types follow binaryang D2 2.2.0's `typeRules` (wasm-tools' rule) — AGREED on both (wazmrt 4.0.0,
+wasmrt 1.0.0: 2,352 / 0 differ)** ⏳ PENDING MIRROR. **v38 (2026-10-24): record-only — `--features` AGREED on both
+(re-run: 2,352 / 0 differ); the ladder line corrected (wasmrt's T13 is met in its source)** ⏳ PENDING MIRROR. 🔒 **v37
+(2026-10-24): §2.2 `--features` — wazmrt implements binaryang D2's names AND meanings (per-instruction gating = D1's
+column; D2 presets; wasm-tools-only names deprecated); wasmrt migrates once, to this** ⏳ PENDING MIRROR. **v36
+(2026-10-24): record-only — §5 #13 MET on both sides (wasmrt `cfeee31`, re-verified by running both)** ⏳ PENDING MIRROR.
+🔒 **v35 (2026-10-24): §2.2m's stale wasmrt cells REFRESHED by running both — all agree but two, now owner decisions: a
+WASI guest sees ONLY `--env`, well-formed, last KEY wins (§5 #13, wazmrt fixed, wasmrt changes), and a `--pins` DB that
+cannot be read is an ERROR (§5 #14, wazmrt fixed, shipped as a patch)** ⏳ PENDING MIRROR. **v34 (2026-10-24):
+record-only — wasmrt's second history rewrite; the four quoted wasmrt ids replaced, one of them a v31 typo** ⏳ PENDING
+MIRROR. 🔒 **v33 (2026-10-23): (1) RELEASE LOCKSTEP ENDED (owner: "we are officially out of lock step now due to
+differences"), §1e; the contract rows and the mirror stay. (2) v32 covers MEANINGS as well as names (owner: "aligning
+with binaryang means its meanings also"). (3) wasmrt's two annexes §2.2f / §2.2m are FOLDED, and the copies were
+byte-identical at the fold** ⏳ PENDING MIRROR. 🔒 **v32 (2026-10-23): the owner REVERSES v30's direction: `--features`
+aligns with binaryang's D2 vocabulary, not wasm-tools'** (§2.2's row; record-only until binaryang's FL1 settles the
+spellings) ⏳ PENDING MIRROR. 🆕 **v31 (2026-10-23): wasmrt's commit ids are its post-rewrite ids** (workspace letter
+H21; no row's meaning changes) ⏳ PENDING MIRROR. 🆕 **v30 (2026-09-21): `--features` takes wasm-tools' whole vocabulary
+with wasm-tools' meanings, proven identical by one shared measurement matrix** (§2.2). 🚨 **v29 (2026-09-21): `.wat` pin
+portability is BROKEN on purpose** — wazmrt `1.0.2` fixed letter H13's three encoder divergences from wasm-tools, and
+pins now agree with wasmrt on 64/528 until wasmrt makes the same fixes (§3.1). 🆕 **v28 (2026-09-21): §5 #12 CLOSED by
+amending §2.4a to match the code** (exact wazmrt flag names after the first guest word are an error; only `--` hands off
+unconditionally), **and wazmrt `1.0.2` ships before wasmrt reaches `1.0.1`** (§1e revised). 🆕 **v27 (2026-09-21) CLOSES
+§5 #10 by giving the `--dir` host half a GRAMMAR** — a relative path must say `./` or `../`, which makes a leading
+`<letter>:` a drive by grammar instead of by resemblance, so the heuristic v14 forbade is deleted rather than exchanged.
+🚨 **It also fixes a defect the row never suspected: the drive rule had no platform branch and was shipping to Linux and
+macOS.** ⚠️ **wazmrt is now the stricter side of a CLI row for the first time — so this one needs a mirror in the other
+direction.** The wasmrt half is **UNMEASURED**; the check is written into the §2.2 row. wazmrt is finishing its
+hardening stage and **its copy is the latest**; wasmrt mirrors from it and **does not originate version numbers** until
+wasmrt reaches the same stage. ✅ **THE 2026-09-19 OWNER DECISIONS ARE FOLDED IN AND NUMBERED HERE** — **§2.4a as v11**,
+**§2.5 as v12**, wasmrt's **§2.3m annex as v13** (the §2.3 Z1 row, and row 3 promoted to ✅ AGREED), 🔒 **the owner's
+NO-"LOOKS LIKE" clarification as v14 (§2.4a-i)**, and 🔒 **the owner's same-day NARROWING of §2.4a as v15** (after the
+module path a single-dash token is the guest's). ⚠️ **v14 puts §2.2's `--dir` drive-letter fallback in tension and needs
+an owner ruling (§5 #10).** 🆕 **v16 adds §2.4b: a flag with a REQUIRED position, written where it cannot apply, is an
+error** — and wazmrt has **shipped** it. 🆕 **v17–v20 fold in wasmrt's T9e + T9i (2026-09-19):** **v17** Z4, `.wat` pin
+digests are not portable and the cause is the `name` section · **v18** the pin DB path is DECIDED (§3.3), closing §5 #1
+· **v19** §3.7a is CLOSED, verified by running both, closing §5 #5 · **v20** §2.1/§2.2 convergence — wasmrt's column is
+green and wazmrt's halves are what remain. ⚠️⚠️ **v20 also carries a NEW wazmrt defect this pass found by running:
+`--dir .:/` — the example wazmrt's own `--help` prints — DOES NOT WORK**, and the cause is the drive-letter heuristic
+already flagged at §5 #10. 🚨 **v15 exists because §1c happened again while this very pass was running** — both sessions
+edited their own copies within the same hour; see the v15 change-log row. 📎 **The annexes themselves (§2.1m, §2.3m)
+stay where they are** — they are the measured *evidence*, and folding never means deleting the measurement that bought
+the row. 🆕 **v22 (2026-09-20) CLOSES Z4: `.wat` pin digests are PORTABLE** — 954 of 954 comparable files agree, up from
+2. ⚠️ **The v17 annex named ONE cause and there were THREE**; the other two (an over-eager data-count section, and
+implicit import types interned after every tag's) were reachable only by the gate, because the file the byte-for-byte
+diagnosis ran on could not contain either. 🚨 **v22 also carries a NEW wazmrt defect the run found — B-d: `(type N)`
+naming an undeclared type binds an import to a signature the text never wrote, rc 0**, where wasmrt refuses. 🆕 **v23
+(same day) FIXES B-d, and cross-runtime parity is now TOTAL: the two pin listings are 1,467 lines each, `.wat` 954 of
+954 and `.wasm` 513 of 513, with nothing in one and not the other.** 🆕 **v24 lands §2.1's four SUBCOMMAND SPELLINGS —
+`run`/`wasi`/`wat`/`wast`, additively — which EMPTIES the 2026-09-19 outstanding list; `pin` on wasmrt's side is what is
+left in §2.1.** ⏳ **wasmrt's copy is therefore at 10 and BEHIND — PENDING MIRROR**, which §1a says the owner directs and
+wasmrt makes in its own tree · opened 2026-08-19 (owner) · 🆕 **v25 records two wazmrt defects that broke BINARY interop
+in both directions** — a block type emitted as an internal enum tag, and the `any`/`extern` conversion opcodes swapped
+at four agreeing sites — found by assembling the SPEC corpus with both toolchains; the real-world `.wat` parity claim is
+unchanged at 954/954, which is exactly why that corpus could not find them. · last change 2026-09-20 (v25) · **this file
+must be kept IDENTICAL
 in both repos**, each side editing ONLY its own copy (§1a) (`wasmrt/cmem/interop.md` and `wazmrt/cmem/interop.md`).
 
 > *"I think this may require a common memory md file in both projects to confer with each other on from
@@ -17,7 +76,10 @@ must satisfy so a deployment can swap one binary for the other.
 
 🔒 **Split from one 187 KB file by moving each section VERBATIM** (owner, 2026-11-25: *"perform the work on W3.
 wazmrt will follow suit"*): no row, status or wording changed, so the CONTRACT VERSION is unchanged. A reference to
-"interop.md §N" means the section, in the part listed here. ⏳ **PENDING MIRROR** in wazmrt's copy (§1).
+"interop.md §N" means the section, in the part listed here. Later the same day (owner: *"fix item 2"*) every table
+with a row over 200 characters became a list — each row a bullet led by its first cell, each other cell a sub-bullet
+labelled with its column header, a `<br>` a line break — and every other line over 200 was wrapped at a space, so each
+part holds the memory guide's line limit; no word changed. ⏳ **PENDING MIRROR** of both in wazmrt's copy (§1).
 
 | sections | file |
 | --- | --- |
@@ -155,10 +217,12 @@ freely"*; this file said *"reading a competitor's implementation for guidance re
 Both were current and binding-sounding and they could not both be followed. **The narrow reading is
 the one that governs:** §1's subject is the sibling, so
 
-| | reading their source for DESIGN GUIDANCE |
-| --- | --- |
-| **`wasmrt`** (the sibling) | 🚫 **off-limits by default** — each time needs an owner-directed scoped exception, logged. Two have been granted: Track B-e, and the `@custom` review |
-| **the other eight** in `reference-projects.md` | ✅ **allowed** — that file's "mine it for" column stands, and adoption stays gated by the Adoption Checklist + a Component Ledger entry in `third_party/LICENSES.md` |
+- **`wasmrt`** (the sibling)
+  - reading their source for DESIGN GUIDANCE: 🚫 **off-limits by default** — each time needs an owner-directed scoped
+    exception, logged. Two have been granted: Track B-e, and the `@custom` review
+- **the other eight** in `reference-projects.md`
+  - reading their source for DESIGN GUIDANCE: ✅ **allowed** — that file's "mine it for" column stands, and adoption
+    stays gated by the Adoption Checklist + a Component Ledger entry in `third_party/LICENSES.md`
 
 ⚠️ **What is NOT restricted for either, and never was: behavioural MEASUREMENT.** Running another
 implementation and comparing its output, bytes or exit codes is the method this project relies on most

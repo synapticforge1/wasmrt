@@ -65,18 +65,43 @@ wrong reason, which is worse than failing.*
 
 #### The agreed design — what wasmrt must implement to close it
 
-| item | agreed value | why it is in the contract |
-| --- | --- | --- |
-| **the unit — ONE ITERATION** | **one loop back-edge, OR one tail-call hop** | 🎯 **THIS IS THE ROW THAT MATTERS.** Two runtimes with "a limit of `1<<30`" that COUNT DIFFERENT THINGS are not swappable: a module finishing just under the ceiling on one traps on the other. Aligning the number while leaving the unit unstated would look like agreement and behave like divergence. **Counting instructions instead of back-edges is a contract breach even at the same number.** |
-| **default** | **`1 << 30`** (1,073,741,824) | measured, not chosen — see below |
-| **scope of the budget** | **per top-level invocation**, refilled on entry | so a long-running host loop calling many short guest functions is never starved |
-| **re-entry** | a host callback calling back in **inherits the remainder**; it does NOT refill | a guest that can refill its budget by bouncing through a host function does not have a budget |
-| **what happens** | a **trap** — an ordinary trap on the runtime's normal trap path | not an abort, not a process exit |
-| **CLI flag** | `--max-iterations <count>`, in the **leading run of host flags** (§2.4) | position is part of the flag contract, not a detail |
-| **`0` at the CLI** | **unlimited** | |
-| **the message** | must state the **ceiling that was hit** and **how to raise it** | |
-| **what it must NOT claim** | it bounds non-termination; it does **not** detect an infinite loop | a legitimately long-running module trips the same trap, and its owner needs to be told to raise the ceiling — not told a falsehood about their program |
-| **a count, NOT a clock** | binding | a wall-clock deadline makes the same module trap on a slow machine and pass on a fast one — the two runtimes would then disagree *by machine*, which is unswappable by construction. It also cannot be enforced without a thread and a clock, which the freestanding target does not have. |
+- **the unit — ONE ITERATION**
+  - agreed value: **one loop back-edge, OR one tail-call hop**
+  - why it is in the contract: 🎯 **THIS IS THE ROW THAT MATTERS.** Two runtimes with "a limit of `1<<30`" that COUNT
+    DIFFERENT THINGS are not swappable: a module finishing just under the ceiling on one traps on the other. Aligning
+    the number while leaving the unit unstated would look like agreement and behave like divergence. **Counting
+    instructions instead of back-edges is a contract breach even at the same number.**
+- **default**
+  - agreed value: **`1 << 30`** (1,073,741,824)
+  - why it is in the contract: measured, not chosen — see below
+- **scope of the budget**
+  - agreed value: **per top-level invocation**, refilled on entry
+  - why it is in the contract: so a long-running host loop calling many short guest functions is never starved
+- **re-entry**
+  - agreed value: a host callback calling back in **inherits the remainder**; it does NOT refill
+  - why it is in the contract: a guest that can refill its budget by bouncing through a host function does not have a
+    budget
+- **what happens**
+  - agreed value: a **trap** — an ordinary trap on the runtime's normal trap path
+  - why it is in the contract: not an abort, not a process exit
+- **CLI flag**
+  - agreed value: `--max-iterations <count>`, in the **leading run of host flags** (§2.4)
+  - why it is in the contract: position is part of the flag contract, not a detail
+- **`0` at the CLI**
+  - agreed value: **unlimited**
+  - why it is in the contract:
+- **the message**
+  - agreed value: must state the **ceiling that was hit** and **how to raise it**
+  - why it is in the contract:
+- **what it must NOT claim**
+  - agreed value: it bounds non-termination; it does **not** detect an infinite loop
+  - why it is in the contract: a legitimately long-running module trips the same trap, and its owner needs to be told to
+    raise the ceiling — not told a falsehood about their program
+- **a count, NOT a clock**
+  - agreed value: binding
+  - why it is in the contract: a wall-clock deadline makes the same module trap on a slow machine and pass on a fast one
+    — the two runtimes would then disagree *by machine*, which is unswappable by construction. It also cannot be
+    enforced without a thread and a clock, which the freestanding target does not have.
 
 ⚠️ **Why the tail-call tick is called out separately: a back-edge counter alone looks complete and is
 not.** A local `return_call` reuses the interpreter's native frame *by design*, so it makes no backward
@@ -106,10 +131,14 @@ returns. *(Same failure shape as the pin-DB path risk in §3.3: a swap that disa
 
 #### Where each side tracks the work
 
-| project | item | state |
-| --- | --- | --- |
-| **wazmrt** | Track **zH3** (hardening, ships as `1.0.1`) | ✅ **built 2026-08-19** — `--max-iterations`, `IterationLimitExceeded`, 4 tests covering both shapes + the no-false-positive and refill directions; corpus descent measured; cost exe +1,024 B / lib +512 B / **dll +0** |
-| **wasmrt** | **T9i** (ships as `1.0.1`) | ✅ decided, `[ ]` not yet built — owner: *"3 has already been decided in the wazmrt project, just follow their lead"* |
+- **wazmrt**
+  - item: Track **zH3** (hardening, ships as `1.0.1`)
+  - state: ✅ **built 2026-08-19** — `--max-iterations`, `IterationLimitExceeded`, 4 tests covering both shapes + the
+    no-false-positive and refill directions; corpus descent measured; cost exe +1,024 B / lib +512 B / **dll +0**
+- **wasmrt**
+  - item: **T9i** (ships as `1.0.1`)
+  - state: ✅ decided, `[ ]` not yet built — owner: *"3 has already been decided in the wazmrt project, just follow their
+    lead"*
 
 ✅ **The two designs were written independently and agree** — `u64::MAX` filled at refill for
 "unlimited", the two `0` conventions, the trap excluded from the `.wast` runner's spec-trap predicate,

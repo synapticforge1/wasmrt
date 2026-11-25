@@ -8,19 +8,63 @@
 the waste.* These checks are the contract's only real enforcement — a row marked ✅ that nothing re-runs
 decays exactly like any other claim.
 
-| # | check | catches |
-| --- | --- | --- |
-| 1 | **byte-compare the two copies of this file** | the drift hazard in §1 — the one failure that makes every other row meaningless |
-| 2 | **assemble the shared `.wat` corpus with both, diff the SHA-256 of the outputs** | ⚠️ a pinned `.wat` that validates under one runtime and is refused by the other. **Not hypothetical** — wasmrt has four recorded defects where its emitter produced a different module than the text described. If the assemblers disagree, **only `.wasm` digests are portable** and that must be documented, not discovered |
-| 3 | **run the same pin DB + the same module under both**, across all nine `decide()` rows | a policy that is honoured *differently*, which is worse than not being honoured |
-| 4 | **row-by-row diff of the WASI rights tables** (§3.6) | the original finding that opened this file: a right present in one and absent in the other, where the read-only test passes trivially because the right is not in the mask |
-| 5 | **the same CLI invocation under both**, for every row of §2 | the `--dir` separator class — a flag that does not error and does the wrong thing |
-| 6 | ⚠️ **UPDATED v19 — assert the TRAP, not merely a non-zero exit, and place the flag in each CLI's own host position.** The pen-holder's first run of this check put `--max-iterations` after the export name, where it was guest argv and never applied; the run exited **1** anyway from an argument-count error, so an `rc != 0` assertion would have recorded the bound as working. · **run a non-terminating module under both, under a timeout** — one `.wasm` containing `(loop (br 0))` **and** `(func $f (return_call $f))`, both shapes, both runtimes, low `--max-iterations` | §3.7a. ⚠️ **Must be run under a timeout and must assert the EXIT, not the output**: the failing side produces no output at all, so a check that greps stdout passes vacuously against a hung process. The two shapes are separate cases on purpose — a back-edge-only implementation passes the first and hangs on the second |
-| 7 | **the same module at a budget just under and just over its true cost**, both runtimes | that both count the SAME UNIT (§3.7a). Equal defaults with different units disagree only near the ceiling, which is exactly where nobody looks |
-| 8 | 🆕 **an unknown flag in EVERY host-flag position under both** — first argument, before the path, the leading run after the path, and a `.wast`/`wat` invocation — **and in the guest positions, asserting it is UNTOUCHED** (§2.4a, v11, **as narrowed by v15**) | ⚠️ the Z2 class: a mistyped host flag that vanishes into the guest's argv. **The negative half is the load-bearing half** — a check that only asserts the error will be "fixed" by a parser that errors on the guest's own `-la`, which v15 explicitly permits and `prog.wasm install --yes` explicitly forbids. 🆕 **Run the dash-count cases in BOTH mode families** (`_start` present and absent): the single-dash carve-out applies only where there is guest argv, so a check that uses one module shape will bless the wrong behaviour in the other |
-| 9 | 🆕 **summarize an INVALID module under both and grep EVERY output line for a validity claim** (§2.5, v12) | ⚠️ the Z3 class. **Assert on the whole output, not the exit code** — the exit code was already right on both sides when Z3 was found, so a check that reads only `rc` passes vacuously against the exact defect it is named for |
-| 11 | 🆕 **a position-restricted flag written in the WRONG host position, under both** — and, separately, in a guest position asserting it is untouched (§2.4b, v16) | ⚠️ the silent-drop class on a flag that RESTRICTS. **Assert the exit status, not the message**: the failure mode being guarded is a **successful** run that ignored the flag, so a check that greps stderr for wording passes vacuously against a build that dropped the flag and said nothing |
-| 10 | 🆕 **name an export the module does not have, under both, on every call form** (§2.3 Z1 row, v13) | ⚠️ the Z1/F1 class, and it is **live on both sides today** — wazmrt's bare path and wasmrt's bare path both exit 0. **Every call form** is deliberate: wasmrt's `run` passes this and its bare path fails it, so a one-form check would have reported the project compliant |
+- 1
+  - check: **byte-compare the two copies of this file**
+  - catches: the drift hazard in §1 — the one failure that makes every other row meaningless
+- 2
+  - check: **assemble the shared `.wat` corpus with both, diff the SHA-256 of the outputs**
+  - catches: ⚠️ a pinned `.wat` that validates under one runtime and is refused by the other. **Not hypothetical** —
+    wasmrt has four recorded defects where its emitter produced a different module than the text described. If the
+    assemblers disagree, **only `.wasm` digests are portable** and that must be documented, not discovered
+- 3
+  - check: **run the same pin DB + the same module under both**, across all nine `decide()` rows
+  - catches: a policy that is honoured *differently*, which is worse than not being honoured
+- 4
+  - check: **row-by-row diff of the WASI rights tables** (§3.6)
+  - catches: the original finding that opened this file: a right present in one and absent in the other, where the
+    read-only test passes trivially because the right is not in the mask
+- 5
+  - check: **the same CLI invocation under both**, for every row of §2
+  - catches: the `--dir` separator class — a flag that does not error and does the wrong thing
+- 6
+  - check: ⚠️ **UPDATED v19 — assert the TRAP, not merely a non-zero exit, and place the flag in each CLI's own host
+    position.** The pen-holder's first run of this check put `--max-iterations` after the export name, where it was
+    guest argv and never applied; the run exited **1** anyway from an argument-count error, so an `rc != 0` assertion
+    would have recorded the bound as working. · **run a non-terminating module under both, under a timeout** — one
+    `.wasm` containing `(loop (br 0))` **and** `(func $f (return_call $f))`, both shapes, both runtimes, low
+    `--max-iterations`
+  - catches: §3.7a. ⚠️ **Must be run under a timeout and must assert the EXIT, not the output**: the failing side
+    produces no output at all, so a check that greps stdout passes vacuously against a hung process. The two shapes are
+    separate cases on purpose — a back-edge-only implementation passes the first and hangs on the second
+- 7
+  - check: **the same module at a budget just under and just over its true cost**, both runtimes
+  - catches: that both count the SAME UNIT (§3.7a). Equal defaults with different units disagree only near the ceiling,
+    which is exactly where nobody looks
+- 8
+  - check: 🆕 **an unknown flag in EVERY host-flag position under both** — first argument, before the path, the leading
+    run after the path, and a `.wast`/`wat` invocation — **and in the guest positions, asserting it is UNTOUCHED**
+    (§2.4a, v11, **as narrowed by v15**)
+  - catches: ⚠️ the Z2 class: a mistyped host flag that vanishes into the guest's argv. **The negative half is the
+    load-bearing half** — a check that only asserts the error will be "fixed" by a parser that errors on the guest's own
+    `-la`, which v15 explicitly permits and `prog.wasm install --yes` explicitly forbids. 🆕 **Run the dash-count cases
+    in BOTH mode families** (`_start` present and absent): the single-dash carve-out applies only where there is guest
+    argv, so a check that uses one module shape will bless the wrong behaviour in the other
+- 9
+  - check: 🆕 **summarize an INVALID module under both and grep EVERY output line for a validity claim** (§2.5, v12)
+  - catches: ⚠️ the Z3 class. **Assert on the whole output, not the exit code** — the exit code was already right on
+    both sides when Z3 was found, so a check that reads only `rc` passes vacuously against the exact defect it is named
+    for
+- 11
+  - check: 🆕 **a position-restricted flag written in the WRONG host position, under both** — and, separately, in a
+    guest position asserting it is untouched (§2.4b, v16)
+  - catches: ⚠️ the silent-drop class on a flag that RESTRICTS. **Assert the exit status, not the message**: the failure
+    mode being guarded is a **successful** run that ignored the flag, so a check that greps stderr for wording passes
+    vacuously against a build that dropped the flag and said nothing
+- 10
+  - check: 🆕 **name an export the module does not have, under both, on every call form** (§2.3 Z1 row, v13)
+  - catches: ⚠️ the Z1/F1 class, and it is **live on both sides today** — wazmrt's bare path and wasmrt's bare path both
+    exit 0. **Every call form** is deliberate: wasmrt's `run` passes this and its bare path fails it, so a one-form
+    check would have reported the project compliant
 
 ⚠️ **A disagreement found by any of these is recorded as an OBSERVATION until its cause is traced.**
 Neither runtime is the oracle, so "the other one does X" is not a diagnosis.
@@ -29,22 +73,126 @@ Neither runtime is the oracle, so "the other one does X" is not a diagnosis.
 
 ## 5. Owner decisions this file is waiting on
 
-| # | decision | why it blocks |
-| --- | --- | --- |
-| ~~1~~ | ~~**The shared pin DB path** (§3.3)~~ | ✅ **DECIDED by the owner 2026-09-19 and FOLDED IN AS v18** — the shared `wasmtk` path, per-runtime fallback, **and a loud warning when a runtime finds no DB where its sibling would have found one.** 🎓 *This file's most dangerous row since v1, and what closed it was not the path but the warning.* ✅ wasmrt implements it (T9e, mutation-verified); ⏳ **wazmrt to adopt the order AND the warning** — Track B-b. ⚠️ **REOPEN if either side ships the path without the warning**, which is the partial fix that leaves the migration window open |
-| ~~2~~ | ~~**Who accepts whose CLI spelling, and by when** (§2.1)~~ | ✅ **CONFIRMED by the owner 2026-09-20 — and wasmrt is SYNCING ITS CLI TO wazmrt'S.** wazmrt's half landed in B-c4 (`run`/`wasi`/`wat`/`wast`, both `--dir` separators); the sibling adopting the rest closes the additive plan. ⚠️ **The ⬜ rows in `roadmap.md`'s §2.1 tables were stale when this was decided** — they still read "not started" for four capabilities that shipped; corrected the same day |
-| ~~3~~ | ~~**Fuel / execution bound** (§3.7)~~ | ✅ **DECIDED by the owner 2026-08-19** — a bound is wanted, with an error message and a break. Design agreed in **§3.7a**. ⚠️ **The decision is closed; the DIVERGENCE is open**: wazmrt ships it, wasmrt does not, and the predicted failure ("a workload that completes under one hangs under the other") is **verified live**, not hypothetical |
-| ~~5~~ | ~~**When does wasmrt land the execution bound** (§3.7a)~~ | ✅ **CLOSED 2026-09-19 — wasmrt shipped it (T9i), FOLDED IN AS v19**, and the pen-holder re-verified by running both on the same bytes: all four cells trap, `rc 1`, both messages naming the ceiling and how to raise it. Defaults independently re-measured on each corpus to the same shape. ⚠️ **REOPEN if either side amortizes the tick to every *N*th back-edge** — that changes the UNIT's granularity, and the ceiling stops meaning the same thing on both sides |
-| ~~6~~ | ~~**Attribution of commit `aa2769b8` (was `7ce0dcd2`) in the wasmrt repo**~~ | ✅ **CONFIRMED by the owner 2026-09-20** — the record stands as written and the matter is closed on wazmrt's side. 🔒 Nothing for an agent to do here and nothing to reopen: **wazmrt does not write to that tree**, and the owner carries anything that needs carrying. *(Original entry: )* wasmrt reports it committed **wazmrt's** §3.7a rewrite into its tree as if it were its own, before the collision was noticed. ⚠️ **wazmrt cannot fix this — §1a forbids writing to that tree**, and rewriting another repo's history is not an agent's call anyway. It is exactly the tracking-integrity problem the boundary was added to prevent, and it is now **behind** the rule rather than in front of it. Options: leave it with the collision documented in row 3b, or have the wasmrt session amend/annotate it **in its own tree** |
-| ~~7~~ | ~~**Whether coordination should run in ONE session at a time** (§1c)~~ | ✅ **DECIDED by the owner 2026-09-20: YES — coordination runs ONE SESSION AT A TIME.** 🔒 **And the owner restated the boundary alongside it: *"we do not modify the other project unless specifically requested."*** That is §1a unchanged and now doubly stated — one session removes the same-copy last-write-wins race, and the write ban removes the cross-tree one. ⚠️ **"Specifically requested" means the owner, for a named edit.** `coordinate` is still an order to CONFER, never a licence to write. *(Original entry: )* §1a removes the cross-tree risk by construction, but two sessions editing the *same* copy still resolve last-write-wins with nothing to detect it. wasmrt proposed the discipline; it costs nothing and closes the residual gap |
-| ~~4~~ | ~~**Exit-code table** (§2.3)~~ | ✅ **CLOSED 2026-09-19 by MEASUREMENT rather than by a decision — v13.** Both runtimes already return `1` for every host-side failure kind and every trap (§2.3m, plus the pen-holder's own re-run); §2.3 row 3 is now ✅ AGREED and no table is needed. 🎓 *The decision had been waiting on the owner for a month for want of somebody running twelve commands.* ⚠️ **REOPEN if either side ever emits a second non-zero code.** |
-| ~~8~~ | ~~**Unknown flags**~~ (§2.4a) | ✅ **DECIDED by the owner 2026-09-19** and ✅ **FOLDED IN AS v11** by the pen-holder the same day: an error saying `unknown flag`, rc 1, in every host-flag position. wasmrt complies (re-verified by running it); **wazmrt to adopt — tracked at Track B-b.** |
-| ~~10~~ | ~~**Does v14's "no looks like" reach flag VALUES — the `--dir` drive-letter fallback?**~~ (§2.2, §2.4a-i) | ✅ **DECIDED by the owner 2026-09-21 and SHIPPED THE SAME DAY as v27 — and none of the three costed options was the answer.** 🔑 **The host half of `--dir` now has a GRAMMAR: a relative path must start with `./` or `../`, and a bare `data` is an ERROR.** Once `data` is not a legal spelling, a leading `<letter>:` can only *be* a drive — **grammar, not resemblance** — so v14 is satisfied with the heuristic deleted rather than exchanged. 🎓 *The row was open two days over which spelling to guess; it closed by removing the spelling that forced the guess.* ⚠️ **The escape already existed and already worked** — `./q:/m` split correctly before any of this was written, which is why the fix cost a restriction and not a new rule. 🚨 **AND THE ROW HID A SECOND DEFECT: the drive rule had NO PLATFORM BRANCH and both POSIX targets cross-compile clean**, so a drive-letter heuristic was shipping to Linux and macOS, where there are no drives and `\` is an ordinary filename byte. Now gated — see the §2.2 row. **Breaking:** `--dir data:/m` and `--dir q::/m` must become `./data:/m` and `./q::/m`; `C:` and `C:Users` are drive-relative errors instead of `FileNotFound` |
-| ~~11~~ | ~~**Should zH7's WARN become an ERROR?**~~ (§2.2 position row, §2.4a-i) | ✅ **DECIDED by the owner 2026-09-20: YES, IT ERRORS.** ✅ **wazmrt shipped it the same day** — `misplacedHostFlag` + `reportMisplacedHostFlag` replace `warnMisplacedFlags`; `rc 1`, the message names both correct spellings, **byte-neutral in ReleaseSmall** (all three ceilings unmoved). ⏳ **PENDING MIRROR — wasmrt's §2.2 row still says WARN.** 🎓 The code argued *"warn, do not refuse, because a guest may legitimately take `--dir`"* — **and was wrong about its own escape hatch**: that case already had an exact spelling, `tool.wasm build -- --dir src`, which the walk always honoured. *A rule protecting a case the grammar can already express protects nothing; it only defers the ambiguity to whoever reads the output.* 🚨 **BUT THE ROW'S OBJECTION WAS REAL AND IS NOW LIVE — see §2.4a-ii below.** *(Original entry: )* a *known* host flag in a *guest* position warns today, because it may genuinely be the guest's. v14 does not reach it — the host/guest split is **grammar, not resemblance** — but it is the rule's nearest neighbour. ⚠️ **Erroring would break `prog.wasm install --yes`**, which §2.4 says must reach the guest untouched, so this is a real trade and not a tightening |
-| ~~12~~ | ~~**§2.4a-ii — zH7-as-error CONTRADICTS §2.4a's "guest positions are never examined". Which text wins?**~~ | ✅ **DECIDED by the owner 2026-09-21: (a), AMEND THE RULE — folded in as v28.** §2.4a now says what the code does: only what follows `--` is never examined; after the first non-flag argument, EXACT wazmrt flag names are an error and everything else passes verbatim. **No code change** — the behaviour shipped with #11. ✅ **Re-verified by running** the day it was decided: `install --yes` rc 1; `install --yess`, `install --Yes`, `install --dirs` and `install -- --yes` all rc 0. *(Original entry:)* 🔬 **MEASURED after shipping #11, not predicted:** `wazmrt prog.wasm install --yes` now **errors, rc 1**. §2.4a says a guest's argv *"is not addressed to wazmrt at all"* and is never examined; §2.4 records the `install --yes` trap as the reason. ⚠️ **Both cannot stand as written.** 🎓 The honest framing: §2.4a's "never examined" **was already not literally true** — zH7 warned about exactly these tokens since 2026-08-19. #11 changed the VERDICT, not the examination, and that is what made the contradiction visible. **Three ways out, for the owner:** **(a)** accept it — `install -- --yes` becomes the only spelling, and §2.4a is amended to say guest positions are examined for EXACT host-flag names; **(b)** restrict the error to the fail-OPEN flags (`--verify`, `--pins`, `--max-*`) and keep warning for the rest, which splits on the harm rather than on the grammar; **(c)** revert #11. 📌 **Recommendation: (a).** It is the only one that leaves a single rule, the escape hatch is exact, and (b) reintroduces a list that drifts — the failure mode v14 exists to prevent |
-| ~~13~~ | ~~**Does a WASI guest inherit the host environment?**~~ (§2.2 `--env`) | ✅ **DECIDED by the owner 2026-10-24: NO — the guest sees ONLY the `--env` variables** (v35). Found while refreshing §2.2m's stale cells: wazmrt passes only `--env`, and wasmrt passes the whole host environment (110 variables measured) with `--env` added. 🔒 A guest reaches only what is granted, and an environment carries secrets. The row also fixes the entry's shape: `KEY=VALUE` with a non-empty KEY, and a repeated KEY replaces (last wins). ✅ **wazmrt FIXED the same day** (it did not inherit, but passed `--env A` and `--env =x` verbatim and duplicated a repeated KEY); a test that fails on each half of the old code. ✅ **wasmrt FIXED it the same day** (`cfeee31`, by letter): it no longer inherits and refuses an empty KEY; re-verified by running both, identical on six cases (v36) |
-| ~~14~~ | ~~**A `--pins` path that does not exist: an error, or "no DB"?**~~ (§2.2 `--pins`) | ✅ **DECIDED by the owner 2026-10-24: AN ERROR, in every mode** (v35). wasmrt already refused; wazmrt read it as "no DB", so a typo in the path ran modules unverified in silence: fail-OPEN, the class v18's anti-silent-disarm rule exists to stop. ✅ **wazmrt FIXED the same day**, with a test that fails on the old behaviour. 🔒 **Owner: released as a PATCH, as a security fix**, and listed in the README's Breaking Changes table anyway |
-| ~~9~~ | ~~**Truthful validity claims in output (Z3)**~~ (§2.5) | ✅ **DECIDED by the owner 2026-09-19** and ✅ **FOLDED IN AS v12** by the pen-holder the same day: in scope as the one output-text exception (§0). wasmrt complies (re-verified); **wazmrt to adopt — tracked at Track B-b.** |
+- ~~1~~
+  - decision: ~~**The shared pin DB path** (§3.3)~~
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-19 and FOLDED IN AS v18** — the shared `wasmtk` path, per-runtime
+    fallback, **and a loud warning when a runtime finds no DB where its sibling would have found one.** 🎓 *This file's
+    most dangerous row since v1, and what closed it was not the path but the warning.* ✅ wasmrt implements it (T9e,
+    mutation-verified); ⏳ **wazmrt to adopt the order AND the warning** — Track B-b. ⚠️ **REOPEN if either side ships
+    the path without the warning**, which is the partial fix that leaves the migration window open
+- ~~2~~
+  - decision: ~~**Who accepts whose CLI spelling, and by when** (§2.1)~~
+  - why it blocks: ✅ **CONFIRMED by the owner 2026-09-20 — and wasmrt is SYNCING ITS CLI TO wazmrt'S.** wazmrt's half
+    landed in B-c4 (`run`/`wasi`/`wat`/`wast`, both `--dir` separators); the sibling adopting the rest closes the
+    additive plan. ⚠️ **The ⬜ rows in `roadmap.md`'s §2.1 tables were stale when this was decided** — they still read
+    "not started" for four capabilities that shipped; corrected the same day
+- ~~3~~
+  - decision: ~~**Fuel / execution bound** (§3.7)~~
+  - why it blocks: ✅ **DECIDED by the owner 2026-08-19** — a bound is wanted, with an error message and a break. Design
+    agreed in **§3.7a**. ⚠️ **The decision is closed; the DIVERGENCE is open**: wazmrt ships it, wasmrt does not, and
+    the predicted failure ("a workload that completes under one hangs under the other") is **verified live**, not
+    hypothetical
+- ~~5~~
+  - decision: ~~**When does wasmrt land the execution bound** (§3.7a)~~
+  - why it blocks: ✅ **CLOSED 2026-09-19 — wasmrt shipped it (T9i), FOLDED IN AS v19**, and the pen-holder re-verified
+    by running both on the same bytes: all four cells trap, `rc 1`, both messages naming the ceiling and how to raise
+    it. Defaults independently re-measured on each corpus to the same shape. ⚠️ **REOPEN if either side amortizes the
+    tick to every *N*th back-edge** — that changes the UNIT's granularity, and the ceiling stops meaning the same thing
+    on both sides
+- ~~6~~
+  - decision: ~~**Attribution of commit `aa2769b8` (was `7ce0dcd2`) in the wasmrt repo**~~
+  - why it blocks: ✅ **CONFIRMED by the owner 2026-09-20** — the record stands as written and the matter is closed on
+    wazmrt's side. 🔒 Nothing for an agent to do here and nothing to reopen: **wazmrt does not write to that tree**, and
+    the owner carries anything that needs carrying. *(Original entry: )* wasmrt reports it committed **wazmrt's** §3.7a
+    rewrite into its tree as if it were its own, before the collision was noticed. ⚠️ **wazmrt cannot fix this — §1a
+    forbids writing to that tree**, and rewriting another repo's history is not an agent's call anyway. It is exactly
+    the tracking-integrity problem the boundary was added to prevent, and it is now **behind** the rule rather than in
+    front of it. Options: leave it with the collision documented in row 3b, or have the wasmrt session amend/annotate it
+    **in its own tree**
+- ~~7~~
+  - decision: ~~**Whether coordination should run in ONE session at a time** (§1c)~~
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-20: YES — coordination runs ONE SESSION AT A TIME.** 🔒 **And the
+    owner restated the boundary alongside it: *"we do not modify the other project unless specifically requested."***
+    That is §1a unchanged and now doubly stated — one session removes the same-copy last-write-wins race, and the write
+    ban removes the cross-tree one. ⚠️ **"Specifically requested" means the owner, for a named edit.** `coordinate` is
+    still an order to CONFER, never a licence to write. *(Original entry: )* §1a removes the cross-tree risk by
+    construction, but two sessions editing the *same* copy still resolve last-write-wins with nothing to detect it.
+    wasmrt proposed the discipline; it costs nothing and closes the residual gap
+- ~~4~~
+  - decision: ~~**Exit-code table** (§2.3)~~
+  - why it blocks: ✅ **CLOSED 2026-09-19 by MEASUREMENT rather than by a decision — v13.** Both runtimes already return
+    `1` for every host-side failure kind and every trap (§2.3m, plus the pen-holder's own re-run); §2.3 row 3 is now ✅
+    AGREED and no table is needed. 🎓 *The decision had been waiting on the owner for a month for want of somebody
+    running twelve commands.* ⚠️ **REOPEN if either side ever emits a second non-zero code.**
+- ~~8~~
+  - decision: ~~**Unknown flags**~~ (§2.4a)
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-19** and ✅ **FOLDED IN AS v11** by the pen-holder the same day: an
+    error saying `unknown flag`, rc 1, in every host-flag position. wasmrt complies (re-verified by running it);
+    **wazmrt to adopt — tracked at Track B-b.**
+- ~~10~~
+  - decision: ~~**Does v14's "no looks like" reach flag VALUES — the `--dir` drive-letter fallback?**~~ (§2.2, §2.4a-i)
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-21 and SHIPPED THE SAME DAY as v27 — and none of the three costed
+    options was the answer.** 🔑 **The host half of `--dir` now has a GRAMMAR: a relative path must start with `./` or
+    `../`, and a bare `data` is an ERROR.** Once `data` is not a legal spelling, a leading `<letter>:` can only *be* a
+    drive — **grammar, not resemblance** — so v14 is satisfied with the heuristic deleted rather than exchanged. 🎓 *The
+    row was open two days over which spelling to guess; it closed by removing the spelling that forced the guess.* ⚠️
+    **The escape already existed and already worked** — `./q:/m` split correctly before any of this was written, which
+    is why the fix cost a restriction and not a new rule. 🚨 **AND THE ROW HID A SECOND DEFECT: the drive rule had NO
+    PLATFORM BRANCH and both POSIX targets cross-compile clean**, so a drive-letter heuristic was shipping to Linux and
+    macOS, where there are no drives and `\` is an ordinary filename byte. Now gated — see the §2.2 row. **Breaking:**
+    `--dir data:/m` and `--dir q::/m` must become `./data:/m` and `./q::/m`; `C:` and `C:Users` are drive-relative
+    errors instead of `FileNotFound`
+- ~~11~~
+  - decision: ~~**Should zH7's WARN become an ERROR?**~~ (§2.2 position row, §2.4a-i)
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-20: YES, IT ERRORS.** ✅ **wazmrt shipped it the same day** —
+    `misplacedHostFlag` + `reportMisplacedHostFlag` replace `warnMisplacedFlags`; `rc 1`, the message names both correct
+    spellings, **byte-neutral in ReleaseSmall** (all three ceilings unmoved). ⏳ **PENDING MIRROR — wasmrt's §2.2 row
+    still says WARN.** 🎓 The code argued *"warn, do not refuse, because a guest may legitimately take `--dir`"* — **and
+    was wrong about its own escape hatch**: that case already had an exact spelling, `tool.wasm build -- --dir src`,
+    which the walk always honoured. *A rule protecting a case the grammar can already express protects nothing; it only
+    defers the ambiguity to whoever reads the output.* 🚨 **BUT THE ROW'S OBJECTION WAS REAL AND IS NOW LIVE — see
+    §2.4a-ii below.** *(Original entry: )* a *known* host flag in a *guest* position warns today, because it may
+    genuinely be the guest's. v14 does not reach it — the host/guest split is **grammar, not resemblance** — but it is
+    the rule's nearest neighbour. ⚠️ **Erroring would break `prog.wasm install --yes`**, which §2.4 says must reach the
+    guest untouched, so this is a real trade and not a tightening
+- ~~12~~
+  - decision: ~~**§2.4a-ii — zH7-as-error CONTRADICTS §2.4a's "guest positions are never examined". Which text wins?**~~
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-21: (a), AMEND THE RULE — folded in as v28.** §2.4a now says what
+    the code does: only what follows `--` is never examined; after the first non-flag argument, EXACT wazmrt flag names
+    are an error and everything else passes verbatim. **No code change** — the behaviour shipped with #11. ✅
+    **Re-verified by running** the day it was decided: `install --yes` rc 1; `install --yess`, `install --Yes`, `install
+    --dirs` and `install -- --yes` all rc 0. *(Original entry:)* 🔬 **MEASURED after shipping #11, not predicted:**
+    `wazmrt prog.wasm install --yes` now **errors, rc 1**. §2.4a says a guest's argv *"is not addressed to wazmrt at
+    all"* and is never examined; §2.4 records the `install --yes` trap as the reason. ⚠️ **Both cannot stand as
+    written.** 🎓 The honest framing: §2.4a's "never examined" **was already not literally true** — zH7 warned about
+    exactly these tokens since 2026-08-19. #11 changed the VERDICT, not the examination, and that is what made the
+    contradiction visible. **Three ways out, for the owner:** **(a)** accept it — `install -- --yes` becomes the only
+    spelling, and §2.4a is amended to say guest positions are examined for EXACT host-flag names; **(b)** restrict the
+    error to the fail-OPEN flags (`--verify`, `--pins`, `--max-*`) and keep warning for the rest, which splits on the
+    harm rather than on the grammar; **(c)** revert #11. 📌 **Recommendation: (a).** It is the only one that leaves a
+    single rule, the escape hatch is exact, and (b) reintroduces a list that drifts — the failure mode v14 exists to
+    prevent
+- ~~13~~
+  - decision: ~~**Does a WASI guest inherit the host environment?**~~ (§2.2 `--env`)
+  - why it blocks: ✅ **DECIDED by the owner 2026-10-24: NO — the guest sees ONLY the `--env` variables** (v35). Found
+    while refreshing §2.2m's stale cells: wazmrt passes only `--env`, and wasmrt passes the whole host environment (110
+    variables measured) with `--env` added. 🔒 A guest reaches only what is granted, and an environment carries secrets.
+    The row also fixes the entry's shape: `KEY=VALUE` with a non-empty KEY, and a repeated KEY replaces (last wins). ✅
+    **wazmrt FIXED the same day** (it did not inherit, but passed `--env A` and `--env =x` verbatim and duplicated a
+    repeated KEY); a test that fails on each half of the old code. ✅ **wasmrt FIXED it the same day** (`cfeee31`, by
+    letter): it no longer inherits and refuses an empty KEY; re-verified by running both, identical on six cases (v36)
+- ~~14~~
+  - decision: ~~**A `--pins` path that does not exist: an error, or "no DB"?**~~ (§2.2 `--pins`)
+  - why it blocks: ✅ **DECIDED by the owner 2026-10-24: AN ERROR, in every mode** (v35). wasmrt already refused; wazmrt
+    read it as "no DB", so a typo in the path ran modules unverified in silence: fail-OPEN, the class v18's
+    anti-silent-disarm rule exists to stop. ✅ **wazmrt FIXED the same day**, with a test that fails on the old
+    behaviour. 🔒 **Owner: released as a PATCH, as a security fix**, and listed in the README's Breaking Changes table
+    anyway
+- ~~9~~
+  - decision: ~~**Truthful validity claims in output (Z3)**~~ (§2.5)
+  - why it blocks: ✅ **DECIDED by the owner 2026-09-19** and ✅ **FOLDED IN AS v12** by the pen-holder the same day: in
+    scope as the one output-text exception (§0). wasmrt complies (re-verified); **wazmrt to adopt — tracked at Track
+    B-b.**
 
 ---
 

@@ -206,8 +206,9 @@ The rule in full: `../workspace/cmem/tooling-rules.md` rule 15. For wasmrt:
 - `interop.md` and its parts (`interop-*.md`): 🔒 **wasmrt and wazmrt co-own it** (owner, 2026-11-20: "wasmrt
   and wazmrt co-own interop.md"). The two copies stay byte-identical, so a split or a wrap is ONE edit made in
   both, never by writing into wazmrt's tree. SPLIT 2026-11-25 (owner: "perform the work on W3. wazmrt will follow
-  suit"): every section moved verbatim into 12 files, each under 25 KB; ⏳ wazmrt mirrors it. Still the exception:
-  ~114 table rows over 200 characters (a Markdown table row cannot wrap) and 4 long lines kept verbatim.
+  suit"): every section moved verbatim into 12 files, each under 25 KB; then (owner: "fix item 2") the 22 tables
+  with a row over 200 characters became lists and 4 long lines were wrapped, no word changed. They now hold every
+  limit, so they are no longer an exception here; ⏳ wazmrt mirrors both.
 - `best-practices-shared.md` line 114 (201 characters): the workspace's ★ rules, copied unchanged under
   their stamp (owner, 2026-11-19: keep the ★ copy as it is).
 - Every other live note holds the limits: `bun scripts/check-cmem.ts` reports only these.

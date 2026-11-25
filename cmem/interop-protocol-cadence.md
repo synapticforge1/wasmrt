@@ -24,11 +24,14 @@ repo, do not run one in the other until it has reported.
 🔒 **Decided by the owner.** Cross-project coordination runs **at the end of each track**, not
 continuously and not mid-track.
 
-| phase | what happens |
-| --- | --- |
-| **during a track** | build and gate normally; **do not** open a coordination pass. If the work touches an in-scope surface (§0), note it and carry it to the end-of-track pass |
-| **end of a track** | run `coordinate` in full (§1b): compare copies, read the sibling's in-flight work, diff every in-scope row, **verify by running both on the same bytes**, record in your own copy, report to the owner |
-| **then** | **pause and wait for the sibling to reach the same point.** The project that is ahead holds |
+- **during a track**
+  - what happens: build and gate normally; **do not** open a coordination pass. If the work touches an in-scope surface
+    (§0), note it and carry it to the end-of-track pass
+- **end of a track**
+  - what happens: run `coordinate` in full (§1b): compare copies, read the sibling's in-flight work, diff every in-scope
+    row, **verify by running both on the same bytes**, record in your own copy, report to the owner
+- **then**
+  - what happens: **pause and wait for the sibling to reach the same point.** The project that is ahead holds
 
 **Why end-of-track and not continuous:** a track is the unit that produces a *finished, gated* change,
 and §1 rule 4 says a row is verified by **running both** — which needs something built and green to run.

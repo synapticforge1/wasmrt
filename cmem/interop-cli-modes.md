@@ -23,16 +23,44 @@ wazmrt dispatches on the file extension and on whether an export was named; wasm
 subcommands. **The agreed target is ADDITIVE: each accepts the other's spelling, and neither loses the
 form it already ships.**
 
-| capability | wazmrt spelling | wasmrt spelling | status |
-| --- | --- | --- | --- |
-| summarize + validate, no execution | `wazmrt <module>` | `wasmrt <file>` | ✅ **AGREED on behaviour + exit code (both `rc=0`, neither executes) — ⚠️ MEASURED 2026-08-19, the OUTPUT TEXT differs.** *(The row read "already identical", which was written from reading and is false as stated.)* |
-| call an exported function | `wazmrt <module> <export> [args…]` **and `run <module> <export> …`** | `wasmrt run <file> <fn> [args…]` **and the bare form** | ✅ **AGREED — both spellings on both sides.** wasmrt's F1 closed 2026-09-19; wazmrt took `run` 2026-09-20 (v24). 🔒 `run` does not fall back to WASI |
-| run a WASI `_start` command | `wazmrt <module> [flags] [-- argv]` **and `wasi [flags] <module> …`** | `wasmrt wasi [flags] <file> […]` **and the bare form** | ✅ **AGREED 2026-09-20 (v24).** ⚠️ Under `wasi` the flags may precede the module on BOTH runtimes; `wasi` does not fall back to a summary |
-| run a `.wast` spec script | `wazmrt <script.wast>` **and `wast <file\|dir>… [-v]`** | `wasmrt wast <file\|dir>… [-v]` **and the bare form** | ✅ **AGREED 2026-09-20 (v24).** 🔒 wazmrt gates every script, multi-target included — the path executes |
-| assemble `.wat` → `.wasm` | `wazmrt wat <file.wat> [-o out]` | `wasmrt wat <file.wat> [-o out]` | ✅ **AGREED — wazmrt grew it 2026-09-20 (v24).** Without `-o` both assemble and report the size, writing nothing |
-| pin a module for the DB | `wazmrt pin <file\|dir> [--db <path>]` | `wasmrt pin <file\|dir> [--db <path>]` | ✅ **AGREED — measured 2026-10-24 (v35).** The same digest for the same file, written to `--db`, and each runtime's DB then admits the module under `--verify enforce`. *(The cell read "absent — a stub" until v35; it was stale from 2026-09-19.)* Corpus-wide parity is §3.1's `.wat`/`.wasm` pin rows |
-| keypair / signing tools | `wazmrt keygen`, `wazmrt sign` | *(design-only)* | ⬜ **deferred** — reopen when either ships signatures |
-| `-h`/`--help`, `-v`/`--version` | **first argument only** | **first argument only** | ✅ **AGREED** |
+- summarize + validate, no execution
+  - wazmrt spelling: `wazmrt <module>`
+  - wasmrt spelling: `wasmrt <file>`
+  - status: ✅ **AGREED on behaviour + exit code (both `rc=0`, neither executes) — ⚠️ MEASURED 2026-08-19, the OUTPUT
+    TEXT differs.** *(The row read "already identical", which was written from reading and is false as stated.)*
+- call an exported function
+  - wazmrt spelling: `wazmrt <module> <export> [args…]` **and `run <module> <export> …`**
+  - wasmrt spelling: `wasmrt run <file> <fn> [args…]` **and the bare form**
+  - status: ✅ **AGREED — both spellings on both sides.** wasmrt's F1 closed 2026-09-19; wazmrt took `run` 2026-09-20
+    (v24). 🔒 `run` does not fall back to WASI
+- run a WASI `_start` command
+  - wazmrt spelling: `wazmrt <module> [flags] [-- argv]` **and `wasi [flags] <module> …`**
+  - wasmrt spelling: `wasmrt wasi [flags] <file> […]` **and the bare form**
+  - status: ✅ **AGREED 2026-09-20 (v24).** ⚠️ Under `wasi` the flags may precede the module on BOTH runtimes; `wasi`
+    does not fall back to a summary
+- run a `.wast` spec script
+  - wazmrt spelling: `wazmrt <script.wast>` **and `wast <file|dir>… [-v]`**
+  - wasmrt spelling: `wasmrt wast <file|dir>… [-v]` **and the bare form**
+  - status: ✅ **AGREED 2026-09-20 (v24).** 🔒 wazmrt gates every script, multi-target included — the path executes
+- assemble `.wat` → `.wasm`
+  - wazmrt spelling: `wazmrt wat <file.wat> [-o out]`
+  - wasmrt spelling: `wasmrt wat <file.wat> [-o out]`
+  - status: ✅ **AGREED — wazmrt grew it 2026-09-20 (v24).** Without `-o` both assemble and report the size, writing
+    nothing
+- pin a module for the DB
+  - wazmrt spelling: `wazmrt pin <file|dir> [--db <path>]`
+  - wasmrt spelling: `wasmrt pin <file|dir> [--db <path>]`
+  - status: ✅ **AGREED — measured 2026-10-24 (v35).** The same digest for the same file, written to `--db`, and each
+    runtime's DB then admits the module under `--verify enforce`. *(The cell read "absent — a stub" until v35; it was
+    stale from 2026-09-19.)* Corpus-wide parity is §3.1's `.wat`/`.wasm` pin rows
+- keypair / signing tools
+  - wazmrt spelling: `wazmrt keygen`, `wazmrt sign`
+  - wasmrt spelling: *(design-only)*
+  - status: ⬜ **deferred** — reopen when either ships signatures
+- `-h`/`--help`, `-v`/`--version`
+  - wazmrt spelling: **first argument only**
+  - wasmrt spelling: **first argument only**
+  - status: ✅ **AGREED**
 
 ⚠️⚠️ **ALIGNING THE RUN MODES CHANGES WHAT A BARE PATH DOES, AND IT IS A SECURITY-POSTURE CHANGE.**
 wazmrt's `will_execute` predicate is *"an export was named **or** the module exports `_start`"*, so
@@ -60,13 +88,24 @@ and Z1 with it. *The finding and its fix are hours apart, which is the cadence w
 
 ⏳ **Outstanding on wazmrt's side — measured, not assumed:**
 
-| # | item | wazmrt today |
-| --- | --- | --- |
-| **the subcommand spellings** | `run`, `wasi`, `wast`, `wat` | ✅ **CLOSED 2026-09-20, v24** (`b35940cb`) — all four accepted, additively, every bare form unchanged. The cell is the measurement that bought the row |
-| **`::`** | the preferred separator | ⚠️ unsupported — **and `.:/` is broken too, §2.2z** |
-| **the hyphenated feature vocabulary** | `bulk-memory-operations` | ⚠️ `error: --features: unknown proposal` — wazmrt accepts only `bulk_memory` |
-| **Z1 / Z2 / Z3** | §2.3, §2.4a, §2.5 | ✅ **CLOSED 2026-09-19, v21** (`f780ad27`) — the cells above are the measurement that bought the rows and stay as written |
-| **Z4** | the `name` section | ✅ **CLOSED 2026-09-20, v22** (`1bfdc6f5`) — **954 of 954 comparable `.wat` digests agree**, up from 2. See §3.1m |
+- **the subcommand spellings**
+  - item: `run`, `wasi`, `wast`, `wat`
+  - wazmrt today: ✅ **CLOSED 2026-09-20, v24** (`b35940cb`) — all four accepted, additively, every bare form unchanged.
+    The cell is the measurement that bought the row
+- **`::`**
+  - item: the preferred separator
+  - wazmrt today: ⚠️ unsupported — **and `.:/` is broken too, §2.2z**
+- **the hyphenated feature vocabulary**
+  - item: `bulk-memory-operations`
+  - wazmrt today: ⚠️ `error: --features: unknown proposal` — wazmrt accepts only `bulk_memory`
+- **Z1 / Z2 / Z3**
+  - item: §2.3, §2.4a, §2.5
+  - wazmrt today: ✅ **CLOSED 2026-09-19, v21** (`f780ad27`) — the cells above are the measurement that bought the rows
+    and stay as written
+- **Z4**
+  - item: the `name` section
+  - wazmrt today: ✅ **CLOSED 2026-09-20, v22** (`1bfdc6f5`) — **954 of 954 comparable `.wat` digests agree**, up from 2.
+    See §3.1m
 
 ✅ **ALL SIX ROWS MEASURED ON 2026-09-19 ARE NOW CLOSED.** The `::` and feature-vocabulary rows and
 Z1–Z3 closed with v21; Z4 with v22; B-d with v23; the subcommand spellings with **v24**. ⚠️ Closed

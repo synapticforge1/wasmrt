@@ -2,7 +2,8 @@
      Split from the one file on 2026-11-25 by moving each section verbatim (owner: "perform the work on W3"). -->
 # interop — §2.5 A validity claim must match the verdict
 
-### 2.5 A validity claim in the output must match the verdict (Z3) · 🔒 **OWNER DECISION 2026-09-19** · ✅ **CONTRACT VERSION 12 — FOLDED IN AND NUMBERED by the pen-holder (wazmrt, regime A), 2026-09-19**
+### 2.5 A validity claim in the output must match the verdict (Z3) · 🔒 **OWNER DECISION 2026-09-19** · ✅ **CONTRACT
+VERSION 12 — FOLDED IN AND NUMBERED by the pen-holder (wazmrt, regime A), 2026-09-19**
 
 > Owner, 2026-09-19: *"we also need a contract item for Z3"*.
 
@@ -11,9 +12,10 @@ exit status (§2.3), any verdict line, and any header or summary wording must **
 prints before validation finishes must use neutral wording ("WebAssembly module", "wasm v1", section
 counts), never "valid". **Only validity claims are in scope** (§0); the rest of the output text is not.
 
-| | wazmrt (measured 2026-09-19, 1.0.1) | wasmrt | status |
-| --- | --- | --- | --- |
-| summary of an INVALID module | ⚠️ header `…: valid wasm v1, 4 section(s)`, then `validation: FAILED …`, rc 1 | header `…: WebAssembly module (version 1)`, then `validation FAILED: …`, rc 1 | ⚠️ **wazmrt must adopt** (the header) |
+- summary of an INVALID module
+  - wazmrt (measured 2026-09-19, 1.0.1): ⚠️ header `…: valid wasm v1, 4 section(s)`, then `validation: FAILED …`, rc 1
+  - wasmrt: header `…: WebAssembly module (version 1)`, then `validation FAILED: …`, rc 1
+  - status: ⚠️ **wazmrt must adopt** (the header)
 
 wasmrt is pinned by `cli_exit_codes.rs::the_summary_never_calls_an_invalid_module_valid`. That test
 **fails when wazmrt's header wording is injected into wasmrt's summary** (mutation-verified), so it
@@ -24,11 +26,23 @@ checks exactly this.
 Owner: *"lets pass all three issues to the wazmrt team."* Passed **through this file**, because §1a
 forbids writing into wazmrt's tree. For wazmrt's own session to adopt in wazmrt's own commit:
 
-| # | issue | contract item | wazmrt action | verify by running |
-| --- | --- | --- | --- | --- |
-| **Z1** | an unmatched export name is silently ignored (rc 0) | §2.3, new row | fail with rc 1 and name the export, when the argument can only be an export name | `wazmrt m.wasm nosuch` → rc 1 |
-| **Z2** | unknown flags are ignored or misreported | **§2.4a** (owner decision, **as narrowed by v15**) | `unknown flag`, rc 1, in every host-flag position — but after the module path **only for a `--flag`**: a single-dash token there is the guest's, and no "looks like" guessing anywhere (v14) | `wazmrt m.wasm --bogus`, `wazmrt --bogus m.wasm` and `wazmrt s.wast --bogus` → `unknown flag`, rc 1; `wazmrt m.wasm -- --bogus` **and `wazmrt m.wasm -la`** → untouched |
-| **Z3** | the summary header says "valid" for an invalid module | **§2.5** (owner decision) | neutral header wording until validation has passed | `wazmrt invalid.wasm` → no line claims validity; rc 1 |
+- **Z1**
+  - issue: an unmatched export name is silently ignored (rc 0)
+  - contract item: §2.3, new row
+  - wazmrt action: fail with rc 1 and name the export, when the argument can only be an export name
+  - verify by running: `wazmrt m.wasm nosuch` → rc 1
+- **Z2**
+  - issue: unknown flags are ignored or misreported
+  - contract item: **§2.4a** (owner decision, **as narrowed by v15**)
+  - wazmrt action: `unknown flag`, rc 1, in every host-flag position — but after the module path **only for a
+    `--flag`**: a single-dash token there is the guest's, and no "looks like" guessing anywhere (v14)
+  - verify by running: `wazmrt m.wasm --bogus`, `wazmrt --bogus m.wasm` and `wazmrt s.wast --bogus` → `unknown flag`, rc
+    1; `wazmrt m.wasm -- --bogus` **and `wazmrt m.wasm -la`** → untouched
+- **Z3**
+  - issue: the summary header says "valid" for an invalid module
+  - contract item: **§2.5** (owner decision)
+  - wazmrt action: neutral header wording until validation has passed
+  - verify by running: `wazmrt invalid.wasm` → no line claims validity; rc 1
 
 ⚠️ **Z1 needs care on wazmrt's side.** Its bare path runs `_start` when the module exports one, so a
 following word may be guest argv rather than an export name. The failure applies when the word **can
@@ -42,14 +56,36 @@ explicit call form. How wazmrt draws that line is its design call; the observabl
 verified by **running both**, and that applies to a row arriving from the sibling exactly as it applies
 to one this side wrote. All three were re-run here, on the same bytes, before any of them was numbered:
 
-| # | invocation | wazmrt 1.0.1 (re-measured) | wasmrt 0.9.0 (re-measured) | verdict |
-| --- | --- | --- | --- | --- |
-| **Z1** | `wazmrt valid.wasm nosuch` | **rc 0**, prints the summary; `nosuch` silently dropped | `run`: **rc 1**, *"no exported function `nosuch`"* | ⚠️ **confirmed — wazmrt in breach** |
-| **Z2** | after the path (`m.wasm --bogus`) | **rc 0** — handed to the guest | **rc 1**, `unknown flag` | ⚠⚠ **confirmed** |
-| **Z2** | before the path (`--bogus m.wasm`) | rc 1, but *"cannot read '--bogus': FileNotFound"* | **rc 1**, `unknown flag` | ⚠️ **confirmed — right code, wrong reason** |
-| **Z2** | `.wast` (`s.wast --bogus`) | **rc 0** — ignored | **rc 1**, `unknown flag` | ⚠⚠ **confirmed** |
-| **Z2** | guest position (`m.wasm -- --bogus`) | untouched, rc 0 | untouched | ✅ **agreed — the carve-out works** |
-| **Z3** | `wazmrt invalid.wasm` | header `invalid.wasm: valid wasm v1, 5 section(s)`, then `validation: FAILED …`, rc 1 | `invalid.wasm: WebAssembly module (version 1)`, then `validation FAILED: …`, rc 1 | ⚠️ **confirmed — wazmrt in breach** |
+- **Z1**
+  - invocation: `wazmrt valid.wasm nosuch`
+  - wazmrt 1.0.1 (re-measured): **rc 0**, prints the summary; `nosuch` silently dropped
+  - wasmrt 0.9.0 (re-measured): `run`: **rc 1**, *"no exported function `nosuch`"*
+  - verdict: ⚠️ **confirmed — wazmrt in breach**
+- **Z2**
+  - invocation: after the path (`m.wasm --bogus`)
+  - wazmrt 1.0.1 (re-measured): **rc 0** — handed to the guest
+  - wasmrt 0.9.0 (re-measured): **rc 1**, `unknown flag`
+  - verdict: ⚠⚠ **confirmed**
+- **Z2**
+  - invocation: before the path (`--bogus m.wasm`)
+  - wazmrt 1.0.1 (re-measured): rc 1, but *"cannot read '--bogus': FileNotFound"*
+  - wasmrt 0.9.0 (re-measured): **rc 1**, `unknown flag`
+  - verdict: ⚠️ **confirmed — right code, wrong reason**
+- **Z2**
+  - invocation: `.wast` (`s.wast --bogus`)
+  - wazmrt 1.0.1 (re-measured): **rc 0** — ignored
+  - wasmrt 0.9.0 (re-measured): **rc 1**, `unknown flag`
+  - verdict: ⚠⚠ **confirmed**
+- **Z2**
+  - invocation: guest position (`m.wasm -- --bogus`)
+  - wazmrt 1.0.1 (re-measured): untouched, rc 0
+  - wasmrt 0.9.0 (re-measured): untouched
+  - verdict: ✅ **agreed — the carve-out works**
+- **Z3**
+  - invocation: `wazmrt invalid.wasm`
+  - wazmrt 1.0.1 (re-measured): header `invalid.wasm: valid wasm v1, 5 section(s)`, then `validation: FAILED …`, rc 1
+  - wasmrt 0.9.0 (re-measured): `invalid.wasm: WebAssembly module (version 1)`, then `validation FAILED: …`, rc 1
+  - verdict: ⚠️ **confirmed — wazmrt in breach**
 
 🔎 **And one thing the re-run adds, which is why re-running mattered: `wazmrt invalid.wasm bad` — the
 CALL form on an invalid module — already exits 1.** Z1 is therefore **not** a general "wazmrt ignores the

@@ -2,17 +2,112 @@
      Split from the one file on 2026-11-25 by moving each section verbatim (owner: "perform the work on W3"). -->
 # interop — §6 Change log, v10 to v1 (continued)
 
-| version | date | change |
-| --- | --- | --- |
-| *(annex detail)* | 2026-08-19 | 🔬 **§4 CHECK 5 RUN FOR THE FIRST TIME — the CLI rows verified by RUNNING both binaries, not by reading either** (§2.1m). wasmrt 0.9.0 vs wazmrt 1.0.0, same box. **Five findings.** ⚠⚠ **F1: the two “call an export” gaps fail in OPPOSITE directions** — `wasmrt add.wat add 2 3` exits **0** printing a summary and silently ignoring the export and its arguments, while `wazmrt run …` exits **1** and says why; same missing capability, and wasmrt's half is the silent-wrong-output one, so it outranks the other. **F2: the “summarize” row was marked ✅ AGREED and the output text is NOT identical** (behaviour and exit code do agree) — the word “identical” had been written from reading. 🆕 **F3: FLAG POSITION differs and had no row at all** — wazmrt's flags follow the module path, wasmrt's precede it, and ⚠⚠ **a trailing `--dir` under wasmrt is passed to the GUEST, so the sandbox is silently never granted.** 🔻 **F4: a CORRECTION — §2.2’s claim that a single-colon `--dir` “does not error, it preopens the wrong thing” is FALSE; measured, it fails loudly** (`errno 29`, rc=1). That claim had been carried as ⚠⚠ since v1 and was written from reading the code. **F5: `-v` output shape differs** (1 line vs 2). ⚠ Everything check 5 did not reach — the `.wast` row, `--ro-dir`, `--allow-symlink`, `--env`, the ceiling flags, `--`, and all of §2.3’s per-failure exit codes — stays ⬜ UNVERIFIED and **may not be quoted as agreed.** |
-| **10** | 2026-08-19 | 🆕 **wazmrt WARNS on a misplaced flag (§2.2 position row) — zH7, and F3 is what found it.** wazmrt recognises host flags only in the LEADING run after the module path; the inverse of that protection had never been asked, so a flag written after a guest argument was **silently donated to the guest and never applied**. Fail-closed for `--no-verify`/`--dir`, ⚠️ **fail-OPEN for `--verify`, `--pins` and every `--max-*`** — a user asks for a restriction, gets no error, and runs without it. Now warns (never refuses: a guest may legitimately take `--dir` as its own argument), and **nothing after an explicit `--` is examined**. Zero bytes. 🎓 Demonstrated with `--max-iterations`, a flag wazmrt had added HOURS earlier in the same track — *a change's own new surface is the one place the audit that produced it will not look.* |
-| **9** | 2026-08-19 | 🔻 **F4 FOLDED IN by the pen-holder (wazmrt, regime A).** §2.2's `--dir` paragraph still asserted *"it does not error; it preopens the wrong thing"* — the claim F4 measured and REFUTED (`rc=1`, `cannot preopen …: errno 29`). Corrected in place and downgraded ⚠️⚠️ → ⚠️: the divergence is real, its consequence is a **clean failure**, not a silent mis-preopen. 🎓 **A refuted claim left in the table is what the next reader quotes** — an annex records the finding, the table is what gets believed, so folding is the pen-holder's actual job. Third read-not-verify error across the two projects in two days, and the reason rule 4 exists. |
-| **8** ⏳ | 2026-08-19 | 🗓️ **COORDINATION CADENCE (owner) — §1d: coordinate at the END of each track**, not continuously and not mid-track; then the project that is ahead **holds** until the sibling reaches the same boundary. Rationale: rule 4 verifies a row by RUNNING both, which needs something built and green — coordinating mid-track compares a settled implementation against a moving one. ⚠️ Does **not** weaken "coordinate BEFORE shipping a contract surface": *decide* before building, *verify and record* at the end of the track. Current application: wazmrt finishes **Track H**, then holds for wasmrt. |
-| **7** ⏳ | 2026-08-19 | ✅ **ROW 3b's 🚩 IS DISCHARGED — §0.5 restored, from wazmrt's session context, the only place it survived.** ⚠️ **Restored as §1b, NOT as a verbatim §0.5:** three of its four parts had since been re-expressed better (the order in §1; the editing boundary in §1a, which the owner has since made ABSOLUTE and is stronger than what §0.5 introduced), so re-pasting it would have left two definitions of one order in one file — the exact drift this file exists to prevent. What was genuinely lost and is now back: **the ordered checklist** (including *"the sibling may cite a contract row that does not exist yet — that is a cue to WRITE the row"*, which is literally what T9i did), and *"`coordinate` is also the right response to discovering you have already diverged."* Adds **§1c** on wasmrt's diagnosis — *a version is a pin, not a lock* — plus owner rows 6 (the `aa2769b8` (was `7ce0dcd2`) attribution, which wazmrt cannot fix without breaching §1a) and 7 (one coordination session at a time). |
-| **6** ⏳ | 2026-08-19 | 🔒🔒 **THE EDITING BOUNDARY IS NOW ABSOLUTE (owner) — §1a.** *"Not to edit the other's md file unless specifically directed by me … each project needs to edit their own files … important for tracking and integrity."* **Neither project writes ANYTHING into the other's tree — including this file** — without a specific owner direction. `coordinate` is an order to CONFER, never a licence to WRITE. Supersedes the earlier "this file is the one thing you may write there" rule, which caused two destructive overwrites in one day (rows 3b, 4). Rule 1 rewritten: propose in your OWN copy, bump the version, mark ⏳ **PENDING MIRROR**, and TELL THE OWNER the sibling is behind — the owner directs the other project, which makes the edit in its own tree. A version mismatch is now a normal coordination signal, resolved by reporting, **never** by copying over it. ⚠️ **This row is itself pending mirror: wasmrt's copy is at 5.** |
-| **5** | 2026-08-19 | wazmrt ran the **A/B/A throughput** measurement wasmrt's T9i plan called for (§3.7a): the tick costs **~3% on a tight loop** — 34.29 → 33.45 → 34.62 ns/loop-iter, A-to-A spread ~1%, B a single sample. Recorded for wasmrt's planning, **not** as a contract row (§0 puts performance out of scope). ⚠️ Names the one performance response that WOULD be a contract change: amortizing the tick to every *N*th back-edge alters the UNIT's granularity, so the ceiling would stop meaning the same thing on both sides. |
-| **4** | 2026-08-19 | 🔒 **The EDITING BOUNDARY added to §1** (reconstructed from row 3’s description, since the §0.5 it named was destroyed): this file is the only thing either project may write into the other’s tree, and ⚠⚠ **read the other copy before overwriting it** — it starts untracked in both repos, so a blind copy is unrecoverable. §2’s owner ruling restored. The duplicate row-3 entries reconciled into 3 + 3b. |
-| **3b** | 2026-08-19 | ⚠️⚠️ **A CONCURRENT-EDIT COLLISION, recorded rather than tidied away — the drift hazard §1 predicts, arriving on day one.** Both projects edited this file at once. wazmrt's §3.7a rewrite (better than what it replaced: it had *built* the feature and found that **the UNIT matters more than the number**) landed in wasmrt's tree mid-session and was committed there without being noticed; in the other direction, wasmrt `cp`-ed its copy over wazmrt's **untracked** working copy without checking it first, destroying wazmrt's in-flight **§0.5** — which row 3 below still references and which is **NOT PRESENT in either copy**. 🚩 **wazmrt must restore §0.5 from its own context; nobody else has it.** Restored here: the §2 owner ruling, dropped in the same collision. **Two lessons, both already in the rulebooks:** *a version is a pin, not a lock — it makes drift detectable, it does not prevent a simultaneous write*, and **check before you overwrite**, which is exactly the editing boundary row 3 was adding. ✅ **The 🚩 IS DISCHARGED — §0.5 was restored from wazmrt's session context as §1b; see row 7.** |
-| **3** | 2026-08-19 | 🔑 **`coordinate` — the one-word binding order (§0.5), owner.** One word from the owner now obliges the full cross-project protocol: byte-compare both copies, read the sibling's **uncommitted** in-flight work, diff shipped behaviour against every in-scope row, **verify by RUNNING both on the same bytes**, land changes in both copies with a version bump, and report divergences with reopen conditions. Carries **the editing boundary** — this file is the only thing either project may write into the other's tree, and the sibling's own `cmem/` stays theirs. |
-| **2** | 2026-08-19 | **The execution bound (§3.7a).** Owner decided a bound is wanted; §5 decision #3 closes. wazmrt shipped `--max-iterations` + `IterationLimitExceeded` (default `1<<30`) in its Track zH3 — ⚠️ **before this file carried it, which §1 rule 1 forbids; recorded as a process breach rather than tidied away.** New rows: the flag in §2.2; the agreed design in §3.7a, whose load-bearing clause is **the UNIT** (one loop back-edge **or** one tail-call hop) — equal defaults with different units are not swappable; differential checks 6 and 7. **Verified by running both on the same wasmrt-assembled bytes: wazmrt traps on both shapes, wasmrt hangs on both.** Status ⚠️ DIVERGENT AND LIVE until wasmrt lands it. |
-| **1** | 2026-08-19 | Opened. Scope set by the owner (CLI options + security checks; C ABI explicitly out). Recorded: the `--dir` separator break and the bare-path-executes consequence, both live today; the pin DB path risk; the nine-row `decide()` matrix; the ceiling defaults, verified equal in both; the WASI rights rows already agreed. |
+- *(annex detail)*
+  - date: 2026-08-19
+  - change: 🔬 **§4 CHECK 5 RUN FOR THE FIRST TIME — the CLI rows verified by RUNNING both binaries, not by reading
+    either** (§2.1m). wasmrt 0.9.0 vs wazmrt 1.0.0, same box. **Five findings.** ⚠⚠ **F1: the two “call an export” gaps
+    fail in OPPOSITE directions** — `wasmrt add.wat add 2 3` exits **0** printing a summary and silently ignoring the
+    export and its arguments, while `wazmrt run …` exits **1** and says why; same missing capability, and wasmrt's half
+    is the silent-wrong-output one, so it outranks the other. **F2: the “summarize” row was marked ✅ AGREED and the
+    output text is NOT identical** (behaviour and exit code do agree) — the word “identical” had been written from
+    reading. 🆕 **F3: FLAG POSITION differs and had no row at all** — wazmrt's flags follow the module path, wasmrt's
+    precede it, and ⚠⚠ **a trailing `--dir` under wasmrt is passed to the GUEST, so the sandbox is silently never
+    granted.** 🔻 **F4: a CORRECTION — §2.2’s claim that a single-colon `--dir` “does not error, it preopens the wrong
+    thing” is FALSE; measured, it fails loudly** (`errno 29`, rc=1). That claim had been carried as ⚠⚠ since v1 and was
+    written from reading the code. **F5: `-v` output shape differs** (1 line vs 2). ⚠ Everything check 5 did not reach —
+    the `.wast` row, `--ro-dir`, `--allow-symlink`, `--env`, the ceiling flags, `--`, and all of §2.3’s per-failure exit
+    codes — stays ⬜ UNVERIFIED and **may not be quoted as agreed.**
+- **10**
+  - date: 2026-08-19
+  - change: 🆕 **wazmrt WARNS on a misplaced flag (§2.2 position row) — zH7, and F3 is what found it.** wazmrt
+    recognises host flags only in the LEADING run after the module path; the inverse of that protection had never been
+    asked, so a flag written after a guest argument was **silently donated to the guest and never applied**. Fail-closed
+    for `--no-verify`/`--dir`, ⚠️ **fail-OPEN for `--verify`, `--pins` and every `--max-*`** — a user asks for a
+    restriction, gets no error, and runs without it. Now warns (never refuses: a guest may legitimately take `--dir` as
+    its own argument), and **nothing after an explicit `--` is examined**. Zero bytes. 🎓 Demonstrated with
+    `--max-iterations`, a flag wazmrt had added HOURS earlier in the same track — *a change's own new surface is the one
+    place the audit that produced it will not look.*
+- **9**
+  - date: 2026-08-19
+  - change: 🔻 **F4 FOLDED IN by the pen-holder (wazmrt, regime A).** §2.2's `--dir` paragraph still asserted *"it does
+    not error; it preopens the wrong thing"* — the claim F4 measured and REFUTED (`rc=1`, `cannot preopen …: errno 29`).
+    Corrected in place and downgraded ⚠️⚠️ → ⚠️: the divergence is real, its consequence is a **clean failure**, not a
+    silent mis-preopen. 🎓 **A refuted claim left in the table is what the next reader quotes** — an annex records the
+    finding, the table is what gets believed, so folding is the pen-holder's actual job. Third read-not-verify error
+    across the two projects in two days, and the reason rule 4 exists.
+- **8** ⏳
+  - date: 2026-08-19
+  - change: 🗓️ **COORDINATION CADENCE (owner) — §1d: coordinate at the END of each track**, not continuously and not
+    mid-track; then the project that is ahead **holds** until the sibling reaches the same boundary. Rationale: rule 4
+    verifies a row by RUNNING both, which needs something built and green — coordinating mid-track compares a settled
+    implementation against a moving one. ⚠️ Does **not** weaken "coordinate BEFORE shipping a contract surface":
+    *decide* before building, *verify and record* at the end of the track. Current application: wazmrt finishes **Track
+    H**, then holds for wasmrt.
+- **7** ⏳
+  - date: 2026-08-19
+  - change: ✅ **ROW 3b's 🚩 IS DISCHARGED — §0.5 restored, from wazmrt's session context, the only place it survived.**
+    ⚠️ **Restored as §1b, NOT as a verbatim §0.5:** three of its four parts had since been re-expressed better (the
+    order in §1; the editing boundary in §1a, which the owner has since made ABSOLUTE and is stronger than what §0.5
+    introduced), so re-pasting it would have left two definitions of one order in one file — the exact drift this file
+    exists to prevent. What was genuinely lost and is now back: **the ordered checklist** (including *"the sibling may
+    cite a contract row that does not exist yet — that is a cue to WRITE the row"*, which is literally what T9i did),
+    and *"`coordinate` is also the right response to discovering you have already diverged."* Adds **§1c** on wasmrt's
+    diagnosis — *a version is a pin, not a lock* — plus owner rows 6 (the `aa2769b8` (was `7ce0dcd2`) attribution, which
+    wazmrt cannot fix without breaching §1a) and 7 (one coordination session at a time).
+- **6** ⏳
+  - date: 2026-08-19
+  - change: 🔒🔒 **THE EDITING BOUNDARY IS NOW ABSOLUTE (owner) — §1a.** *"Not to edit the other's md file unless
+    specifically directed by me … each project needs to edit their own files … important for tracking and integrity."*
+    **Neither project writes ANYTHING into the other's tree — including this file** — without a specific owner
+    direction. `coordinate` is an order to CONFER, never a licence to WRITE. Supersedes the earlier "this file is the
+    one thing you may write there" rule, which caused two destructive overwrites in one day (rows 3b, 4). Rule 1
+    rewritten: propose in your OWN copy, bump the version, mark ⏳ **PENDING MIRROR**, and TELL THE OWNER the sibling is
+    behind — the owner directs the other project, which makes the edit in its own tree. A version mismatch is now a
+    normal coordination signal, resolved by reporting, **never** by copying over it. ⚠️ **This row is itself pending
+    mirror: wasmrt's copy is at 5.**
+- **5**
+  - date: 2026-08-19
+  - change: wazmrt ran the **A/B/A throughput** measurement wasmrt's T9i plan called for (§3.7a): the tick costs **~3%
+    on a tight loop** — 34.29 → 33.45 → 34.62 ns/loop-iter, A-to-A spread ~1%, B a single sample. Recorded for wasmrt's
+    planning, **not** as a contract row (§0 puts performance out of scope). ⚠️ Names the one performance response that
+    WOULD be a contract change: amortizing the tick to every *N*th back-edge alters the UNIT's granularity, so the
+    ceiling would stop meaning the same thing on both sides.
+- **4**
+  - date: 2026-08-19
+  - change: 🔒 **The EDITING BOUNDARY added to §1** (reconstructed from row 3’s description, since the §0.5 it named was
+    destroyed): this file is the only thing either project may write into the other’s tree, and ⚠⚠ **read the other copy
+    before overwriting it** — it starts untracked in both repos, so a blind copy is unrecoverable. §2’s owner ruling
+    restored. The duplicate row-3 entries reconciled into 3 + 3b.
+- **3b**
+  - date: 2026-08-19
+  - change: ⚠️⚠️ **A CONCURRENT-EDIT COLLISION, recorded rather than tidied away — the drift hazard §1 predicts,
+    arriving on day one.** Both projects edited this file at once. wazmrt's §3.7a rewrite (better than what it replaced:
+    it had *built* the feature and found that **the UNIT matters more than the number**) landed in wasmrt's tree
+    mid-session and was committed there without being noticed; in the other direction, wasmrt `cp`-ed its copy over
+    wazmrt's **untracked** working copy without checking it first, destroying wazmrt's in-flight **§0.5** — which row 3
+    below still references and which is **NOT PRESENT in either copy**. 🚩 **wazmrt must restore §0.5 from its own
+    context; nobody else has it.** Restored here: the §2 owner ruling, dropped in the same collision. **Two lessons,
+    both already in the rulebooks:** *a version is a pin, not a lock — it makes drift detectable, it does not prevent a
+    simultaneous write*, and **check before you overwrite**, which is exactly the editing boundary row 3 was adding. ✅
+    **The 🚩 IS DISCHARGED — §0.5 was restored from wazmrt's session context as §1b; see row 7.**
+- **3**
+  - date: 2026-08-19
+  - change: 🔑 **`coordinate` — the one-word binding order (§0.5), owner.** One word from the owner now obliges the full
+    cross-project protocol: byte-compare both copies, read the sibling's **uncommitted** in-flight work, diff shipped
+    behaviour against every in-scope row, **verify by RUNNING both on the same bytes**, land changes in both copies with
+    a version bump, and report divergences with reopen conditions. Carries **the editing boundary** — this file is the
+    only thing either project may write into the other's tree, and the sibling's own `cmem/` stays theirs.
+- **2**
+  - date: 2026-08-19
+  - change: **The execution bound (§3.7a).** Owner decided a bound is wanted; §5 decision #3 closes. wazmrt shipped
+    `--max-iterations` + `IterationLimitExceeded` (default `1<<30`) in its Track zH3 — ⚠️ **before this file carried it,
+    which §1 rule 1 forbids; recorded as a process breach rather than tidied away.** New rows: the flag in §2.2; the
+    agreed design in §3.7a, whose load-bearing clause is **the UNIT** (one loop back-edge **or** one tail-call hop) —
+    equal defaults with different units are not swappable; differential checks 6 and 7. **Verified by running both on
+    the same wasmrt-assembled bytes: wazmrt traps on both shapes, wasmrt hangs on both.** Status ⚠️ DIVERGENT AND LIVE
+    until wasmrt lands it.
+- **1**
+  - date: 2026-08-19
+  - change: Opened. Scope set by the owner (CLI options + security checks; C ABI explicitly out). Recorded: the `--dir`
+    separator break and the bare-path-executes consequence, both live today; the pin DB path risk; the nine-row
+    `decide()` matrix; the ceiling defaults, verified equal in both; the WASI rights rows already agreed.
