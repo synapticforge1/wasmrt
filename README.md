@@ -182,6 +182,6 @@ wasmrt has **no third-party dependencies**, and its engine incorporates no third
 components are recorded, both **data**: WebAssembly instruction-table data derived from
 [wabt](https://github.com/WebAssembly/wabt) (Apache-2.0), by way of the owner's binaryang project —
 since 2026-10-24 wasmrt's opcode gating and its SIMD and atomic mnemonic tables are generated from it;
-and, since 3.0.0, wasmparser's implementation-limit values and error wording (MIT), so that wasmrt
-refuses what wasmtime refuses, in its words — used under MIT whichever licence you take wasmrt under.
+and, since 3.0.0, wasmparser's implementation-limit values and error wording (MIT), so that wasmrt's
+refusals read as wasmtime's — used under MIT whichever licence you take wasmrt under.
 See [`NOTICE`](NOTICE) and [`third_party/LICENSES.md`](third_party/LICENSES.md).

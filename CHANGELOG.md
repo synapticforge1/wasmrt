@@ -38,8 +38,8 @@ pair.
 
 **A breaking release** (the Rust API gains fields and error variants and loses three, modules past
 wasmtime's implementation limits are refused, `wasmrt pin` and `wasmrt wat -o` write files differently,
-and the minimum Rust version is 1.100; see Breaking Changes in the README). Refusals now name the byte
-wasmtime names, in its words.
+and the minimum Rust version is 1.100; see Breaking Changes in the README). Refusals now name, almost
+always, the byte wasmtime names, in its words.
 
 ### Added
 
@@ -125,7 +125,7 @@ wasmtime names, in its words.
 - **A valid encoding was refused with reference-types disabled:** an overlong table index on
   `return_call_indirect`, which binaryang's shared definitions and wasm-tools both accept.
 - **Every decode failure carries its byte offset** (`decode failed at offset 10: unexpected end of
-  input`), on the CLI and in the C ABI's error strings, at the offsets wasmtime reports. A vector
+  input`), on the CLI and in the C ABI's error strings — almost always the offset wasmtime reports. A vector
   whose count runs past its section, entry or body is read item by item, as wasmtime reads it: a
   malformed item is reported at itself, and otherwise the failure is where the bytes run out. A
   code section whose count differs from the function section's is refused at that count.
@@ -134,15 +134,16 @@ wasmtime names, in its words.
   must be defined before subtypes` (at the rec group's start, once the group is read), `type index 0
   is not a function type`, and `unknown type 5: type index out of bounds` (an import's at the
   import's start).
-- **Every decode refusal is worded as wasmtime words it**, where wasmrt had one message for several
+- **Decode refusals are worded as wasmtime words them**, where wasmrt had one message for several
   of wasmtime's: `unexpected end-of-file`, `invalid value type` / `malformed reference type` /
   `invalid heap type` by context, `malformed section id`, `illegal opcode: 0x27`, `unknown 0xfc
   subopcode: 0x71`, the flag bytes of memories, tables, globals, tags and segments each in its own
   words, `invalid var_u32: integer representation too long`, and the others. Compared with
   wasm-tools on 4,000 one-byte corruptions of the behaviour corpus: the decode-stage refusals then
   agreed in words and offset except where wasmtime's validator reaches a function body's type error
-  first — the difference the one-pass load (above) removes. Some refusals still differ in offset (234
-  of the 4,000: end-of-file positions, and refusals outside a body, which carry no offset yet).
+  first — the difference the one-pass load (above) removes. Some still differ: 234 of the 4,000 in
+  offset (mainly end-of-file positions, refusals outside a body, which carry no offset yet, and the
+  memory-count limit wasmrt does not adopt), and 9 in wording.
 - **A function body's decode error waits for the rest of the module**, as in wasmtime: a structural
   fault later in the file (a section past the end, a count mismatch) is reported first. `else`,
   `catch` and `delegate` outside their block are refused while decoding, and a constant expression
