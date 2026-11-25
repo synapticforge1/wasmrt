@@ -94,7 +94,7 @@ always, the byte wasmtime names, in its words.
   (the types had to be equal); `array.new_fixed` in unreachable code naming more operands than the
   body had instructions was refused. Both are accepted, as wasm-tools accepts them. And
   `array.new_fixed` in unreachable code no longer counts through every operand it names: a 400 KB
-  body of them took minutes to validate, and takes 0.14 s.
+  body of them took 116 s to validate, and takes 0.14 s.
 - **The CLI never destroys a file it was given.** `wasmrt pin --db` treated a pin DB it could not
   read (a UTF-16 file, a permission error) as empty and overwrote it, and concurrent `pin` runs could
   drop each other's pins while all exited 0; `wasmrt wat x.wat -o x.wat` replaced its source with the
@@ -169,8 +169,8 @@ always, the byte wasmtime names, in its words.
   eight times: `fib(32)` (7 million calls) 3.34–3.41 s → 1.09 s (a call-heavy loop; the steady
   loop gains less, as measured below). The cold start on the 48 KB benchmark
   module 3.1–3.3 ms → 2.35 ms; the steady loop 243–254 → 255–278 Mops/s. The CLI decodes a module once
-  (it decoded the bare-path form twice), links WASI without copying the module, and does not free an
-  instance it is about to exit from (about 1.5 ms off a small WASI program's run). An instance no
+  (it decoded the bare-path form twice; the second decode cost 1.16 ms), links WASI without copying
+  the module, and does not free an instance it is about to exit from. An instance no
   longer holds two copies of every instruction, its per-instruction jump tables are a sixth of their
   size, and a decoded body keeps no spare capacity: a 7.3 MB function 1,861 → 828 MB, a million
   functions 990 → 329 MB, a million types 190 → 100 MB.

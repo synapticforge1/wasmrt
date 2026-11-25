@@ -10,7 +10,7 @@ Updated: 2026-11-25, releasing 3.0.0 (owner: "release 3.0.0") — notes merged; 
 ## Now
 - 3.0.0's content: wasmtime's implementation limits (the measured-needed set, owner 2026-11-24); decode and
   validation refusals in wasmtime's words, almost always at its offset (wasmparser 0.263's); one-pass load (`module::parse` /
-  `Parsed::validate` / `decode_validated`); the efficiency review (function calls ~3× faster, a large module's memory a third to a half lower); the
+  `Parsed::validate` / `decode_validated`); the efficiency review (function calls ~3× faster, a large module's memory a third to two thirds lower); the
   CLI's safe writes (temp + rename, a new file's usual mode) and `pin`'s OS lock; the C ABI store guard
 - Toolchains (owner, 2026-11-24): gnu on both OSes, the same versions — stable 1.100.0 (the MSRV, `rust-version`)
   and `nightly-2026-11-04` (pinned in `rust-toolchain.toml` and release.yml, the default); gnullvm dropped
