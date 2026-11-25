@@ -475,8 +475,14 @@ impl Module {
     /// non-function composite type.
     #[must_use]
     pub fn func_sig(&self, ti: u32) -> Option<FuncType> {
+        self.func_sig_ref(ti).cloned()
+    }
+
+    /// [`Self::func_sig`], borrowed: what the validator reads, once per instruction that names a type
+    /// (W5: it cloned the type for each).
+    pub(crate) fn func_sig_ref(&self, ti: u32) -> Option<&FuncType> {
         match self.comp_types.get(ti as usize)? {
-            CompType::Func(f) => Some(f.clone()),
+            CompType::Func(f) => Some(f),
             _ => None,
         }
     }
@@ -871,41 +877,51 @@ impl Parsed<'_> {
     pub fn validate(self, features: &crate::features::Features) -> Result<Module, LoadError> {
         let Parsed { bytes, mut module, mut deferred } = self;
         let at = crate::validate::At { pos: &deferred.pos, bytes };
-        let refs = crate::validate::module_checks(&module, features, Some(&at)).map_err(LoadError::Invalid)?;
-        let first_import = module.imported_func_count();
-        for k in 0..module.code.len() {
-            if let Some((_, e, at)) = deferred.locals_error.take_if(|(at_k, ..)| *at_k == k) {
-                crate::reader::reset_decode_at();
-                if let Some(at) = at {
-                    crate::reader::note_decode_at(at);
+        // Each body's instructions, held until every check is done: the function table borrows the module.
+        let irs = {
+            let funcs = crate::validate::Funcs::new(&module);
+            let refs = crate::validate::module_checks(&module, features, Some(&at), &funcs).map_err(LoadError::Invalid)?;
+            let first_import = module.imported_func_count();
+            let mut irs = Vec::with_capacity(module.code.len());
+            for k in 0..module.code.len() {
+                if let Some((_, e, at)) = deferred.locals_error.take_if(|(at_k, ..)| *at_k == k) {
+                    crate::reader::reset_decode_at();
+                    if let Some(at) = at {
+                        crate::reader::note_decode_at(at);
+                    }
+                    return Err(LoadError::Decode(e));
                 }
-                return Err(LoadError::Decode(e));
+                let (start, len) = deferred.body_spans[k];
+                let ft = module
+                    .func_sig_ref(module.functions[k])
+                    .ok_or(LoadError::Invalid(crate::validate::ValidateError::UndefinedType))?;
+                let origin = u32::try_from(start).unwrap_or(u32::MAX);
+                let ir = crate::validate::decode_and_validate_body(
+                    &module,
+                    ft,
+                    &module.code[k].locals,
+                    &bytes[start..start + len],
+                    origin,
+                    &refs,
+                    &funcs,
+                    features,
+                    deferred.has_data_count,
+                )
+                .map_err(|e| match e {
+                    crate::validate::BodyError::Decode(e) => LoadError::Decode(e),
+                    crate::validate::BodyError::Invalid(e) => {
+                        LoadError::Invalid(crate::validate::located(e, first_import + k as u32))
+                    }
+                })?;
+                irs.push(ir);
             }
-            let (start, len) = deferred.body_spans[k];
-            let ft = module
-                .func_sig(module.functions[k])
-                .ok_or(LoadError::Invalid(crate::validate::ValidateError::UndefinedType))?;
-            let origin = u32::try_from(start).unwrap_or(u32::MAX);
-            let ir = crate::validate::decode_and_validate_body(
-                &module,
-                &ft,
-                &module.code[k].locals,
-                &bytes[start..start + len],
-                origin,
-                &refs,
-                features,
-                deferred.has_data_count,
-            )
-            .map_err(|e| match e {
-                crate::validate::BodyError::Decode(e) => LoadError::Decode(e),
-                crate::validate::BodyError::Invalid(e) => {
-                    LoadError::Invalid(crate::validate::located(e, first_import + k as u32))
-                }
-            })?;
-            module.code[k].ir = ir;
+            // The data section follows the code section, and wasmtime checks each body as it reads it.
+            crate::validate::data_checks(&module, features, Some(&at), &funcs).map_err(LoadError::Invalid)?;
+            irs
+        };
+        for (code, ir) in module.code.iter_mut().zip(irs) {
+            code.ir = ir;
         }
-        // The data section follows the code section, and wasmtime checks each body as it reads it.
-        crate::validate::data_checks(&module, features, Some(&at)).map_err(LoadError::Invalid)?;
         Ok(module)
     }
 }

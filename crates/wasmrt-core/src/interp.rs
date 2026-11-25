@@ -24,7 +24,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::module::{CompKind, CompType, FuncType, Module, StorageType};
+use crate::module::{CompKind, CompType, Module, StorageType};
 use crate::opcode::{BlockType, Catch, CatchKind, HeapType, Imm, Instr, Op, RefType};
 use crate::reader::Reader;
 use crate::types::{DecodeError, RefHeap};
@@ -227,6 +227,60 @@ const MAX_INSTANCES: usize = 1 << 31;
 #[inline]
 fn pack_funcref(instance: usize, func: u32) -> Value {
     ((instance as Value) << FUNCREF_INSTANCE_SHIFT) | Value::from(func)
+}
+
+/// An element segment's items, as the store holds them (W5, item 6). Every item was a 16-byte value,
+/// held for the instance's life — an active or declarative segment's too, after it was dropped.
+enum ElemSeg {
+    /// The function-index form: `ref.func` of the instance's own functions, read from its module
+    /// (`module.elements[seg].funcs` of instance `inst`) when used.
+    Funcs { inst: usize, seg: usize },
+    /// The expression form, evaluated at instantiation in the order §4.5.4 gives. Empty once the
+    /// segment is no longer needed (an active one, once applied).
+    Values(Box<[Value]>),
+}
+
+/// A segment's items, borrowed: see [`ElemSeg`].
+#[derive(Clone, Copy)]
+enum ElemItems<'a> {
+    Funcs { inst: usize, funcs: &'a [u32] },
+    Values(&'a [Value]),
+}
+
+impl<'a> ElemItems<'a> {
+    /// `seg`'s items; the function-index form is read from `code`, the instances' modules.
+    fn of(code: &'a [InstanceData], seg: &'a ElemSeg) -> ElemItems<'a> {
+        match *seg {
+            ElemSeg::Funcs { inst, seg } => ElemItems::Funcs {
+                inst,
+                funcs: code
+                    .get(inst)
+                    .and_then(|d| d.module.elements.get(seg))
+                    .map_or(&[], |e| e.funcs.as_slice()),
+            },
+            ElemSeg::Values(ref v) => ElemItems::Values(v),
+        }
+    }
+
+    fn len(self) -> usize {
+        match self {
+            ElemItems::Funcs { funcs, .. } => funcs.len(),
+            ElemItems::Values(v) => v.len(),
+        }
+    }
+
+    /// Item `k`; the caller has checked `k < len()`.
+    fn get(self, k: usize) -> Value {
+        match self {
+            ElemItems::Funcs { inst, funcs } => pack_funcref(inst, funcs[k]),
+            ElemItems::Values(v) => v[k],
+        }
+    }
+
+    /// Items `a..b`; the caller has checked `b <= len()`.
+    fn range(self, a: usize, b: usize) -> Vec<Value> {
+        (a..b).map(|k| self.get(k)).collect()
+    }
 }
 
 /// The instance that produced a `funcref`. Callers must have established it is not `NULL_REF`.
@@ -492,8 +546,8 @@ struct Pools {
     /// `data_dropped[i]` marks a data segment consumed — active segments are dropped once
     /// instantiation copies them in (§4.5.4); `data.drop` marks a passive one.
     data_dropped: Vec<bool>,
-    /// Evaluated reference values of each element segment (for `table.init`).
-    elem_values: Vec<Vec<Value>>,
+    /// Each element segment's items (for `table.init`, `array.new_elem`, `array.init_elem`).
+    elems: Vec<ElemSeg>,
     /// `elem_dropped[i]` marks a segment consumed (active/declarative at init, or `elem.drop`).
     elem_dropped: Vec<bool>,
     /// One entry per **tag instance**, holding the instance that defined it. A tag has no runtime
@@ -805,10 +859,14 @@ impl core::error::Error for Trap {}
 pub type Result<T> = core::result::Result<T, Trap>;
 
 /// A defined function prepared for execution (compute slice: one slot per local/value).
+///
+/// Slim, because there is one per defined function (W5, item 5: 184 B with a clone of its `FuncType`,
+/// of which only the result count was read): counts as `u32`, tables as boxed slices.
 struct FuncBody {
-    ty: FuncType,
+    /// How many results the function returns (its type's; the type itself is the module's).
+    n_results: u32,
     /// params + declared locals (one `u64` slot each — no v128 in this slice).
-    num_locals: usize,
+    num_locals: u32,
     /// Indices of declared locals whose default value is `ref.null`, not zero (§4.4.5: a local's
     /// default is `t.default`, and a reference type's is null).
     ///
@@ -821,20 +879,20 @@ struct FuncBody {
     /// A list of indices rather than a vector of defaults, because it is almost always EMPTY: the
     /// hot path keeps its `vec![0; n]` and pays one length check. Non-null reference locals are not
     /// defaultable at all, so the validator has already refused those.
-    null_locals: Vec<u32>,
+    null_locals: Box<[u32]>,
     // The instructions are NOT held here: they are the module's (`InstanceData.module.code[i].ir`, the same
     // instance), borrowed by each frame — a copy here held every instruction twice (efficiency review, 2026-11-24),
     // and moving them out of the module emptied `Instance::module()` (review H1).
     /// For each `block`/`loop`/`if`/`else` index: the matching `end` index. `u32`: a body's instruction
     /// count is bounded by the function-size limit (efficiency review, 2026-11-24: `usize` cost 8 B more per
     /// instruction).
-    end_of: Vec<u32>,
+    end_of: Box<[u32]>,
     /// For each `if` index: the `else` index, or `ir.len()` if none.
-    else_of: Vec<u32>,
+    else_of: Box<[u32]>,
     /// The legacy `try`s (EH, legacy encoding), by their index, ascending: each one's inline catch handlers
     /// and optional `delegate` label. SPARSE — a dense per-instruction `Option` cost 32 B for every
     /// instruction to describe the rare `try` (efficiency review); looked up only when a throw unwinds.
-    try_info: Vec<(u32, LegacyTry)>,
+    try_info: Box<[(u32, LegacyTry)]>,
     /// Absolute module offset of this body's first instruction, so a trap frame can report a
     /// module offset rather than a body-relative one the consumer would have to rebase.
     body_offset: u32,
@@ -1263,6 +1321,12 @@ struct InstanceData {
     /// import matching an integer comparison rather than a structural walk.
     type_ids: Vec<u32>,
     func_bodies: Vec<FuncBody>,
+    /// Each function's (params, results) count, by function index, imports first: what a call reads.
+    /// ⚠️ A call looked the callee's type up in the module, which walks every import and CLONES the type —
+    /// two allocations per call for a function with parameters and results (W5, item 5).
+    arity: Box<[(u32, u32)]>,
+    /// How many of the functions are imported (the module counted its imports on every call).
+    imported_funcs: u32,
     maps: IndexMaps,
     /// One entry per **imported** function, in declaration order.
     imports: Vec<FuncTarget>,
@@ -1489,6 +1553,8 @@ pub struct Instance {
 /// separately as `&mut` so a recursive `call` reborrows it cleanly.
 struct Ctx<'a> {
     module: &'a Module,
+    /// This instance's [`InstanceData::arity`].
+    arity: &'a [(u32, u32)],
     /// Where this instance's index spaces live in the shared store pools.
     maps: &'a IndexMaps,
     /// Every instance's code, so a `call` into an imported wasm function can reach the
@@ -2079,24 +2145,32 @@ impl Store {
 
         // Evaluate element segments to reference values; apply the active ones to their table
         // (then drop them and the declarative ones; passive stay for `table.init`).
-        let mut elem_values: Vec<Vec<Value>> = Vec::with_capacity(module.elements.len());
+        let mut elem_segs: Vec<ElemSeg> = Vec::with_capacity(module.elements.len());
         let mut elem_dropped: Vec<bool> = Vec::with_capacity(module.elements.len());
         // `(segment index, table index, offset)` for each ACTIVE element segment, applied once the
         // instance exists — see the note at the application site.
         let mut active_elems: Vec<(usize, u32, u64)> = Vec::new();
-        for elem in &module.elements {
-            let mut vals: Vec<Value> = Vec::with_capacity(elem.funcs.len() + elem.exprs.len());
-            // The funcidx shorthand (elem forms 0-3) denotes `ref.func` of THIS instance, so the
-            // values are stamped exactly as the instruction form would stamp them.
-            vals.extend(elem.funcs.iter().map(|&f| pack_funcref(self_inst, f)));
-            for ex in &elem.exprs {
-                vals.push(eval_const_expr(
-                    ex,
-                    &globals,
-                    self_inst,
-                    Some((&module, &mut self.pools)),
-                )?);
-            }
+        for (k, elem) in module.elements.iter().enumerate() {
+            // The funcidx shorthand (elem forms 0-3) denotes `ref.func` of THIS instance: read from the
+            // module when used, stamped exactly as the instruction form would stamp it (`ElemItems::get`).
+            let seg = if elem.exprs.is_empty() {
+                ElemSeg::Funcs { inst: self_inst, seg: k }
+            } else {
+                let mut vals: Vec<Value> = Vec::with_capacity(elem.exprs.len());
+                for ex in &elem.exprs {
+                    vals.push(eval_const_expr(
+                        ex,
+                        &globals,
+                        self_inst,
+                        Some((&module, &mut self.pools)),
+                    )?);
+                }
+                // A declarative segment is dropped now; its items were evaluated, as §4.5.4 does.
+                if elem.mode == crate::module::ElementMode::Declarative {
+                    vals.clear();
+                }
+                ElemSeg::Values(vals.into_boxed_slice())
+            };
             if elem.mode == crate::module::ElementMode::Active {
                 // The offset's constant expression is evaluated HERE, while `globals` is in scope;
                 // the write itself happens after the instance is allocated (see below).
@@ -2105,10 +2179,10 @@ impl Store {
                 let ti = elem.table_index as usize;
                 let is64 = module.tables.get(ti).is_some_and(|t| t.limits.is64);
                 let offset = eval_const_offset(&elem.offset_expr, &globals, is64)?;
-                active_elems.push((elem_values.len(), elem.table_index, offset));
+                active_elems.push((elem_segs.len(), elem.table_index, offset));
             }
             elem_dropped.push(elem.mode != crate::module::ElementMode::Passive);
-            elem_values.push(vals);
+            elem_segs.push(seg);
         }
 
         // Active data segments: offsets evaluated now, applied after the instance exists (§4.5.4).
@@ -2125,12 +2199,24 @@ impl Store {
         let data_dropped: Vec<bool> = module.data.iter().map(|s| s.active).collect();
 
         // Prepare each defined function: decode its body + precompute control flow.
+        let imported_funcs = module.imported_func_count();
+        let mut arity = Vec::with_capacity(imported_funcs as usize + module.functions.len());
+        for imp in &module.imports {
+            if let crate::module::Extern::Func(ft) = &imp.ty {
+                arity.push((ft.params.len() as u32, ft.results.len() as u32));
+            }
+        }
+        for &ti in &module.functions {
+            let ft = module.func_sig_ref(ti).ok_or(Trap::UndefinedFunc)?;
+            arity.push((ft.params.len() as u32, ft.results.len() as u32));
+        }
         let mut func_bodies = Vec::with_capacity(module.functions.len());
         for k in 0..module.code.len().min(module.functions.len()) {
             let type_index = module.functions[k];
-            let ty = module.func_sig(type_index).ok_or(Trap::UndefinedFunc)?;
+            let ty = module.func_sig_ref(type_index).ok_or(Trap::UndefinedFunc)?;
             let code = &module.code[k];
-            let num_locals = ty.params.len() + code.local_count() as usize;
+            // (validation holds params + locals to 50,000)
+            let num_locals = u32::try_from(ty.params.len() as u64 + code.local_count()).unwrap_or(u32::MAX);
             // Declared locals follow the parameters in the index space.
             let mut null_locals = Vec::new();
             let mut li = ty.params.len() as u32;
@@ -2144,12 +2230,12 @@ impl Store {
             // The body's control-flow tables only; its instructions stay the module's (borrowed by each frame).
             let cf = precompute_control_flow(&code.ir)?;
             func_bodies.push(FuncBody {
-                ty,
+                n_results: ty.results.len() as u32,
                 num_locals,
-                null_locals,
-                end_of: cf.end_of,
-                else_of: cf.else_of,
-                try_info: cf.try_info,
+                null_locals: null_locals.into_boxed_slice(),
+                end_of: cf.end_of.into_boxed_slice(),
+                else_of: cf.else_of.into_boxed_slice(),
+                try_info: cf.try_info.into_boxed_slice(),
                 body_offset,
             });
         }
@@ -2198,7 +2284,7 @@ impl Store {
                     .collect()
             },
             data: base(self.pools.data_dropped.len(), data_dropped.len()),
-            elems: base(self.pools.elem_values.len(), elem_values.len()),
+            elems: base(self.pools.elems.len(), elem_segs.len()),
             // Imported tags keep the exporter's slots; defined ones take fresh slots after them,
             // so index order matches the module's own tag index space.
             tags: {
@@ -2215,7 +2301,7 @@ impl Store {
         self.pools.globals.extend(defined_globals);
         self.pools.globals.extend(host_globals);
         self.pools.data_dropped.extend(data_dropped);
-        self.pools.elem_values.extend(elem_values);
+        self.pools.elems.extend(elem_segs);
         self.pools.elem_dropped.extend(elem_dropped);
         self.pools
             .tags
@@ -2250,6 +2336,8 @@ impl Store {
             module,
             type_ids,
             func_bodies,
+            arity: arity.into_boxed_slice(),
+            imported_funcs,
             maps,
             imports: targets,
         });
@@ -2275,17 +2363,22 @@ impl Store {
             let data = &self.code[self_inst];
             let pools = &mut self.pools;
             for (k, table_index, offset) in active_elems {
-                let vals = &pools.elem_values[IndexMaps::get(&data.maps.elems, k)];
+                let slot = IndexMaps::get(&data.maps.elems, k);
+                let items = ElemItems::of(&self.code, &pools.elems[slot]);
                 let tbl = pools
                     .tables
                     .get_mut(data.maps.table(table_index))
                     .ok_or(Trap::NoTable)?;
                 let start = usize::try_from(offset).map_err(|_| Trap::TableOutOfBounds)?;
                 let end = start
-                    .checked_add(vals.len())
+                    .checked_add(items.len())
                     .filter(|&e| e <= tbl.entries.len())
                     .ok_or(Trap::TableOutOfBounds)?;
-                tbl.entries[start..end].copy_from_slice(vals);
+                for (j, entry) in tbl.entries[start..end].iter_mut().enumerate() {
+                    *entry = items.get(j);
+                }
+                // Applied, and dropped since instantiation began: its items are never read again.
+                pools.elems[slot] = ElemSeg::Values(Box::new([]));
             }
             for (k, mem_index, offset) in active_data {
                 let bytes = &data.module.data[k].bytes;
@@ -2890,16 +2983,13 @@ fn call_function(
     let data = code.get(inst).ok_or(Trap::UndefinedFunc)?;
     // Imported functions occupy the LOW indices of the function space, so an index below
     // the import count is an import and everything above it shifts down by that count.
-    let imported = data.module.imported_func_count();
+    let imported = data.imported_funcs;
     if func_index < imported {
         return match *data.imports.get(func_index as usize).ok_or(Trap::MissingImport)? {
             FuncTarget::Host(h) => {
                 let hf = host_funcs.get(h).ok_or(Trap::MissingImport)?;
-                let ft = data
-                    .module
-                    .func_type(func_index)
-                    .ok_or(Trap::UndefinedFunc)?;
-                let mut results = vec![0 as Value; ft.results.len()];
+                let &(_, n_results) = data.arity.get(func_index as usize).ok_or(Trap::UndefinedFunc)?;
+                let mut results = vec![0 as Value; n_results as usize];
                 let mut caller = Caller {
                     store,
                     maps: &data.maps,
@@ -2919,7 +3009,7 @@ fn call_function(
     let ir: &[Instr] = &data.module.code.get(defined).ok_or(Trap::UndefinedFunc)?.ir;
 
     let mut locals = store.take_values();
-    locals.resize(body.num_locals, 0 as Value);
+    locals.resize(body.num_locals as usize, 0 as Value);
     let n_args = args.len().min(locals.len());
     locals[..n_args].copy_from_slice(&args[..n_args]);
     // A reference local defaults to `ref.null`, not zero — zero is GC heap object 0.
@@ -2931,7 +3021,7 @@ fn call_function(
 
 
     let mut labels = store.take_labels();
-    labels.push(plain_label(false, body.ty.results.len() as u32, ir.len(), 0));
+    labels.push(plain_label(false, body.n_results, ir.len(), 0));
     let mut frame = Frame {
         body,
         ir,
@@ -2941,6 +3031,7 @@ fn call_function(
     };
     let ctx = Ctx {
         module: &data.module,
+        arity: &data.arity,
         maps: &data.maps,
         code,
         host_funcs,
@@ -2985,7 +3076,7 @@ fn call_function(
         continue;
     }
 
-    let n = body.ty.results.len();
+    let n = body.n_results as usize;
     let base = frame.stack_base(n)?;
     let mut results = store.take_values();
     results.extend_from_slice(&frame.vstack[base..]);
@@ -3273,8 +3364,8 @@ fn run(
                     let Imm::Func(f) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
-                    let ft = ctx.module.func_type(f).ok_or(Trap::UndefinedFunc)?;
-                    let base = frame.stack_base(ft.params.len())?;
+                    let &(np, _) = ctx.arity.get(f as usize).ok_or(Trap::UndefinedFunc)?;
+                    let base = frame.stack_base(np as usize)?;
                     *tail_out = Some(TailCall {
                         inst: ctx.inst,
                         func: f,
@@ -3286,9 +3377,8 @@ fn run(
                     let Imm::Func(f) = instr.imm else {
                         return Err(Trap::UnsupportedInstruction);
                     };
-                    let ft = ctx.module.func_type(f).ok_or(Trap::UndefinedFunc)?;
-                    let np = ft.params.len();
-                    let base = frame.stack_base(np)?;
+                    let &(np, _) = ctx.arity.get(f as usize).ok_or(Trap::UndefinedFunc)?;
+                    let base = frame.stack_base(np as usize)?;
                     let mut args = store.take_values();
                     args.extend_from_slice(&frame.vstack[base..]);
                     let results = match call_function(ctx.code, ctx.host_funcs, store, ctx.inst, f, &args, depth + 1) {
@@ -3453,12 +3543,12 @@ fn run(
                     // shared table they are not, and using the caller's would be the wrong function.
                     let owner = funcref_instance(f_ref);
                     let f = funcref_index(f_ref);
-                    let ft = ctx
+                    let &(np, _) = ctx
                         .code
                         .get(owner)
-                        .and_then(|d| d.module.func_type(f))
+                        .and_then(|d| d.arity.get(f as usize))
                         .ok_or(Trap::UndefinedFunc)?;
-                    let base = frame.stack_base(ft.params.len())?;
+                    let base = frame.stack_base(np as usize)?;
                     // ⚠️ `return_call_ref` used to be implemented here as "call, then jump to the end
                     // of the body" — which returns the right answer and is NOT a tail call: it
                     // recursed into `call_function`, so the native stack grew exactly as it does for
@@ -3520,9 +3610,11 @@ fn run(
                     // this, `entry as u32` resolved against the *calling* instance: a silent wrong call.
                     let owner = funcref_instance(entry);
                     let f = funcref_index(entry);
-                    let want = ctx.module.func_sig(ci.type_index).ok_or(Trap::UndefinedType)?;
+                    let want = ctx.module.func_sig_ref(ci.type_index).ok_or(Trap::UndefinedType)?;
                     let owner_data = ctx.code.get(owner).ok_or(Trap::UndefinedFunc)?;
-                    let got = owner_data.module.func_type(f).ok_or(Trap::UndefinedFunc)?;
+                    let &(np, _) = owner_data.arity.get(f as usize).ok_or(Trap::UndefinedFunc)?;
+                    // The callee's whole type only for the structural fallback below (an import).
+                    let got_equal = || owner_data.module.func_type(f).is_some_and(|got| ctx.module.func_types_equal(want, &got));
                     // Matched on **type identity with subtyping**, by index — not by comparing the two
                     // signatures' shapes. Same lesson as import matching, and the third site to need it:
                     // two functions can both be `(func)` and still be different types, because rec-group
@@ -3538,7 +3630,7 @@ fn run(
                             Some(got_ti) => ctx.module.is_subtype(got_ti, ci.type_index),
                             // An *imported* function has no defining type index in this module. Fall back
                             // to the structural comparison, which `func_types_equal` decides canonically.
-                            None => ctx.module.func_types_equal(&want, &got),
+                            None => got_equal(),
                         }
                     } else {
                         match (
@@ -3554,13 +3646,13 @@ fn run(
                             (Some(want_id), Some(got_id)) => store.types.is_subtype(got_id, want_id),
                             // No store-wide id on one side (a re-exported import has no defining type
                             // index): fall back to the structural comparison rather than refusing.
-                            _ => ctx.module.func_types_equal(&want, &got),
+                            _ => got_equal(),
                         }
                     };
                     if !matched {
                         return Err(Trap::IndirectTypeMismatch);
                     }
-                    let base = frame.stack_base(got.params.len())?;
+                    let base = frame.stack_base(np as usize)?;
                     // The tail form replaces the frame instead of stacking one — and note it inherits
                     // the cross-instance `owner` above, so a tail call THROUGH a shared table lands in
                     // the reference's own instance, same as the non-tail form.
@@ -3677,20 +3769,17 @@ fn run(
                     let n = frame.pop_i32() as u32 as usize;
                     let src = frame.pop_i32() as u32 as usize;
                     let dst = table_slot(frame.pop_table(is64))?;
-                    let seg_len = if dropped { 0 } else { store.elem_values[ei].len() };
+                    let items = ElemItems::of(ctx.code, store.elems.get(ei).ok_or(Trap::UndefinedElement)?);
+                    let seg_len = if dropped { 0 } else { items.len() };
                     let tbl_len = store.tables.get(ti).ok_or(Trap::NoTable)?.entries.len();
                     if src.checked_add(n).is_none_or(|e| e > seg_len)
                         || dst.checked_add(n).is_none_or(|e| e > tbl_len)
                     {
                         return Err(Trap::TableOutOfBounds);
                     }
+                    // (n is 0 when the segment is dropped: the bounds check above allows nothing else)
                     for k in 0..n {
-                        let v = if dropped {
-                            NULL_REF
-                        } else {
-                            store.elem_values[ei][src + k]
-                        };
-                        store.tables[ti].entries[dst + k] = v;
+                        store.tables[ti].entries[dst + k] = items.get(src + k);
                     }
                     pc += 1;
                 }
@@ -4439,10 +4528,14 @@ fn read_data_elem(s: StorageType, b: &[u8]) -> Value {
 /// A dropped segment reads as EMPTY rather than as an error — the same convention `table.init`
 /// follows, so an out-of-range access after a drop traps on the bounds check instead of on the
 /// drop flag, which is what the spec asks for.
-fn elem_segment_values<'a>(ctx: &Ctx, store: &'a Pools, seg: u32) -> Result<&'a [Value]> {
+fn elem_segment_values<'a>(ctx: &Ctx<'a>, store: &'a Pools, seg: u32) -> Result<ElemItems<'a>> {
     let ei = ctx.maps.elem(seg);
     let dropped = *store.elem_dropped.get(ei).ok_or(Trap::UndefinedElement)?;
-    Ok(if dropped { &[] } else { store.elem_values.get(ei).ok_or(Trap::UndefinedElement)? })
+    Ok(if dropped {
+        ElemItems::Values(&[])
+    } else {
+        ElemItems::of(ctx.code, store.elems.get(ei).ok_or(Trap::UndefinedElement)?)
+    })
 }
 
 /// `array.new_data` / `array.new_elem` — build a fresh array from a segment.
@@ -4482,7 +4575,7 @@ fn exec_array_new_seg(
         if end > vals.len() {
             return Err(Trap::TableOutOfBounds);
         }
-        vals[off..end].to_vec()
+        vals.range(off, end)
     };
     let r = alloc_object(store, ctx.inst, type_index, fields)?;
     frame.push(r);
@@ -4532,7 +4625,7 @@ fn exec_array_init_seg(
         if end > vals.len() {
             return Err(Trap::TableOutOfBounds);
         }
-        vals[soff..end].to_vec()
+        vals.range(soff, end)
     };
     for (k, v) in run.into_iter().enumerate() {
         store.gc_heap[idx].fields[doff + k] = pack_field(f.storage, v);
@@ -4699,12 +4792,12 @@ fn alloc_object(store: &mut Pools, owner: usize, type_index: u32, fields: Vec<Va
 
 /// The type index of a *defined* function (for a funcref `ref.cast` to a concrete func type);
 /// `None` for an imported function.
-fn defined_func_type(module: &Module, fi: u32) -> Option<u32> {
-    let imported = module.imported_func_count();
+fn defined_func_type(d: &InstanceData, fi: u32) -> Option<u32> {
+    let imported = d.imported_funcs;
     if fi < imported {
         return None;
     }
-    module.functions.get((fi - imported) as usize).copied()
+    d.module.functions.get((fi - imported) as usize).copied()
 }
 
 /// The instance that DEFINES function `fi` of instance `inst`, and its type index there — following
@@ -4716,7 +4809,7 @@ fn defined_func_type(module: &Module, fi: u32) -> Option<u32> {
 fn defining_func(code: &[InstanceData], mut inst: usize, mut fi: u32) -> Option<(usize, u32)> {
     for _ in 0..=code.len() {
         let d = code.get(inst)?;
-        if let Some(ti) = defined_func_type(&d.module, fi) {
+        if let Some(ti) = defined_func_type(d, fi) {
             return Some((inst, ti));
         }
         match d.imports.get(fi as usize)? {

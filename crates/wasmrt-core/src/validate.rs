@@ -164,11 +164,12 @@ pub fn validate(module: &Module) -> ValidateResult<()> {
 /// With [`Features::all`] every gate below is a no-op, which is why enabling this cost the
 /// spec-suite numbers nothing.
 pub fn validate_with_features(module: &Module, features: &Features) -> ValidateResult<()> {
-    let refs = module_checks(module, features, None)?;
+    let funcs = Funcs::new(module);
+    let refs = module_checks(module, features, None, &funcs)?;
     // Function bodies last, so `refs` is complete before any body's C.refs check.
     for (n, (&type_index, code)) in module.functions.iter().zip(&module.code).enumerate() {
-        let ft = module.func_sig(type_index).ok_or(ValidateError::UndefinedType)?;
-        validate_function(module, &ft, code, Some(&refs), features).map_err(|e| {
+        let ft = module.func_sig_ref(type_index).ok_or(ValidateError::UndefinedType)?;
+        validate_function(module, ft, code, Some(&refs), &funcs, features).map_err(|e| {
             // Attach WHICH function failed. A bare `TypeMismatch` for a 900-line module is a
             // diagnosis problem, not a verdict problem: localizing T9a#9's fixture by hand — to
             // defined function #6 of 19 — is what turned "our type-checker is wrong" into "the
@@ -176,7 +177,47 @@ pub fn validate_with_features(module: &Module, features: &Features) -> ValidateR
             located(e, module.imported_func_count() + n as u32)
         })?;
     }
-    data_checks(module, features, None)
+    data_checks(module, features, None, &funcs)
+}
+
+/// Each function's type, by function index (imports first), and how `ref.func` types it: built once per
+/// module, so a `call` costs an index. ⚠️ It walked the imports and cloned the type for each (W5,
+/// 2026-11-25): 20,000 imports and 200,000 calls took **5.3 s** to validate, wasm-tools 0.10 s — quadratic
+/// in two counts the guest chooses, paid before anything runs.
+pub(crate) struct Funcs<'a> {
+    sig: Vec<Option<&'a FuncType>>,
+    /// The type index it was declared with (`None`: an import that names none), and whether `ref.func`
+    /// of it is exact (a defined function's is; an import's only if it was declared exact).
+    decl: Vec<(Option<u32>, bool)>,
+}
+
+impl<'a> Funcs<'a> {
+    pub(crate) fn new(module: &'a Module) -> Funcs<'a> {
+        let n = module.imports.len() + module.functions.len();
+        let mut sig = Vec::with_capacity(n);
+        let mut decl = Vec::with_capacity(n);
+        for imp in &module.imports {
+            if let crate::module::Extern::Func(ft) = &imp.ty {
+                sig.push(Some(ft));
+                decl.push((imp.func_type_index, imp.exact));
+            }
+        }
+        for &ti in &module.functions {
+            sig.push(module.func_sig_ref(ti));
+            decl.push((Some(ti), true));
+        }
+        Funcs { sig, decl }
+    }
+
+    /// Function `f`'s type, if `f` is a function (as [`Module::func_type`], borrowed).
+    fn sig(&self, f: u32) -> Option<&'a FuncType> {
+        self.sig.get(f as usize).copied().flatten()
+    }
+
+    /// As [`Module::declared_func_type_index`] and [`Module::func_ref_is_exact`].
+    fn decl(&self, f: u32) -> (Option<u32>, bool) {
+        self.decl.get(f as usize).copied().unwrap_or((None, false))
+    }
 }
 
 /// Where a just-parsed module's entities begin, and its bytes: the offsets at which wasmtime reports a
@@ -208,8 +249,14 @@ fn past_leb(bytes: &[u8], p: usize) -> usize {
 /// wasmtime's order — the sections': tables, memories, tags, globals, exports, start, elements (W5);
 /// returns the module's C.refs (the functions a body may name in `ref.func`). Run BEFORE any body, as
 /// wasmtime validates each section before the code section after it; the data segments come after the
-/// bodies ([`data_checks`]), as the data section does. `at`: where the module's entities begin.
-pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At<'_>>) -> ValidateResult<Vec<bool>> {
+/// bodies ([`data_checks`]), as the data section does. `at`: where the module's entities begin; `funcs`:
+/// [`Funcs::new`] of `module`.
+pub(crate) fn module_checks(
+    module: &Module,
+    features: &Features,
+    at: Option<&At<'_>>,
+    funcs: &Funcs<'_>,
+) -> ValidateResult<Vec<bool>> {
     // Cleared on ENTRY, not on success: every failure below this point that is not inside a
     // function body must report "no location" rather than inherit the previous module's.
     reset_failure();
@@ -292,6 +339,7 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
                 n_imported_globals,
                 Some(&mut refs),
                 features,
+                funcs,
                 entry.and_then(|e| e.1),
             )?;
         }
@@ -347,7 +395,7 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
         let self_index = n_imported_globals + i as u32;
         let expected = module.globals[self_index as usize].content;
         let init_at = pos.and_then(|p| p.global_inits.get(i).copied());
-        validate_const_expr(module, init_expr, expected, self_index, Some(&mut refs), features, init_at)?;
+        validate_const_expr(module, init_expr, expected, self_index, Some(&mut refs), features, funcs, init_at)?;
     }
 
     // Export names must be pairwise distinct (§3.4.10).
@@ -369,7 +417,7 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
     // Start function (§3.5.5): a defined/imported function of type [] → [], refused at the section.
     if let Some(si) = module.start {
         let here = || mark(pos.map(|p| p.start));
-        let Some(ft) = module.func_type(si) else {
+        let Some(ft) = funcs.sig(si) else {
             here();
             say(|| alloc::format!("unknown function {si}: func index out of bounds"));
             return Err(ValidateError::UndefinedFunc);
@@ -415,12 +463,12 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
             // `(elem (table $t) (i64.const 1) …)` a TypeMismatch and took every assertion
             // in `table_get64.wast` / `table_set64.wast` with it.
             let off_ty = if module.tables[ti].limits.is64 { V::I64 } else { V::I32 };
-            validate_const_expr(module, &elem.offset_expr, off_ty, all_globals, None, features, ep.map(|e| e.offset_expr))?;
+            validate_const_expr(module, &elem.offset_expr, off_ty, all_globals, None, features, funcs, ep.map(|e| e.offset_expr))?;
         }
         // Each item's offset: just past the items' count, then item by item.
         let mut item_at = at.zip(ep).map(|(a, e)| past_leb(a.bytes, e.items));
         for &fi in &elem.funcs {
-            if module.func_type(fi).is_none() {
+            if funcs.sig(fi).is_none() {
                 mark(item_at);
                 say(|| alloc::format!("unknown function {fi}: func index out of bounds"));
                 return Err(ValidateError::UndefinedFunc);
@@ -437,7 +485,7 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
             // (`(elem (table $t) (global.get $g3) funcref (global.get $gf))`) and was refused.
             // The segment's OFFSET expression above already used `all_globals`; the item
             // expressions did not, and the two are read from the same section.
-            validate_const_expr(module, ex, elem.elem_type, all_globals, Some(&mut refs), features, item_at)?;
+            validate_const_expr(module, ex, elem.elem_type, all_globals, Some(&mut refs), features, funcs, item_at)?;
             item_at = item_at.map(|p| p + ex.len());
         }
     }
@@ -447,7 +495,7 @@ pub(crate) fn module_checks(module: &Module, features: &Features, at: Option<&At
 /// The data segments' checks, which wasmtime makes after the function bodies (the data section follows
 /// the code section): an active segment targets an existing memory — refused at the segment — and its
 /// offset const-expr produces the memory's index type (memory64: i64, else i32).
-pub(crate) fn data_checks(module: &Module, features: &Features, at: Option<&At<'_>>) -> ValidateResult<()> {
+pub(crate) fn data_checks(module: &Module, features: &Features, at: Option<&At<'_>>, funcs: &Funcs<'_>) -> ValidateResult<()> {
     let all_globals = module.globals.len() as u32;
     for (k, seg) in module.data.iter().enumerate() {
         if !seg.active {
@@ -465,7 +513,7 @@ pub(crate) fn data_checks(module: &Module, features: &Features, at: Option<&At<'
         } else {
             V::I32
         };
-        validate_const_expr(module, &seg.offset_expr, off_ty, all_globals, None, features, dp.map(|d| d.1))?;
+        validate_const_expr(module, &seg.offset_expr, off_ty, all_globals, None, features, funcs, dp.map(|d| d.1))?;
     }
     Ok(())
 }
@@ -1028,6 +1076,7 @@ fn check_module_features(module: &Module, features: &Features) -> ValidateResult
 ///
 /// `at`: where the expression begins in the module. A refusal is noted where wasmtime reports it — at
 /// the instruction refused, and for the value the expression leaves, at its `end` (W5) — in its words.
+#[allow(clippy::too_many_arguments)]
 fn validate_const_expr(
     module: &Module,
     expr: &[u8],
@@ -1035,10 +1084,11 @@ fn validate_const_expr(
     self_index: u32,
     refs: Option<&mut Vec<bool>>,
     features: &Features,
+    funcs: &Funcs<'_>,
     at: Option<usize>,
 ) -> ValidateResult<()> {
     let mut op_at = 0;
-    check_const_expr(module, expr, expected, self_index, refs, features, &mut op_at)
+    check_const_expr(module, expr, expected, self_index, refs, features, funcs, &mut op_at)
         .inspect_err(|_| mark(at.map(|a| a + op_at)))
 }
 
@@ -1081,6 +1131,7 @@ fn pop_const_operand(stack: &mut Vec<V>, want: V) -> ValidateResult<()> {
 }
 
 /// [`validate_const_expr`]'s check; `op_at` is left at the instruction it stopped at.
+#[allow(clippy::too_many_arguments)]
 fn check_const_expr(
     module: &Module,
     expr: &[u8],
@@ -1088,6 +1139,7 @@ fn check_const_expr(
     self_index: u32,
     mut refs: Option<&mut Vec<bool>>,
     features: &Features,
+    funcs: &Funcs<'_>,
     op_at: &mut usize,
 ) -> ValidateResult<()> {
     let mut r = Reader::new(expr);
@@ -1168,7 +1220,7 @@ fn check_const_expr(
                 // ref.func x
                 gate(Some(Feature::ReferenceTypes), features)?;
                 let fi = r.read_var_u32()?;
-                if module.func_type(fi).is_none() {
+                if funcs.sig(fi).is_none() {
                     say(|| alloc::format!("unknown function {fi}: function index out of bounds"));
                     return Err(ValidateError::UndefinedFunc);
                 }
@@ -1178,8 +1230,8 @@ fn check_const_expr(
                     }
                 // Exact for a DEFINED function, inexact for an import — the body rule's twin (see
                 // `Op::RefFunc`); a constant expression is a second copy of the same typing.
-                if let Some(ti) = module.declared_func_type_index(fi) {
-                    let t = if module.func_ref_is_exact(fi) {
+                if let (Some(ti), exact) = funcs.decl(fi) {
+                    let t = if exact {
                         V::exact_ref(false, RefHeap::Func, ti)
                     } else {
                         V::concrete_ref(false, RefHeap::Func, ti)
@@ -1354,6 +1406,7 @@ fn validate_function(
     ft: &FuncType,
     code: &Code,
     refs: Option<&[bool]>,
+    funcs: &Funcs<'_>,
     features: &Features,
 ) -> ValidateResult<()> {
     let locals = expand_locals(ft, &code.locals, features)?;
@@ -1363,7 +1416,7 @@ fn validate_function(
     // a second time.
     let instrs = &code.ir;
 
-    let mut v = FuncValidator::begin(module, features, refs, ft, &locals, code.body_offset)?;
+    let mut v = FuncValidator::begin(module, features, refs, funcs, ft, &locals, code.body_offset)?;
     for instr in instrs {
         // On failure, stamp the absolute module offset of the instruction that failed:
         // `Instr::offset` is body-relative (added at T9a#7) and `Code::body_offset` is the body's
@@ -1420,11 +1473,12 @@ pub(crate) fn decode_and_validate_body(
     body: &[u8],
     origin: u32,
     refs: &[bool],
+    funcs: &Funcs<'_>,
     features: &Features,
     has_data_count: bool,
 ) -> Result<Vec<Instr>, BodyError> {
     let locals = expand_locals(ft, decl, features).map_err(BodyError::Invalid)?;
-    let mut v = FuncValidator::begin(module, features, Some(refs), ft, &locals, origin).map_err(BodyError::Invalid)?;
+    let mut v = FuncValidator::begin(module, features, Some(refs), funcs, ft, &locals, origin).map_err(BodyError::Invalid)?;
     v.no_data_count = !has_data_count;
     let mut failed: Option<BodyError> = None;
     let decoded = crate::opcode::decode_body_checked(body, origin as usize, &mut |instr: &Instr| {
@@ -1537,6 +1591,8 @@ struct FuncValidator<'a> {
     /// [`FuncValidator::step`] via the `op_feature` table, so no arm can forget its gate.
     features: &'a Features,
     refs: Option<&'a [bool]>,
+    /// Each function's type, by index ([`Funcs`]).
+    funcs: &'a Funcs<'a>,
     locals: &'a [V],
     results: &'a [V],
     local_init: Vec<bool>,
@@ -1560,6 +1616,7 @@ impl<'a> FuncValidator<'a> {
         module: &'a Module,
         features: &'a Features,
         refs: Option<&'a [bool]>,
+        funcs: &'a Funcs<'a>,
         ft: &'a FuncType,
         locals: &'a [V],
         body_offset: u32,
@@ -1574,6 +1631,7 @@ impl<'a> FuncValidator<'a> {
             module,
             features,
             refs,
+            funcs,
             locals,
             results: &ft.results,
             local_init,
@@ -2189,10 +2247,7 @@ impl<'a> FuncValidator<'a> {
             }
 
             Op::Call => {
-                let ft = self
-                    .module
-                    .func_type(expect_func(&instr.imm)?)
-                    .ok_or(ValidateError::UndefinedFunc)?;
+                let ft = self.funcs.sig(expect_func(&instr.imm)?).ok_or(ValidateError::UndefinedFunc)?;
                 self.pop_vals(&ft.params)?;
                 self.push_vals(&ft.results);
             }
@@ -2206,7 +2261,7 @@ impl<'a> FuncValidator<'a> {
                 }
                 let ft = self
                     .module
-                    .func_sig(ci.type_index)
+                    .func_sig_ref(ci.type_index)
                     .ok_or(ValidateError::UndefinedType)?;
                 self.pop_expect(self.table_addr_ty(ci.table))?;
                 self.pop_vals(&ft.params)?;
@@ -2218,10 +2273,7 @@ impl<'a> FuncValidator<'a> {
             // the stack), and the instruction ends the block — hence `set_unreachable` rather than
             // pushing results.
             Op::ReturnCall => {
-                let ft = self
-                    .module
-                    .func_type(expect_func(&instr.imm)?)
-                    .ok_or(ValidateError::UndefinedFunc)?;
+                let ft = self.funcs.sig(expect_func(&instr.imm)?).ok_or(ValidateError::UndefinedFunc)?;
                 self.pop_vals(&ft.params)?;
                 self.check_tail_results(&ft.results)?;
                 self.set_unreachable();
@@ -2236,7 +2288,7 @@ impl<'a> FuncValidator<'a> {
                 }
                 let ft = self
                     .module
-                    .func_sig(ci.type_index)
+                    .func_sig_ref(ci.type_index)
                     .ok_or(ValidateError::UndefinedType)?;
                 // ⚠️ The TABLE's index type, exactly as in the non-tail twin above. This arm had
                 // `V::I32` written out, so on a 64-bit table it refused the valid `i64` index and
@@ -2251,14 +2303,14 @@ impl<'a> FuncValidator<'a> {
             }
             Op::CallRef => {
                 let ti = expect_func(&instr.imm)?;
-                let ft = self.module.func_sig(ti).ok_or(ValidateError::UndefinedType)?;
+                let ft = self.module.func_sig_ref(ti).ok_or(ValidateError::UndefinedType)?;
                 self.pop_expect(V::concrete_ref(true, RefHeap::Func, ti))?;
                 self.pop_vals(&ft.params)?;
                 self.push_vals(&ft.results);
             }
             Op::ReturnCallRef => {
                 let ti = expect_func(&instr.imm)?;
-                let ft = self.module.func_sig(ti).ok_or(ValidateError::UndefinedType)?;
+                let ft = self.module.func_sig_ref(ti).ok_or(ValidateError::UndefinedType)?;
                 self.pop_expect(V::concrete_ref(true, RefHeap::Func, ti))?;
                 self.pop_vals(&ft.params)?;
                 self.check_tail_results(&ft.results)?;
@@ -2438,7 +2490,7 @@ impl<'a> FuncValidator<'a> {
             }
             Op::RefFunc => {
                 let fi = expect_func(&instr.imm)?;
-                if self.module.func_type(fi).is_none() {
+                if self.funcs.sig(fi).is_none() {
                     return Err(ValidateError::UndefinedFunc);
                 }
                 if let Some(set) = self.refs
@@ -2448,9 +2500,8 @@ impl<'a> FuncValidator<'a> {
                 // custom-descriptors: `ref.func` of a DEFINED function is EXACT — the function is known
                 // to have exactly its declared type. Of an IMPORT it is not: the exporter's function may be
                 // a strict subtype ("References to inexact imports are not exact", exact-func-import.wast).
-                if let Some(ti) = self.module.declared_func_type_index(fi) {
-                    let defined = self.module.func_ref_is_exact(fi);
-                    self.push_val_t(if defined {
+                if let (Some(ti), exact) = self.funcs.decl(fi) {
+                    self.push_val_t(if exact {
                         V::exact_ref(false, RefHeap::Func, ti)
                     } else {
                         V::concrete_ref(false, RefHeap::Func, ti)
@@ -4075,6 +4126,61 @@ mod tests {
                 "a table of {numeric:?} is not a table"
             );
         }
+    }
+
+    /// Calls over many imports (W5, 2026-11-25).
+    ///
+    /// ⚠️ Validating each `call` walked every import and cloned the callee's type — O(imports × calls),
+    /// two counts the MODULE chooses. Measured before the fix (release CLI): 20,000 imports and 200,000
+    /// calls took **4.9–5.3 s**, against wasm-tools' 0.10 s; after, 0.08 s. The counts here make a return
+    /// to the walk impossible to miss (10⁹ steps), with no timing assertion to flake. Inverted: with the
+    /// walk put back in `call`, this test took 7.96 s (debug); with the table, 0.03 s.
+    #[test]
+    fn many_calls_over_many_imports_are_not_quadratic() {
+        const IMPORTS: u32 = 10_000;
+        const CALLS: usize = 100_000;
+        let leb = |mut n: u32, out: &mut Vec<u8>| loop {
+            let b = (n & 0x7f) as u8;
+            n >>= 7;
+            out.push(if n == 0 { b } else { b | 0x80 });
+            if n == 0 {
+                break;
+            }
+        };
+        let section = |id: u8, payload: &[u8], out: &mut Vec<u8>| {
+            out.push(id);
+            leb(payload.len() as u32, out);
+            out.extend_from_slice(payload);
+        };
+        let mut m = alloc::vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+        section(0x01, &[0x01, 0x60, 0x00, 0x00], &mut m);
+        let mut imports = Vec::new();
+        leb(IMPORTS, &mut imports);
+        for i in 0..IMPORTS {
+            let name = alloc::format!("f{i}");
+            imports.extend_from_slice(&[0x01, b'm', name.len() as u8]);
+            imports.extend_from_slice(name.as_bytes());
+            imports.extend_from_slice(&[0x00, 0x00]); // a function of type 0
+        }
+        section(0x02, &imports, &mut m);
+        section(0x03, &[0x01, 0x00], &mut m);
+        // one body: `call <the last import>` CALLS times
+        let mut target = Vec::new();
+        leb(IMPORTS - 1, &mut target);
+        let mut body = alloc::vec![0x00];
+        for _ in 0..CALLS {
+            body.push(0x10);
+            body.extend_from_slice(&target);
+        }
+        body.push(0x0b);
+        let mut code = alloc::vec![0x01];
+        leb(body.len() as u32, &mut code);
+        code.extend_from_slice(&body);
+        section(0x0a, &code, &mut m);
+
+        let md = crate::module::decode_validated(&m, &Features::all()).expect("valid");
+        assert_eq!(md.code[0].ir.len(), CALLS + 1);
+        assert_eq!(validate(&md), Ok(()), "the decode-then-validate path too");
     }
 
     /// Export-name uniqueness over a realistic export count.

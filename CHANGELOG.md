@@ -57,8 +57,26 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
     entry as it reads it. wasmrt reads the whole structure before validating, because only
     validation knows the features.
 
+- **Calls no longer look up the callee's type.** Every `call`, `call_indirect` and `call_ref`
+  scanned the module's imports and copied the callee's type, two allocations for a function with
+  parameters and results. Each instance now keeps every function's parameter and result counts.
+  Measured on win-x64, three rounds: `fib(30)` 0.45–0.47 s → 0.25–0.32 s through `call`, and
+  0.66–0.68 s → 0.26 s through `call_indirect`.
+- **Leaner per-function state.** A function's prepared body no longer holds a copy of its type,
+  and its tables are boxed slices. 1M empty functions: peak memory 321–326 → 253–257 MB, 0.60–0.64
+  → 0.53 s.
+- **Element segments hold no copy of their items.** A segment of function indices is read from the
+  module when `table.init`, `array.new_elem` or `array.init_elem` uses it. Each item had been held
+  as a 16-byte value for the instance's life, even for segments already applied or dropped. An
+  active segment's evaluated items are now freed once applied, and a declarative segment's are
+  discarded. One passive segment of 5M functions: peak memory 104–105 → 28 MB.
+
 ### Fixed
 
+- **Validation was quadratic in imports × calls.** Validating each `call` scanned the imports and
+  copied the callee's type, so 20,000 imports and 200,000 calls took 5.3 s to validate (wasm-tools:
+  0.10 s). Both counts are the guest's to choose. Each function's type is now looked up once per
+  module: 0.08 s.
 - **A SIMD lane index past its shape is refused as invalid, not malformed.** This is the stage the
   spec gives (`simd_lane.wast` asserts it with `assert_invalid` 40 times). The decoder had refused
   it since T2. For `i8x16.shuffle` the check now comes after its operands are popped, as
