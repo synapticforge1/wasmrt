@@ -29,6 +29,36 @@ round N, date."; no release was made under that rule.)* Releases before 2026-11-
 
 ## Release History
 
+### 3.0.0 — 2026-11-25 — wasmtime's refusals in its words, one-pass load, faster and leaner
+
+A major release (owner, 2026-11-25: "release 3.0.0"). wasmtime's implementation limits (the measured-needed
+set); every decode and validation refusal at wasmtime's offset and in its words (wasmparser 0.263's, credited);
+decoding and validation in one pass, as wasmtime reads a module (`module::parse` / `Parsed::validate`); the
+efficiency review (calls ~3× faster, memory roughly halved); `pin` and `wat -o` write files whole (temp + rename)
+and `pin` holds an OS file lock; the C ABI refuses a callback that re-enters its own store (was undefined
+behaviour); gnu toolchains on both OSes, MSRV 1.100. Breaking: the Rust API's new fields and error variants
+(three removed), the limits, the CLI's file writing, the MSRV (README Breaking Changes, six rows).
+
+Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)
+Tested on: Ubuntu 26.04.1 LTS under WSL (`linux-x64`)
+Other platforms: not yet tested.
+
+- **Review:** the release review over `v2.0.2..f17127e`, five classes in order: basic R1 (a new file created
+  0600 on Unix), licensing L1 (README's component count), notes; hardening, security, privacy EMPTY. Fixed;
+  re-review 1: one small issue (the DB read through the unresolved path), fixed; re-review 2 EMPTY.
+  `Review complete:` at the notes commit (gitignored `review-issues.md`).
+- **Platforms verified** (nightly `708c94ef0`, commit `10f032b`, 2026-11-25; only release notes after):
+  - `win-x64`: workspace 634 / 0, gate 21 / 22 before the commit (publish dry run: dirty tree), 2.0.2's tests
+    72 / 0, C gate, Miri PASSED, S2 64,603 / 0 / 0 over 288 (0 regressed), carry-forward vs v2.0.2 0 / 0 (S1) and
+    0 / 0 over 30,023 pairs of wasmtk's corpus (S3).
+  - `linux-x64`: workspace 634 / 0, gate 21 / 22 (same), 2.0.2's tests 71 / 0, C gate, Miri PASSED, S2 64,603 /
+    0 / 0, carry-forward 0 / 0.
+- **Checklist:** floor PATCH by behaviour (0 / 0) and MAJOR by the API (new fields, removed variants). Size: CLI
+  915,968 B (2.0.2 built today the same way: 845,824, +8.3%), DLL 583,680 B (536,064, +8.9%) — the refusal
+  sentences and limits, the one-pass load beside the kept two-pass API, the CLI's safe writes. Speed (bench, three
+  A/B rounds): cold start 3.2–3.9 ms (4.1–4.4), steady 192–223 Mops/s (166–181), toy cold start within noise.
+  Both binaries import only Windows-provided DLLs; the CLI runs from an empty folder on a system-only `PATH`.
+
 ### 2.0.2 — 2026-11-19 — licence texts in every crate; the first release under the H37 review
 
 The first release reviewed under the five-class standard (H37; owner's "option B", restarting 2.0.2

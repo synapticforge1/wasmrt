@@ -11,8 +11,9 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
   the program as robust as needed and as small as possible"), I12–I14 (decode refusals in wasmtime's words and
   offsets), the efficiency review (calls 3.1×, memory roughly halved), the CLI's safe writes and `pin`'s OS lock,
   the gnu toolchains and MSRV 1.100, the one-pass load (wasmtime's structural difference, closed), validation
-  refusals in wasmtime's words, the C ABI store guard. Each reviewed except: the last pin-lock notes and the
-  toolchain move (tested only) — so `Review complete:` stays at `820669f` and the release review covers all.
+  refusals in wasmtime's words, the C ABI store guard. 2026-11-25: the release review over the whole range is
+  COMPLETE (R1, L1 and notes fixed, re-reviewed to empty, full suite on both platforms), the notes merged; open
+  until CI has published and the release is read back as a user (`release.md`).
 - **W5 — owner calls left open:** F2 (opt-level speed vs size); the efficiency items not done (the archive's W2
   entry); the 234 offset differences from wasmtime on the 4,000-corruption comparison (end-of-file offsets,
   module-level refusals with no offset) and 9 wording singletons (`review-issues.md`).

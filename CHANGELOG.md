@@ -19,6 +19,21 @@ The three crates share one version and are released together: `wasmrt` (CLI), `w
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-11-25 — wasmtime's refusals in its words, one-pass load, faster and leaner
+
+Tested on: Windows 11 Pro 10.0.26300 (`win-x64`)
+Tested on: Ubuntu 26.04.1 LTS under WSL (`linux-x64`)
+Other platforms: not yet tested.
+
+Measured against 2.0.2 built today the same way: no module changes verdict in either direction (the
+behaviour corpus, and 30,023 accepted pairs over wasmtk's corpus), the spec testsuite passes
+64,603 / 0 / 0 over 288 files on both platforms above, and 2.0.2's integration tests pass against
+this release. The CLI is 915,968 bytes (2.0.2: 845,824, +8.3%) and the C ABI DLL 583,680 bytes
+(536,064, +8.9%): the growth is wasmtime's refusal sentences and limits, the one-pass load beside the
+two-pass API it keeps, and the CLI's safe file writes. The cold start on the 48 KB benchmark module is
+3.2–3.9 ms (2.0.2: 4.1–4.4) and the steady loop 192–223 Mops/s (166–181); a 105-byte module's cold
+start is within noise (6–8 µs).
+
 **A breaking release** (the Rust API gains fields and error variants and loses three, modules past
 wasmtime's implementation limits are refused, `wasmrt pin` and `wasmrt wat -o` write files differently,
 and the minimum Rust version is 1.100; see Breaking Changes in the README). Refusals now name the byte

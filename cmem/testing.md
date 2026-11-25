@@ -4,12 +4,13 @@
 plus the size and speed numbers that decide inclusion. Detail:
 `docs/port/06-build-docs-licensing.md`; the test tree layout is in `tests/README.md`.
 
-## The gate today — measured 2026-11-23 (review I6)
+## The gate today — measured 2026-11-25 (the 3.0.0 release)
 
 - `bun scripts/gate.ts`: **22 steps** (`gate: 22 steps`, 2026-11-20 at `db6f63b`); `--release` adds 4 (the floor,
-  the CHANGELOG section, the `release.md` entry, the review gate). Workspace tests 608 / 0 / 1 on win-x64.
+  the CHANGELOG section, the `release.md` entry, the review gate). Workspace tests 634 / 0 on win-x64 and linux-x64
+  (3.0.0 added the one-pass equivalence test `merged_decode_validate.rs`, the C ABI re-entry test, the CLI writes).
 - Self-tests: privacy gate 33, review gate 30, bump 14, previous-tests cleanup 9, release record 40, release page 55,
-  crates.io 53, versions 23; `licence-copies.ts` checks 5 files in each of 3 crates. Counts in the dated sections
+  crates.io 53, versions 23; `licence-copies.ts` checks 6 files in each of 3 crates. Counts in the dated sections
   below are those days' figures, not current ones.
 
 ## 🆕 2026-11-19 — the gate runs LOCALLY only; CI tests nothing (workspace letter H37 (e))
