@@ -227,6 +227,7 @@ rust:wasmrt-capi	#[repr(C)] pub struct wasmrt_capi::wasmrt_instance_t
 rust:wasmrt-capi	#[repr(C)] pub struct wasmrt_capi::wasmrt_memory_t
 rust:wasmrt-capi	#[repr(C)] pub struct wasmrt_capi::wasmrt_val_t
 rust:wasmrt-capi	#[repr(C)] pub union wasmrt_capi::wasmrt_val_union
+rust:wasmrt-capi	impl !core::marker::Freeze for wasmrt_capi::wasmrt_store
 rust:wasmrt-capi	impl !core::marker::Send for wasmrt_capi::wasmrt_linker
 rust:wasmrt-capi	impl !core::marker::Send for wasmrt_capi::wasmrt_store
 rust:wasmrt-capi	impl !core::marker::Sync for wasmrt_capi::wasmrt_linker
@@ -270,7 +271,6 @@ rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_instance_t
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_linker
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_memory_t
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_module
-rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_store
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_trap
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_val_t
 rust:wasmrt-capi	impl core::marker::Freeze for wasmrt_capi::wasmrt_val_union
