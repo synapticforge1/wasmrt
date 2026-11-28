@@ -112,6 +112,14 @@ committed BEFORE the publish handoff.
   no Python); a one-time script may be shell and is deleted after use; **never a heredoc** — write the
   file, then run it; prefer the `Edit` tool, and check every scripted edit applied.
 - 🔒 **Line endings are LF everywhere** (`.gitattributes`; `cargo test` fails on a CR).
+- 🔒 **No toolchain change unasked** (owner, 2026-11-24: "You are adding rust components that are not up to date
+  without asking"): never install, update or add a rustup toolchain, target or component (or another tool) unless the
+  owner asks for that exact change. Run every rustup and cargo command with `RUSTUP_AUTO_INSTALL=0`: naming a
+  toolchain that is not installed (`rustup run X`, `rustup which --toolchain X`, `cargo +X`) downloads it silently.
+  `rustup toolchain list` can show a stray update-hash, so a listed toolchain is not proof it is installed: check
+  its folder under `rustup show home` first. Anything missing: ask, never fetch. (Came from the assistant's own
+  memory folder, moved here 2026-11-27 under Tooling rule 15. What set it off: a `rustup update stable`, two
+  `rustup target add`s and two auto-installs on 2026-11-24, none asked for.)
 - ⚠️ cargo's target directory is not `./target` on every host: ask `cargo metadata`
   (`scripts/target-dir.ts`). Run `cargo test` from either shell; all tests pass from both.
 - 🔑 **History was rewritten on 2026-10-23 and 2026-10-24**: an old commit id is looked up in

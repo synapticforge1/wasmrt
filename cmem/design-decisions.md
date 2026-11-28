@@ -69,10 +69,9 @@ superseded by the section above; the engineering choices they produced stand.*
   oracle" now includes it. This **overrides** wazmrt's earlier narrower "browser-standard bar defers
   SIMD/etc." rule.
 - **Size is a first-class goal:** minimize every artifact. Levers — `opt-level="z"` + LTO +
-  `codegen-units=1` + strip + `wasm-opt -Oz` for the shipped wasm; pick per artifact.
-  🔁 *2026-11-25 (owner, F2: opt-level "s"): the native release profile is `opt-level = "s"` — measured +11% size for
-  ~45% more steady-loop speed (win-x64, three A/B rounds); speed is the contest's other axis. LTO, one codegen unit,
-  strip and `panic = "abort"` stay.*
+  `codegen-units=1` + strip + `panic="abort"` + `wasm-opt -Oz` for the shipped wasm; pick per artifact.
+  🔁 *2026-11-25 (owner, F2: opt-level "s"): native builds: `opt-level = "s"`, +11% size for ~45% more
+  steady-loop speed (win-x64, 3 A/B rounds); speed is the contest's other axis.*
 - **Oracle split — re-checked at the 2026-07-27 freeze; it has all but collapsed.** Features wazmrt
   implements → parity Rust↔wazmrt (golden vectors); at the freeze that is **everything wasmrt targets
   except the tail-call proposal** (`return_call`/`return_call_indirect` — wazmrt has `return_call_ref`
@@ -187,9 +186,8 @@ guarantee. "Zero unsafe everywhere" would be a promise the FFI boundary makes im
 Choices made while porting; consistent with "boundary-faithful behavior, idiomatic-Rust internals."
 
 - **Workspace of 3 crates** (`wasmrt-core` / `wasmrt-capi` / `wasmrt`), **edition 2024**
-  (`#[unsafe(no_mangle)]` on the C ABI), size-first `[profile.release]` (`opt-level="z"` + LTO +
-  `codegen-units=1` + strip + `panic="abort"`; `opt-level = "s"` since 2026-11-25, F2 above). **Windows build host = `x86_64-pc-windows-gnullvm`**
-  (see [architecture.md](architecture.md)).
+  (`#[unsafe(no_mangle)]` on the C ABI), the release profile per the size goal. Windows build host: gnu
+  since 2026-11-24 ([architecture.md](architecture.md)).
 - **Owned data model over an arena.** The decoder returns owned `Vec`/`String`; a `Module` frees on drop
   (no `deinit`, no allocator-error threading). Idiomatic-Rust divergence, behavior identical.
 - **`Op` = a macro-defined enum** (PascalCase variants) with `from_u8` generated from one

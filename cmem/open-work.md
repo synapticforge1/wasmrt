@@ -1,6 +1,6 @@
 # open-work.md — the open items, and nothing else
 
-Every item still to do, one per entry. Last verified: 2026-11-25. Done items leave this file for
+Every item still to do, one per entry. Last verified: 2026-11-27. Done items leave this file for
 `archive/` (the file up to 2026-11-23, and items closed since: [archive/open-work-to-2026-11-23.md](archive/open-work-to-2026-11-23.md));
 where the project stands: [STATE.md](STATE.md); each release's record: [release.md](release.md).
 
@@ -25,7 +25,9 @@ where the project stands: [STATE.md](STATE.md); each release's record: [release.
 - **R1 — binaryang:** wasmrt and binaryang 2.2.0 agree on all 6,860 judgements; naming differences remain
   in D1: `select.t` (0x1c) and the `null` forms of `ref.test` / `ref.cast` / `ref.cast_desc_eq`.
   ✅ Relayed as workspace letter **C52** (owner, 2026-11-25; workspace `1c281d5`): does D1 intend its four spellings,
-  and is the encoding D1's unique key? Open until binaryang answers and wasmrt, its creator, closes it.
+  and is the encoding D1's unique key? ✅ binaryang answered 2026-11-27: yes, all four are intended; yes, the
+  encoding is the key; counting the four as a MATCH on D1's spelling is right (the key rule lands in D1 data 1.0.2).
+  Next, on the owner's word: count them as a MATCH in wasmrt's D1 check, then close C52 (wasmrt is its creator).
 - **R2 — wasmtk:** about ten generated `tests/wasi/wasm_wasi_bundle/**/*.wat` modules `throw 0` with no tag
   declared (`dynrt_eval_bundle/main_*.wat`, `sharedheap_bundle/main_wasic.wat`): a generator defect that
   wasm-tools and wasmrt both refuse (found by `scripts/wat-corpus.ts`, 2026-10-24).
